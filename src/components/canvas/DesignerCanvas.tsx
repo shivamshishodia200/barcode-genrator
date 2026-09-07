@@ -93,6 +93,7 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
   onCloseTab,
   onNewTemplate,
   onNewForm,
+  onOpenDocument,
   onSaveDoc,
   onSaveAll,
   onDuplicateDoc,
