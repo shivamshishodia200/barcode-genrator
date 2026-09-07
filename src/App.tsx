@@ -160,7 +160,7 @@ export default function App() {
         }
       }
     } catch { }
-    return 'dashboard';
+    return 'designer';
   });
   const [isCalibrationModalOpen, setIsCalibrationModalOpen] = useState<boolean>(false);
 
@@ -310,14 +310,7 @@ export default function App() {
     }
   });
 
-  const [isWelcomeOpen, setIsWelcomeOpen] = useState<boolean>(() => {
-    try {
-      const val = localStorage.getItem('barcodeflow.showWelcomeOnStartup');
-      return val === null ? true : val === 'true';
-    } catch {
-      return true;
-    }
-  });
+  const [isWelcomeOpen, setIsWelcomeOpen] = useState<boolean>(false);
 
   const handleToggleShowWelcomeOnStartup = useCallback((enabled: boolean) => {
     setShowWelcomeOnStartup(enabled);
@@ -327,20 +320,13 @@ export default function App() {
   }, []);
 
   const [openDocuments, setOpenDocuments] = useState<OpenDocument[]>(() => {
-    try {
-      const welcomeVal = localStorage.getItem('barcodeflow.showWelcomeOnStartup');
-      const showWelcome = welcomeVal === null ? true : welcomeVal === 'true';
-      if (showWelcome) {
-        return []; // Clean workspace when welcome dialog is active on startup
-      }
-    } catch { }
     const initTpl = INITIAL_TEMPLATES[0];
     return [
       {
         instanceId: `doc-${Date.now()}-1`,
         documentId: initTpl.id,
         type: 'template',
-        name: initTpl.name || 'Template 1',
+        name: initTpl.name || 'Document1.btw',
         isDirty: false,
         isNew: false,
         template: initTpl,
@@ -2762,6 +2748,7 @@ export default function App() {
       setActiveView('super-admin');
       showToast(`Welcome Super Administrator! Governance & Security Control Center loaded.`, 'success');
     } else {
+      let activeTpl = templates[0] || INITIAL_TEMPLATES[0];
       // Seed fresh personalized starter templates for newly registered/logged-in admin
       if (user.email?.toLowerCase() !== 'shivam@gmail.com') {
         const personalTemplates = getUserPersonalizedTemplates(user);
@@ -2775,17 +2762,43 @@ export default function App() {
           return [...personalTemplates, ...prev];
         });
         if (personalTemplates.length > 0) {
+          activeTpl = personalTemplates[0];
           setCurrentTemplateId(personalTemplates[0].id);
         }
       }
-      setActiveView('dashboard');
-      showToast(`Welcome ${user.name}! BarcodeFlow Label Management portal loaded with your personalized workspace.`, 'success');
+
+      // Ensure openDocuments has active template ready for Template Builder
+      setOpenDocuments((prev) => {
+        if (prev.length > 0) return prev;
+        const newDocId = `doc-${Date.now()}-1`;
+        setActiveDocumentInstanceId(newDocId);
+        return [
+          {
+            instanceId: newDocId,
+            documentId: activeTpl.id,
+            type: 'template',
+            name: activeTpl.name || 'Document1.btw',
+            isDirty: false,
+            isNew: false,
+            template: activeTpl,
+            selectedElementIds: [],
+            history: { entries: [activeTpl.elements || []], index: 0 },
+            viewState: { zoom: 1.25, panX: 40, panY: 40 },
+            dataState: { currentRecordIndex: 0, selectedRecordIndices: [] },
+          },
+        ];
+      });
+
+      setIsWelcomeOpen(false);
+      setActiveView('designer');
+      showToast(`Welcome ${user.name}! Barcode Automation Studio (Template Builder) loaded.`, 'success');
     }
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-    setActiveView('dashboard');
+    setActiveView('designer');
+    setIsWelcomeOpen(false);
     try {
       localStorage.removeItem('barcodeflow_auth_session');
     } catch { }
