@@ -1029,39 +1029,8 @@ export const MenuBar: React.FC<MenuBarProps> = (props) => {
           </div>
         </div>
 
-        {/* Center / Right: Workflow & Viewer Buttons + System Status + Logout */}
+        {/* Center / Right: System Status + Logout */}
         <div className="ml-auto flex items-center gap-1 sm:gap-1.5 pr-2 text-slate-700 text-[11px] shrink-0 whitespace-nowrap pl-2">
-          {props.onSubmitForApproval && (
-            <button
-              onClick={props.onSubmitForApproval}
-              title="Freeze Version & Submit for Level 1 Approval Review"
-              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded text-[10.5px] font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1 border border-blue-700 whitespace-nowrap shrink-0"
-            >
-              <Send className="w-3 h-3 shrink-0" />
-              <span className="hidden sm:inline">Submit for Approval</span>
-              <span className="sm:hidden">Submit</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => props.setActiveView('workflow')}
-            title="Open Regulatory Approval & e-Signature Workflow Station"
-            className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-900 rounded text-[10.5px] font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1 border border-amber-600 whitespace-nowrap shrink-0"
-          >
-            <ShieldCheck className="w-3 h-3 text-slate-900 shrink-0" />
-            <span className="hidden sm:inline">Approval Workflow</span>
-            <span className="sm:hidden">Workflow</span>
-          </button>
-
-          <button
-            onClick={() => props.setActiveView('viewer')}
-            title="Open Viewer & 10-Pack Serialized Batch Print Station"
-            className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded text-[10.5px] font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1 border border-indigo-700 whitespace-nowrap shrink-0 mr-1 sm:mr-2"
-          >
-            <Eye className="w-3 h-3 shrink-0" />
-            <span className="hidden sm:inline">Viewer Station</span>
-            <span className="sm:hidden">Viewer</span>
-          </button>
 
           <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-300 font-semibold text-[10px] flex items-center gap-1 shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
