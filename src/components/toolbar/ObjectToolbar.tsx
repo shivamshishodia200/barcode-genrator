@@ -728,28 +728,6 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
           )}
         </div>
 
-        {/* Modern Save & Print Action Group placed directly under Logout area */}
-        <div className="ml-auto flex items-center gap-1.5 pl-3 shrink-0">
-          {/* Enhanced Save Button */}
-          <button
-            onClick={props.onSave}
-            title="Save Template (Ctrl+S)"
-            className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-blue-50 active:bg-blue-100 text-blue-700 hover:text-blue-800 border border-blue-200 hover:border-blue-400 rounded-md font-semibold text-[11px] shadow-2xs transition-all cursor-pointer group"
-          >
-            <Save className="w-3.5 h-3.5 text-blue-600 group-hover:scale-110 transition-transform" />
-            <span>Save</span>
-          </button>
-
-          {/* Enhanced Print Button */}
-          <button
-            onClick={props.onPrint}
-            title="Print Production Labels (Ctrl+P)"
-            className="flex items-center gap-1.5 px-3.5 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-95 text-white rounded-md font-bold text-[11px] shadow-xs hover:shadow transition-all cursor-pointer group border border-blue-500/30"
-          >
-            <Printer className="w-3.5 h-3.5 text-white group-hover:scale-110 transition-transform" />
-            <span>Print</span>
-          </button>
-        </div>
       </div>
 
       {/* ROW 2: CONTEXT-AWARE FORMATTING & PROPERTIES TOOLBAR */}
