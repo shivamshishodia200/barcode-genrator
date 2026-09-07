@@ -1797,11 +1797,11 @@ export default function App() {
 
       try {
         const dialogRes = await promptNativeSaveAsDialog(defaultFileName);
-        if (!dialogRes || dialogRes.canceled || !dialogRes.filePath) {
+        if (!dialogRes || dialogRes.canceled) {
           return; // User cancelled dialog
         }
 
-        const targetFilePath = dialogRes.filePath;
+        const targetFilePath = dialogRes.filePath || `${defaultFileName}.bfl`;
         const targetFileName = dialogRes.fileName || targetFilePath.split(/[\\/]/).pop() || 'ProductLabel.bfl';
         const cleanName = targetFileName.replace(/\.[^.]+$/, '');
 
@@ -1827,8 +1827,8 @@ export default function App() {
           isNew: false,
         };
 
-        // Perform atomic disk write
-        const saveRes = await saveDocumentToDisk(targetFilePath, targetDoc);
+        // Perform disk write (Electron IPC, Browser File Handle, or Download)
+        const saveRes = await saveDocumentToDisk(targetFilePath, targetDoc, currentUser.name, dialogRes.fileHandle);
         if (!saveRes.success) {
           showToast(`Save As failed: ${saveRes.error}`, 'error');
           return;
@@ -2047,15 +2047,19 @@ export default function App() {
         return;
       }
 
-      // Read file from disk
-      const readRes = await readDocumentFromDisk(filePath);
-      if (!readRes.success || !readRes.content) {
-        showToast(`Failed to open document: ${readRes.error}`, 'error');
-        return;
+      let fileContent = openRes.content;
+      if (!fileContent) {
+        // Read file from disk via Electron
+        const readRes = await readDocumentFromDisk(filePath);
+        if (!readRes.success || !readRes.content) {
+          showToast(`Failed to open document: ${readRes.error}`, 'error');
+          return;
+        }
+        fileContent = readRes.content;
       }
 
       // Deserialize .bfl or JSON into BarcodeFlow document
-      const docFile = deserializeBarcodeFlowDocument(readRes.content, filePath);
+      const docFile = deserializeBarcodeFlowDocument(fileContent, filePath);
       const loadedTemplate = docFile.template || INITIAL_TEMPLATES[0];
 
       const newDoc: OpenDocument = {

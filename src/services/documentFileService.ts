@@ -160,29 +160,59 @@ export function deserializeBarcodeFlowDocument(rawData: any, fallbackName: strin
 }
 
 /**
- * Opens native Windows Save As dialog.
+ * Opens native Windows Save As dialog (Electron showSaveDialog or Browser showSaveFilePicker).
  */
 export async function promptNativeSaveAsDialog(defaultFileName: string = 'Document1.bfl'): Promise<{
   canceled: boolean;
   filePath?: string;
   fileName?: string;
+  fileHandle?: any;
 }> {
   const electronAPI = (window as any).electronAPI;
   if (electronAPI?.showSaveDialog) {
     return await electronAPI.showSaveDialog(defaultFileName);
   }
 
+  // Web Browser: File System Access API (Native Windows Explorer Save As Dialog)
+  if (typeof (window as any).showSaveFilePicker === 'function') {
+    try {
+      const suggested = defaultFileName.endsWith('.bfl') ? defaultFileName : `${defaultFileName}.bfl`;
+      const handle = await (window as any).showSaveFilePicker({
+        suggestedName: suggested,
+        types: [
+          {
+            description: 'BarcodeFlow Document (*.bfl)',
+            accept: { 'application/json': ['.bfl', '.btw', '.json'] },
+          },
+        ],
+      });
+      const file = await handle.getFile();
+      return {
+        canceled: false,
+        filePath: file.name,
+        fileName: file.name,
+        fileHandle: handle,
+      };
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return { canceled: true };
+      }
+    }
+  }
+
   // Web Browser fallback
-  return { canceled: false, filePath: undefined, fileName: defaultFileName };
+  const fallbackName = defaultFileName.endsWith('.bfl') ? defaultFileName : `${defaultFileName}.bfl`;
+  return { canceled: false, filePath: fallbackName, fileName: fallbackName };
 }
 
 /**
- * Saves document to disk (via Electron IPC or browser download).
+ * Saves document to disk (via Electron IPC, FileSystemAccessAPI, or browser download).
  */
 export async function saveDocumentToDisk(
   filePath: string | undefined | null,
   doc: OpenDocument,
-  currentUserName: string = 'Operator'
+  currentUserName: string = 'Operator',
+  fileHandle?: any
 ): Promise<{
   success: boolean;
   filePath?: string;
@@ -192,6 +222,7 @@ export async function saveDocumentToDisk(
   const documentPayload = serializeBarcodeFlowDocument(doc, currentUserName);
   const electronAPI = (window as any).electronAPI;
 
+  // 1. Electron Desktop Save
   if (electronAPI?.saveFile && filePath) {
     const result = await electronAPI.saveFile(filePath, documentPayload);
     if (result.success && result.filePath) {
@@ -205,7 +236,27 @@ export async function saveDocumentToDisk(
     return result;
   }
 
-  // Browser Fallback (trigger .bfl file download)
+  // 2. Browser Native File System Handle Save
+  if (fileHandle && typeof fileHandle.createWritable === 'function') {
+    try {
+      const writable = await fileHandle.createWritable();
+      const jsonStr = JSON.stringify(documentPayload, null, 2);
+      await writable.write(jsonStr);
+      await writable.close();
+      const name = fileHandle.name || doc.name;
+      addRecentDocument({
+        filePath: name,
+        fileName: name,
+        lastOpenedAt: new Date().toISOString(),
+        templateName: doc.name,
+      });
+      return { success: true, filePath: name, fileName: name };
+    } catch (err: any) {
+      console.warn('File handle write failed, falling back to download:', err);
+    }
+  }
+
+  // 3. Browser Download Fallback (.bfl file download to local PC)
   try {
     const jsonStr = JSON.stringify(documentPayload, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -214,33 +265,102 @@ export async function saveDocumentToDisk(
     const safeName = (doc.name || 'Document1').endsWith('.bfl') ? doc.name : `${doc.name}.bfl`;
     a.href = url;
     a.download = safeName;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    return { success: true, filePath: undefined, fileName: safeName };
+    addRecentDocument({
+      filePath: safeName,
+      fileName: safeName,
+      lastOpenedAt: new Date().toISOString(),
+      templateName: doc.name,
+    });
+    return { success: true, filePath: safeName, fileName: safeName };
   } catch (err: any) {
     return { success: false, error: err.message || 'Browser export failed' };
   }
 }
 
 /**
- * Opens native Windows Open dialog.
+ * Opens native Windows Open dialog (Electron showOpenDialog, Browser showOpenFilePicker, or input picker).
  */
 export async function promptNativeOpenDialog(): Promise<{
   canceled: boolean;
   filePath?: string;
   fileName?: string;
+  content?: any;
 }> {
   const electronAPI = (window as any).electronAPI;
   if (electronAPI?.showOpenDialog) {
     return await electronAPI.showOpenDialog();
   }
 
-  // Web Browser fallback (will trigger hidden input file picker)
-  return { canceled: true };
+  // 1. Browser Native File System Access API
+  if (typeof (window as any).showOpenFilePicker === 'function') {
+    try {
+      const [handle] = await (window as any).showOpenFilePicker({
+        types: [
+          {
+            description: 'BarcodeFlow / BarTender Document (*.bfl, *.btw, *.json)',
+            accept: { 'application/json': ['.bfl', '.btw', '.json'] },
+          },
+        ],
+        multiple: false,
+      });
+      const file = await handle.getFile();
+      const text = await file.text();
+      return {
+        canceled: false,
+        filePath: file.name,
+        fileName: file.name,
+        content: text,
+      };
+    } catch (err: any) {
+      if (err.name === 'AbortError') return { canceled: true };
+    }
+  }
+
+  // 2. Standard HTML5 Input File Picker Fallback
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.bfl,.btw,.json';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (file) {
+        try {
+          const text = await file.text();
+          document.body.removeChild(input);
+          resolve({
+            canceled: false,
+            filePath: file.name,
+            fileName: file.name,
+            content: text,
+          });
+        } catch (e) {
+          document.body.removeChild(input);
+          resolve({ canceled: true });
+        }
+      } else {
+        document.body.removeChild(input);
+        resolve({ canceled: true });
+      }
+    };
+
+    input.oncancel = () => {
+      document.body.removeChild(input);
+      resolve({ canceled: true });
+    };
+
+    input.click();
+  });
 }
 
 /**
- * Reads document from disk by path.
+ * Reads document from disk by path (or direct memory content).
  */
 export async function readDocumentFromDisk(filePath: string): Promise<{
   success: boolean;
@@ -254,7 +374,11 @@ export async function readDocumentFromDisk(filePath: string): Promise<{
   if (electronAPI?.readFile) {
     const result = await electronAPI.readFile(filePath);
     if (result.success && result.document) {
-      addRecentDocument(result.filePath || filePath, result.fileName || filePath.split(/[\\/]/).pop() || 'Document.bfl');
+      addRecentDocument({
+        filePath: result.filePath || filePath,
+        fileName: result.fileName || filePath.split(/[\\/]/).pop() || 'Document.bfl',
+        lastOpenedAt: new Date().toISOString(),
+      });
       return {
         success: true,
         data: result.document,
@@ -266,7 +390,7 @@ export async function readDocumentFromDisk(filePath: string): Promise<{
     return { success: false, error: result.error || 'Failed to read file from disk' };
   }
 
-  return { success: false, error: 'Desktop file system API not available in browser mode' };
+  return { success: false, error: 'Desktop file system API not available' };
 }
 
 /**
