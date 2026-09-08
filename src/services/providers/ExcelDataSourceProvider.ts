@@ -18,12 +18,22 @@ import {
   ProviderError,
   ExcelCellValue,
 } from './IDataSourceProvider';
-import { ProviderRegistry } from './ProviderRegistry';
 
 
 
 export class ExcelDataSourceProvider implements IDataSourceProvider {
   public readonly type = 'excel';
+  public readonly displayName = 'Microsoft Excel';
+
+  public async detectDependencies() {
+    return {
+      available: true,
+      driverName: 'Excel Native Parser Subsystem',
+      architecture: 'x64' as const,
+      status: 'AVAILABLE' as const,
+      message: 'Excel spreadsheet provider is ready.',
+    };
+  }
 
   private activeWatchers = new Map<string, () => void>();
   private cache = new Map<string, { timestamp: number; data: DataPage }>();
@@ -111,6 +121,16 @@ export class ExcelDataSourceProvider implements IDataSourceProvider {
     };
   }
 
+  public async inspectWorkbook(filePath: string): Promise<{ success: boolean; sheetNames?: string[]; metadata?: any; error?: string }> {
+    if (typeof window !== 'undefined' && window.barcodeFlow?.dataSources?.excel?.inspectWorkbook) {
+      const res = await window.barcodeFlow.dataSources.excel.inspectWorkbook({ filePath });
+      if (res.success && res.metadata) {
+        return { success: true, sheetNames: res.metadata.sheetNames, metadata: res.metadata };
+      }
+    }
+    return { success: false, error: 'Could not inspect workbook' };
+  }
+
   /**
    * Tests connection to the Excel workbook and inspects real metadata
    */
@@ -120,6 +140,7 @@ export class ExcelDataSourceProvider implements IDataSourceProvider {
     if (!val.valid) {
       return {
         success: false,
+        status: 'ERROR',
         errorCode: 'EXCEL_INVALID_WORKBOOK',
         error: val.errors?.join(' ') || 'Invalid configuration.',
       };
@@ -135,6 +156,7 @@ export class ExcelDataSourceProvider implements IDataSourceProvider {
       if (!res.success) {
         return {
           success: false,
+          status: 'ERROR',
           errorCode: res.errorCode || 'EXCEL_PARSE_FAILED',
           error: res.error || 'Failed to inspect Excel workbook.',
           details: { filePath: cfg.filePath },
@@ -144,6 +166,7 @@ export class ExcelDataSourceProvider implements IDataSourceProvider {
       const meta = res.metadata as WorkbookMetadata;
       return {
         success: true,
+        status: 'CONNECTED',
         message: `Successfully connected to ${meta.fileName} (${meta.sheetNames.length} sheets, ~${meta.estimatedRowCount} rows).`,
         details: {
           filePath: meta.fullPath,
@@ -161,6 +184,7 @@ export class ExcelDataSourceProvider implements IDataSourceProvider {
     // Pure Browser Fallback (e.g. Unit tests or Web UI)
     return {
       success: true,
+      status: 'CONNECTED',
       message: 'Workbook validation successful.',
       details: { filePath: cfg.filePath },
     };
@@ -432,4 +456,3 @@ export class ExcelDataSourceProvider implements IDataSourceProvider {
 
 // Register singleton into registry
 export const excelDataSourceProvider = new ExcelDataSourceProvider();
-ProviderRegistry.register(excelDataSourceProvider);

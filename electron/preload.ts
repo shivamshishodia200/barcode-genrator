@@ -80,6 +80,30 @@ contextBridge.exposeInMainWorld('barcodeFlow', {
   fonts: {
     list: (): Promise<string[]> => ipcRenderer.invoke('fonts:list'),
   },
+  database: {
+    detectDependencies: (providerType: string): Promise<any> =>
+      ipcRenderer.invoke('database:detect-dependencies', providerType),
+    testConnection: (config: any): Promise<any> =>
+      ipcRenderer.invoke('database:test-connection', config),
+    listDatabases: (config: any): Promise<any[]> =>
+      ipcRenderer.invoke('database:list-databases', config),
+    listTables: (config: any): Promise<any[]> =>
+      ipcRenderer.invoke('database:list-tables', config),
+    listColumns: (config: any, table?: string): Promise<any[]> =>
+      ipcRenderer.invoke('database:list-columns', config, table),
+    query: (config: any, query: any): Promise<any> =>
+      ipcRenderer.invoke('database:query', config, query),
+    enumerateOleDbProviders: (): Promise<any[]> =>
+      ipcRenderer.invoke('database:enumerate-oledb-providers'),
+    enumerateOdbcDsns: (): Promise<any[]> =>
+      ipcRenderer.invoke('database:enumerate-odbc-dsns'),
+    enumerateOdbcDrivers: (): Promise<any[]> =>
+      ipcRenderer.invoke('database:enumerate-odbc-drivers'),
+    parseIdoc: (filePath: string, options?: any): Promise<any> =>
+      ipcRenderer.invoke('database:parse-idoc', filePath, options),
+    selectIdocFile: (): Promise<any> =>
+      ipcRenderer.invoke('database:select-idoc-file'),
+  },
   dataSources: {
     excel: {
       selectFile: (): Promise<{ canceled: boolean; filePath?: string; fileName?: string; sizeBytes?: number; lastModified?: string }> =>
@@ -132,4 +156,3 @@ contextBridge.exposeInMainWorld('barcodeFlow', {
     },
   },
 });
-

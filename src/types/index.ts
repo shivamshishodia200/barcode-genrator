@@ -1153,6 +1153,19 @@ export interface BarcodeFlowAPI {
     testPrint: (req: any) => Promise<{ success: boolean; message: string; error?: string }>;
     openProperties?: (printerName: string) => Promise<{ success: boolean; error?: string }>;
   };
+  database?: {
+    detectDependencies: (providerType: string) => Promise<any>;
+    testConnection: (config: any) => Promise<any>;
+    listDatabases: (config: any) => Promise<any[]>;
+    listTables: (config: any) => Promise<any[]>;
+    listColumns: (config: any, table?: string) => Promise<any[]>;
+    query: (config: any, query: any) => Promise<any>;
+    enumerateOleDbProviders: () => Promise<any[]>;
+    enumerateOdbcDsns: () => Promise<any[]>;
+    enumerateOdbcDrivers: () => Promise<any[]>;
+    parseIdoc: (filePath: string, options?: any) => Promise<any>;
+    selectIdocFile: () => Promise<any>;
+  };
   dataSources?: {
     excel?: {
       selectFile: () => Promise<{ canceled: boolean; filePath?: string; fileName?: string; sizeBytes?: number; lastModified?: string }>;
@@ -1192,6 +1205,7 @@ export interface BarcodeFlowAPI {
 declare global {
   interface Window {
     barcodeFlow?: BarcodeFlowAPI;
+    electronAPI?: any;
   }
 }
 

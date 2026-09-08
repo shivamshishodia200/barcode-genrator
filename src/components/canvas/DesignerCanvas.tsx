@@ -5,7 +5,7 @@ import { CanvasElement } from './CanvasElement';
 import { ContextMenu } from './ContextMenu';
 import { RightVerticalToolbar } from './RightVerticalToolbar';
 import { DocumentTabBar } from './DocumentTabBar';
-import { Printer, Plus, ZoomIn, ZoomOut, Target, Maximize2, FileText, FolderOpen } from 'lucide-react';
+import { Printer, Plus, ZoomIn, ZoomOut, Target, Maximize2, FileText, FolderOpen, ChevronDown, Check, Scan, MoveHorizontal, Frame } from 'lucide-react';
 
 interface DesignerCanvasProps {
   template: LabelTemplate;
@@ -136,6 +136,24 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; element: LabelElement | null } | null>(null);
 
+  // BarTender style Zoom popup menu state
+  const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
+  const zoomMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (zoomMenuRef.current && !zoomMenuRef.current.contains(e.target as Node)) {
+        setIsZoomMenuOpen(false);
+      }
+    };
+    if (isZoomMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isZoomMenuOpen]);
+
   // 1mm in screen pixels at 100% zoom = 3.7795px
   const baseScale = 3.7795;
   const scale = baseScale * viewport.zoom;
@@ -150,21 +168,56 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
     const containerHeight = containerRef.current.clientHeight;
     if (containerWidth <= 0 || containerHeight <= 0) return;
 
-    const currentZoom = customZoom ?? viewport.zoom;
-    const currentScale = baseScale * currentZoom;
-    const labelWidth = template.dimensions.width * currentScale;
-    const labelHeight = template.dimensions.height * currentScale;
+    setViewport(prev => {
+      const currentZoom = customZoom !== undefined ? customZoom : prev.zoom;
+      const currentScale = baseScale * currentZoom;
+      const labelWidth = template.dimensions.width * currentScale;
+      const labelHeight = template.dimensions.height * currentScale;
 
-    const targetPanX = Math.max(20, Math.round((containerWidth - labelWidth) / 2));
-    const targetPanY = Math.max(20, Math.round((containerHeight - labelHeight) / 2));
+      // Center label precisely in the viewport
+      const targetPanX = Math.round((containerWidth - labelWidth) / 2);
+      const targetPanY = Math.round((containerHeight - labelHeight) / 2);
 
-    setViewport(prev => ({
-      ...prev,
-      zoom: currentZoom,
-      panX: targetPanX,
-      panY: targetPanY,
-    }));
-  }, [template.dimensions.width, template.dimensions.height, viewport.zoom, setViewport]);
+      return {
+        ...prev,
+        zoom: currentZoom,
+        panX: targetPanX,
+        panY: targetPanY,
+      };
+    });
+  }, [template.dimensions.width, template.dimensions.height, setViewport]);
+
+  // Zoom In (Centered on viewport)
+  const handleZoomIn = useCallback(() => {
+    if (!containerRef.current) return;
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    setViewport(v => {
+      const nextZoom = Math.min(32, Number((v.zoom * 1.25).toFixed(2)));
+      const factor = nextZoom / v.zoom;
+      const cX = containerWidth / 2;
+      const cY = containerHeight / 2;
+      const nextPanX = Math.round(cX - (cX - v.panX) * factor);
+      const nextPanY = Math.round(cY - (cY - v.panY) * factor);
+      return { ...v, zoom: nextZoom, panX: nextPanX, panY: nextPanY };
+    });
+  }, [setViewport]);
+
+  // Zoom Out (Centered on viewport)
+  const handleZoomOut = useCallback(() => {
+    if (!containerRef.current) return;
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    setViewport(v => {
+      const nextZoom = Math.max(0.1, Number((v.zoom / 1.25).toFixed(2)));
+      const factor = nextZoom / v.zoom;
+      const cX = containerWidth / 2;
+      const cY = containerHeight / 2;
+      const nextPanX = Math.round(cX - (cX - v.panX) * factor);
+      const nextPanY = Math.round(cY - (cY - v.panY) * factor);
+      return { ...v, zoom: nextZoom, panX: nextPanX, panY: nextPanY };
+    });
+  }, [setViewport]);
 
   // Fit label to workspace with padding
   const fitToWindow = useCallback(() => {
@@ -173,26 +226,136 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
     const containerHeight = containerRef.current.clientHeight;
     if (containerWidth <= 0 || containerHeight <= 0) return;
 
-    const availW = Math.max(100, containerWidth - 80);
-    const availH = Math.max(100, containerHeight - 80);
+    const availW = Math.max(100, containerWidth - 60);
+    const availH = Math.max(100, containerHeight - 60);
 
     const baseW = template.dimensions.width * baseScale;
     const baseH = template.dimensions.height * baseScale;
 
     const zoomW = availW / baseW;
     const zoomH = availH / baseH;
-    const targetZoom = Math.max(0.2, Math.min(3.0, Number(Math.min(zoomW, zoomH).toFixed(2))));
+    const targetZoom = Math.max(0.1, Math.min(10.0, Number(Math.min(zoomW, zoomH).toFixed(2))));
 
     centerInView(targetZoom);
   }, [template.dimensions.width, template.dimensions.height, centerInView]);
 
-  // Auto-fit & center canvas on initial load and template change
+  // Fit label width in window
+  const fitTemplateWidthInWindow = useCallback(() => {
+    if (!containerRef.current) return;
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    if (containerWidth <= 0 || containerHeight <= 0) return;
+
+    const availW = Math.max(100, containerWidth - 60);
+    const baseW = template.dimensions.width * baseScale;
+    const targetZoom = Math.max(0.1, Math.min(10.0, Number((availW / baseW).toFixed(2))));
+
+    const labelHeight = template.dimensions.height * baseScale * targetZoom;
+    const targetPanX = Math.round((containerWidth - baseW * targetZoom) / 2);
+    const targetPanY = labelHeight < containerHeight ? Math.round((containerHeight - labelHeight) / 2) : 30;
+
+    setViewport(v => ({
+      ...v,
+      zoom: targetZoom,
+      panX: targetPanX,
+      panY: targetPanY,
+    }));
+  }, [template.dimensions.width, template.dimensions.height, setViewport]);
+
+  // Fit all objects in window
+  const fitAllObjectsInWindow = useCallback(() => {
+    if (!containerRef.current || template.elements.length === 0) {
+      fitToWindow();
+      return;
+    }
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    if (containerWidth <= 0 || containerHeight <= 0) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    template.elements.forEach(el => {
+      minX = Math.min(minX, el.x);
+      minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x + el.width);
+      maxY = Math.max(maxY, el.y + el.height);
+    });
+
+    const bboxW = Math.max(5, maxX - minX);
+    const bboxH = Math.max(5, maxY - minY);
+    const centerObjX = (minX + maxX) / 2;
+    const centerObjY = (minY + maxY) / 2;
+
+    const availW = Math.max(100, containerWidth - 80);
+    const availH = Math.max(100, containerHeight - 80);
+
+    const baseW = bboxW * baseScale;
+    const baseH = bboxH * baseScale;
+
+    const targetZoom = Math.max(0.1, Math.min(16.0, Number(Math.min(availW / baseW, availH / baseH).toFixed(2))));
+
+    const targetPanX = Math.round(containerWidth / 2 - centerObjX * baseScale * targetZoom);
+    const targetPanY = Math.round(containerHeight / 2 - centerObjY * baseScale * targetZoom);
+
+    setViewport(v => ({
+      ...v,
+      zoom: targetZoom,
+      panX: targetPanX,
+      panY: targetPanY,
+    }));
+  }, [template.elements, fitToWindow, setViewport]);
+
+  // Zoom to selection / rectangle
+  const zoomToSelection = useCallback(() => {
+    if (!containerRef.current) return;
+    const containerWidth = containerRef.current.clientWidth;
+    const containerHeight = containerRef.current.clientHeight;
+    if (containerWidth <= 0 || containerHeight <= 0) return;
+
+    const selectedEls = template.elements.filter(el => selectedElementIds.includes(el.id));
+    if (selectedEls.length === 0) {
+      fitToWindow();
+      return;
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    selectedEls.forEach(el => {
+      minX = Math.min(minX, el.x);
+      minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x + el.width);
+      maxY = Math.max(maxY, el.y + el.height);
+    });
+
+    const bboxW = Math.max(5, maxX - minX);
+    const bboxH = Math.max(5, maxY - minY);
+    const centerSelX = (minX + maxX) / 2;
+    const centerSelY = (minY + maxY) / 2;
+
+    const availW = Math.max(100, containerWidth - 80);
+    const availH = Math.max(100, containerHeight - 80);
+
+    const baseW = bboxW * baseScale;
+    const baseH = bboxH * baseScale;
+
+    const targetZoom = Math.max(0.1, Math.min(24.0, Number(Math.min(availW / baseW, availH / baseH).toFixed(2))));
+
+    const targetPanX = Math.round(containerWidth / 2 - centerSelX * baseScale * targetZoom);
+    const targetPanY = Math.round(containerHeight / 2 - centerSelY * baseScale * targetZoom);
+
+    setViewport(v => ({
+      ...v,
+      zoom: targetZoom,
+      panX: targetPanX,
+      panY: targetPanY,
+    }));
+  }, [selectedElementIds, template.elements, fitToWindow, setViewport]);
+
+  // Auto-fit & center canvas ONLY on initial load and template ID change
   useEffect(() => {
     const timer = setTimeout(() => {
       fitToWindow();
     }, 80);
     return () => clearTimeout(timer);
-  }, [template.id, template.dimensions.width, template.dimensions.height, fitToWindow]);
+  }, [template.id]);
 
   // Track spacebar for pan tool
   useEffect(() => {
@@ -850,35 +1013,6 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
             </div>
           </div>
 
-          {/* Floating Canvas Quick Viewport Controls */}
-          <div className="absolute bottom-3 left-3 z-30 bg-white/90 backdrop-blur-xs border border-slate-300 shadow-md rounded-md p-1 flex items-center gap-1 text-slate-700 text-xs scale-90 sm:scale-100 origin-bottom-left">
-            <button
-              onClick={() => centerInView()}
-              className="px-2 py-1 hover:bg-[#e2e8f0] rounded flex items-center gap-1 font-medium text-[11px] text-slate-800 transition-colors cursor-pointer"
-              title="Center Label in View (Ctrl+0)"
-            >
-              <Target className="w-3.5 h-3.5 text-blue-600" />
-              <span>Center</span>
-            </button>
-            <div className="w-px h-4 bg-slate-300" />
-            <button
-              onClick={fitToWindow}
-              className="px-2 py-1 hover:bg-[#e2e8f0] rounded flex items-center gap-1 font-medium text-[11px] text-slate-800 transition-colors cursor-pointer"
-              title="Fit Label to Window"
-            >
-              <Maximize2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Fit to Screen</span>
-            </button>
-            <div className="w-px h-4 bg-slate-300" />
-            <button
-              onClick={() => centerInView(1.0)}
-              className="px-1.5 py-1 hover:bg-[#e2e8f0] rounded font-mono text-[10.5px] font-semibold text-slate-700 cursor-pointer"
-              title="Actual Size (100%)"
-            >
-              100%
-            </button>
-          </div>
-
           {/* Rubberband Selection Box */}
           {isBoxSelecting && selectionBox && (
             <div
@@ -925,76 +1059,167 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
       )}
 
       {/* 5. Bottom Status Bar (Matching BarTender Status Bar) */}
-      <div className="h-5 bg-[#e4ebf5] border-t border-[#cbd5e1] flex items-center justify-between px-2 text-[10.5px] sm:text-[11px] text-slate-700 select-none overflow-x-auto no-scrollbar shrink-0 whitespace-nowrap">
-        {/* Segment 1: Printer */}
-        <div className="flex items-center gap-1.5 border-r border-[#cbd5e1] pr-3 shrink-0">
-          <Printer className="w-3 h-3 text-slate-600 shrink-0" />
-          <span className="truncate max-w-[120px] sm:max-w-[200px] md:max-w-none">
-            Printer: {activePrinterName || 'Microsoft Print to PDF'}
-          </span>
+      <div className="h-5 bg-[#e4ebf5] border-t border-[#cbd5e1] flex items-center justify-between px-2 text-[10.5px] sm:text-[11px] text-slate-700 select-none shrink-0 whitespace-nowrap relative z-50 overflow-visible">
+        {/* Left Informational Segments */}
+        <div className="flex items-center min-w-0 overflow-hidden">
+          {/* Segment 1: Printer */}
+          <div className="flex items-center gap-1.5 border-r border-[#cbd5e1] pr-3 shrink-0">
+            <Printer className="w-3 h-3 text-slate-600 shrink-0" />
+            <span className="truncate max-w-[120px] sm:max-w-[200px] md:max-w-none">
+              Printer: {activePrinterName || 'Microsoft Print to PDF'}
+            </span>
+          </div>
+
+          {/* Segment 2: Object identification */}
+          <div className="flex items-center gap-1.5 border-r border-[#cbd5e1] pr-3 hidden sm:flex shrink-0">
+            <span className="truncate max-w-[160px] md:max-w-[240px]">
+              {objectLabel}
+            </span>
+          </div>
+
+          {/* Segment 3: Coordinates */}
+          <div className="flex items-center gap-2 border-r border-[#cbd5e1] pr-3 font-mono text-[10px] sm:text-[10.5px] shrink-0">
+            <span>X: {coordX}{unitLabel}</span>
+            <span>Y: {coordY}{unitLabel}</span>
+            <span>Angle: {angleStr}</span>
+          </div>
+
+          {/* Segment 4: Dimensions */}
+          <div className="flex items-center gap-2 border-r border-[#cbd5e1] pr-3 font-mono text-[10px] sm:text-[10.5px] hidden lg:flex shrink-0">
+            <span>Width: {widthStr}{unitLabel}</span>
+            <span>Height: {heightStr}{unitLabel}</span>
+            <span>X Dim: {xDimDisplay}</span>
+          </div>
         </div>
 
-        {/* Segment 2: Object identification */}
-        <div className="flex items-center gap-1.5 border-r border-[#cbd5e1] pr-3 hidden sm:flex shrink-0">
-          <span className="truncate max-w-[160px] md:max-w-[240px]">
-            {objectLabel}
-          </span>
-        </div>
+        {/* Segment 5: BarTender-Style Zoom Menu Control */}
+        <div className="relative ml-auto shrink-0 pl-2 overflow-visible" ref={zoomMenuRef}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsZoomMenuOpen(prev => !prev);
+            }}
+            className={`px-2 py-0.5 rounded-[2px] flex items-center gap-1.5 font-medium text-[11px] cursor-pointer border transition-colors select-none ${
+              isZoomMenuOpen
+                ? 'bg-[#ffe8a6] border-[#d2b470] text-slate-900 shadow-inner'
+                : 'hover:bg-[#d0deec] border-transparent hover:border-slate-300 text-slate-800'
+            }`}
+            title="Zoom&#10;Click to set zoom level."
+          >
+            <ZoomIn className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+            <span className="font-mono text-[11px] font-semibold text-slate-800">
+              {Math.round(viewport.zoom * 100)}%
+            </span>
+            <ChevronDown className="w-3 h-3 text-slate-600 shrink-0 -ml-0.5" />
+          </button>
 
-        {/* Segment 3: Coordinates */}
-        <div className="flex items-center gap-2 border-r border-[#cbd5e1] pr-3 font-mono text-[10px] sm:text-[10.5px] shrink-0">
-          <span>X: {coordX}{unitLabel}</span>
-          <span>Y: {coordY}{unitLabel}</span>
-          <span>Angle: {angleStr}</span>
-        </div>
+          {/* BarTender Zoom Popup Menu */}
+          {isZoomMenuOpen && (
+            <div
+              className="absolute bottom-full right-0 mb-1 z-[9999] bg-white border border-[#999999] shadow-2xl rounded-[2px] py-1 min-w-[220px] text-slate-800 text-[11.5px] select-none"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  handleZoomIn();
+                  setIsZoomMenuOpen(false);
+                }}
+                className="w-full flex items-center px-3 py-1 hover:bg-[#0078d7] hover:text-white text-left cursor-pointer transition-colors"
+              >
+                <ZoomIn className="w-3.5 h-3.5 mr-2.5 shrink-0" />
+                <span>Zoom In</span>
+              </button>
 
-        {/* Segment 4: Dimensions */}
-        <div className="flex items-center gap-2 border-r border-[#cbd5e1] pr-3 font-mono text-[10px] sm:text-[10.5px] hidden lg:flex shrink-0">
-          <span>Width: {widthStr}{unitLabel}</span>
-          <span>Height: {heightStr}{unitLabel}</span>
-          <span>X Dim: {xDimDisplay}</span>
-        </div>
+              <button
+                type="button"
+                onClick={() => {
+                  handleZoomOut();
+                  setIsZoomMenuOpen(false);
+                }}
+                className="w-full flex items-center px-3 py-1 hover:bg-[#0078d7] hover:text-white text-left cursor-pointer transition-colors"
+              >
+                <ZoomOut className="w-3.5 h-3.5 mr-2.5 shrink-0" />
+                <span>Zoom Out</span>
+              </button>
 
-        {/* Segment 5: Zoom & Centering Controls */}
-        <div className="flex items-center gap-1 ml-auto shrink-0 pl-2">
-          <button
-            onClick={() => centerInView()}
-            className="px-1.5 py-0.5 hover:bg-[#d0deec] text-slate-800 rounded font-medium text-[10px] flex items-center gap-0.5 border border-slate-300/80 bg-white/60 cursor-pointer"
-            title="Center Label in View (Ctrl+0)"
-          >
-            <Target className="w-3 h-3 text-blue-600" />
-            <span>Center</span>
-          </button>
-          <button
-            onClick={fitToWindow}
-            className="px-1.5 py-0.5 hover:bg-[#d0deec] text-slate-800 rounded font-medium text-[10px] flex items-center gap-0.5 border border-slate-300/80 bg-white/60 cursor-pointer"
-            title="Fit to Window"
-          >
-            <Maximize2 className="w-3 h-3 text-emerald-600" />
-            <span>Fit</span>
-          </button>
-          <div className="w-px h-3 bg-[#cbd5e1] mx-0.5" />
-          <button
-            onClick={() => setViewport(v => ({ ...v, zoom: Math.max(0.2, Number((v.zoom - 0.2).toFixed(2))) }))}
-            className="w-4 h-4 hover:bg-[#d0deec] rounded flex items-center justify-center font-bold text-xs cursor-pointer"
-            title="Zoom Out"
-          >
-            -
-          </button>
-          <button
-            onClick={() => centerInView(1.0)}
-            className="font-mono text-[10.5px] w-12 text-center font-medium hover:bg-[#d0deec] rounded py-0.5 cursor-pointer"
-            title="Click for 100% Actual Size"
-          >
-            {Math.round(viewport.zoom * 100)}%
-          </button>
-          <button
-            onClick={() => setViewport(v => ({ ...v, zoom: Math.min(8, Number((v.zoom + 0.2).toFixed(2))) }))}
-            className="w-4 h-4 hover:bg-[#d0deec] rounded flex items-center justify-center font-bold text-xs cursor-pointer"
-            title="Zoom In"
-          >
-            +
-          </button>
+              <button
+                type="button"
+                onClick={() => {
+                  zoomToSelection();
+                  setIsZoomMenuOpen(false);
+                }}
+                className="w-full flex items-center px-3 py-1 hover:bg-[#0078d7] hover:text-white text-left cursor-pointer transition-colors"
+              >
+                <Scan className="w-3.5 h-3.5 mr-2.5 shrink-0" />
+                <span>Zoom to Rectangle</span>
+              </button>
+
+              <div className="border-t border-slate-200 my-1 mx-1" />
+
+              {/* Preset Zoom Levels */}
+              {[3200, 1600, 800, 400, 200, 100, 50].map(pct => {
+                const isCurrent = Math.round(viewport.zoom * 100) === pct;
+                return (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => {
+                      centerInView(pct / 100);
+                      setIsZoomMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center px-3 py-1 hover:bg-[#0078d7] hover:text-white text-left cursor-pointer transition-colors ${
+                      isCurrent ? 'font-bold' : ''
+                    }`}
+                  >
+                    <span className="w-3.5 h-3.5 mr-2.5 flex items-center justify-center shrink-0">
+                      {isCurrent && <Check className="w-3 h-3" />}
+                    </span>
+                    <span>{pct}%</span>
+                  </button>
+                );
+              })}
+
+              <div className="border-t border-slate-200 my-1 mx-1" />
+
+              <button
+                type="button"
+                onClick={() => {
+                  fitToWindow();
+                  setIsZoomMenuOpen(false);
+                }}
+                className="w-full flex items-center px-3 py-1 hover:bg-[#0078d7] hover:text-white text-left cursor-pointer transition-colors"
+              >
+                <Maximize2 className="w-3.5 h-3.5 mr-2.5 shrink-0" />
+                <span>Fit Template in Window</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  fitTemplateWidthInWindow();
+                  setIsZoomMenuOpen(false);
+                }}
+                className="w-full flex items-center px-3 py-1 hover:bg-[#0078d7] hover:text-white text-left cursor-pointer transition-colors"
+              >
+                <MoveHorizontal className="w-3.5 h-3.5 mr-2.5 shrink-0" />
+                <span>Fit Template Width in Window</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  fitAllObjectsInWindow();
+                  setIsZoomMenuOpen(false);
+                }}
+                className="w-full flex items-center px-3 py-1 hover:bg-[#0078d7] hover:text-white text-left cursor-pointer transition-colors"
+              >
+                <Frame className="w-3.5 h-3.5 mr-2.5 shrink-0" />
+                <span>Fit All Objects in Window</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

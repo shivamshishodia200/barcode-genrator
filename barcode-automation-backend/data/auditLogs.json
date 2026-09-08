@@ -1,5 +1,18 @@
 [
   {
+    "id": "aud-1788868524186-73",
+    "timestamp": "2026-09-08T11:55:24.188Z",
+    "user": "Designer",
+    "userRole": "Label Designer",
+    "action": "EDIT_TEMPLATE",
+    "details": "Updated label template \"Document1.btw\" (2 elements)",
+    "entityId": "tmpl-document1-btw",
+    "entityName": "Document1.btw",
+    "ipAddress": "127.0.0.1",
+    "previousHash": "5bc84d806519569ba9d937e40bf15985979e5aa4c012d6b3916ca0e679f7be39",
+    "recordHash": "91faca2c5e99311e7903188756821a02debe927fd1a32fd4a0cd7341b535c74b"
+  },
+  {
     "id": "aud-1788866031160-474",
     "timestamp": "2026-09-08T11:13:51.161Z",
     "user": "Designer",

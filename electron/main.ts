@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fork, ChildProcess } from 'child_process';
 import { registerPrinterIpc } from './printer/printerIPC';
+import { registerDatabaseIpc } from './database/databaseIPC';
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcess | null = null;
@@ -1315,6 +1316,7 @@ app.whenReady().then(() => {
   registerExcelIpc();
   registerFontIpc();
   registerPrinterIpc(() => mainWindow);
+  registerDatabaseIpc(() => mainWindow);
   startBackendServer();
   createWindow();
 
