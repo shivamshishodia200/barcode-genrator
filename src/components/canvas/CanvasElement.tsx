@@ -162,23 +162,72 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
       {element.type === 'text' && (() => {
         const textEl = element as TextElement;
 
-        // Arc Text rendering
-        if (textEl.textType === 'arc') {
+        // Border configuration
+        const border = textEl.borderConfig;
+        const hasBorder = border && border.type !== 'none';
+        const isEllipseBorder = border?.type === 'ellipse';
+        const borderStyle = border?.dashStyle || 'solid';
+        const borderWidthPx = (border?.thickness || 1) * (scale / 3.78) * 0.35;
+        const cornerRadiusPx = (border?.cornerSize || 0) * scale;
+        const borderFill = border?.fillColor && (border?.fillTransparency ?? 0) < 100 ? border.fillColor : 'transparent';
+
+        // Margins in screen pixels
+        const mTop = (border?.marginTop || 0) * scale;
+        const mLeft = (border?.marginLeft || 0) * scale;
+        const mBottom = (border?.marginBottom || 0) * scale;
+        const mRight = (border?.marginRight || 0) * scale;
+
+        // Arc Text rendering with SVG Path
+        if (textEl.textFormatType === 'arc' || textEl.textType === 'arc') {
           const pathId = `arc-path-${textEl.id}`;
+          const arc = textEl.arcConfig || {
+            radius: textEl.arcRadius || 50,
+            startAngle: textEl.arcStartAngle || 0,
+            sweepAngle: textEl.arcSweepAngle || 180,
+            direction: textEl.arcDirection || 'clockwise',
+            insidePath: !!textEl.arcInsidePath,
+            characterSpacing: textEl.arcCharacterSpacing || 1,
+          };
+
+          const rad = arc.radius * scale;
+          const cx = widthPx / 2;
+          const cy = heightPx / 2;
+          const startRad = (arc.startAngle * Math.PI) / 180;
+          const sweepRad = (arc.sweepAngle * Math.PI) / 180;
+          const endAngle = arc.direction === 'counter-clockwise' ? arc.startAngle - arc.sweepAngle : arc.startAngle + arc.sweepAngle;
+          const endRad = (endAngle * Math.PI) / 180;
+
+          const x1 = cx + rad * Math.cos(startRad);
+          const y1 = cy + rad * Math.sin(startRad);
+          const x2 = cx + rad * Math.cos(endRad);
+          const y2 = cy + rad * Math.sin(endRad);
+          const largeArc = arc.sweepAngle > 180 ? 1 : 0;
+          const sweepFlag = arc.direction === 'counter-clockwise' ? 0 : 1;
+
+          const pathData = `M ${x1},${y1} A ${rad},${rad} 0 ${largeArc} ${sweepFlag} ${x2},${y2}`;
+
           return (
-            <div className="w-full h-full overflow-hidden flex items-center justify-center">
-              <svg className="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="xMidYMid meet">
-                <path
-                  id={pathId}
-                  d="M 15,85 A 85,85 0 0,1 185,85"
-                  fill="none"
-                  stroke="transparent"
-                />
+            <div
+              className={`w-full h-full overflow-hidden flex items-center justify-center ${
+                isEllipseBorder ? 'rounded-full' : ''
+              }`}
+              style={{
+                border: hasBorder ? `${borderWidthPx}px ${borderStyle} ${border?.color || '#000'}` : undefined,
+                borderRadius: !isEllipseBorder && cornerRadiusPx > 0 ? `${cornerRadiusPx}px` : undefined,
+                backgroundColor: borderFill !== 'transparent' ? borderFill : textEl.whiteOnBlack ? '#000000' : textEl.backgroundColor || 'transparent',
+                paddingTop: `${mTop}px`,
+                paddingLeft: `${mLeft}px`,
+                paddingBottom: `${mBottom}px`,
+                paddingRight: `${mRight}px`,
+              }}
+            >
+              <svg className="w-full h-full" viewBox={`0 0 ${widthPx} ${heightPx}`} preserveAspectRatio="xMidYMid meet">
+                <path id={pathId} d={pathData} fill="none" stroke="transparent" />
                 <text
-                  fill={textEl.color || '#000000'}
-                  fontSize={textEl.fontSize * 2.2}
+                  fill={textEl.whiteOnBlack ? '#ffffff' : textEl.color || '#000000'}
+                  fontSize={textEl.fontSize * (scale / 3.78) * 0.85}
                   fontFamily={textEl.fontFamily || 'Arial, sans-serif'}
-                  fontWeight={textEl.fontWeight || 'bold'}
+                  fontWeight={textEl.fontWeight || 'normal'}
                   fontStyle={textEl.fontStyle || 'normal'}
                   letterSpacing={textEl.letterSpacing || 1}
                 >
@@ -193,19 +242,22 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
 
         // Dynamic Auto-Fit Font Size Calculation
         let effectiveFontSize = textEl.fontSize * (scale / 3.78) * 0.85;
-        if (textEl.autoFit && evaluatedContent) {
-          const maxW = widthPx;
-          const maxH = heightPx;
+        if ((textEl.autoFit || textEl.autoSize || textEl.autoSizeConfig?.enabled) && evaluatedContent) {
+          const maxW = Math.max(10, widthPx - mLeft - mRight);
+          const maxH = Math.max(10, heightPx - mTop - mBottom);
           const textLength = evaluatedContent.length || 1;
           const approxCharWidthRatio = 0.55;
-          if (!textEl.multiline && textEl.textType !== 'multi-line') {
+          const minSz = textEl.autoSizeConfig?.minFontSize ?? textEl.minFontSize ?? 6;
+          const maxSz = textEl.autoSizeConfig?.maxFontSize ?? textEl.maxFontSize ?? 720;
+
+          if (!textEl.multiline && textEl.textType !== 'multi-line' && textEl.textFormatType !== 'paragraph') {
             const estimatedWidth = textLength * effectiveFontSize * approxCharWidthRatio;
             if (estimatedWidth > maxW && maxW > 0) {
               const widthRatio = maxW / estimatedWidth;
-              effectiveFontSize = Math.max(6, effectiveFontSize * widthRatio);
+              effectiveFontSize = Math.max(minSz, Math.min(maxSz, effectiveFontSize * widthRatio));
             }
             if (effectiveFontSize * 1.2 > maxH && maxH > 0) {
-              effectiveFontSize = Math.max(6, maxH * 0.75);
+              effectiveFontSize = Math.max(minSz, Math.min(maxSz, maxH * 0.75));
             }
           } else {
             const charsPerLine = Math.max(1, Math.floor(maxW / (effectiveFontSize * approxCharWidthRatio)));
@@ -213,7 +265,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
             const estimatedHeight = estimatedLines * effectiveFontSize * (textEl.lineHeight || 1.15);
             if (estimatedHeight > maxH && maxH > 0) {
               const heightRatio = Math.sqrt(maxH / estimatedHeight);
-              effectiveFontSize = Math.max(6, effectiveFontSize * heightRatio);
+              effectiveFontSize = Math.max(minSz, Math.min(maxSz, effectiveFontSize * heightRatio));
             }
           }
         }
@@ -232,46 +284,65 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
 
           return (
             <div
-              className="w-full h-full overflow-hidden p-0.5 text-slate-900"
+              className={`w-full h-full overflow-hidden p-0.5 ${isEllipseBorder ? 'rounded-full' : ''}`}
               style={{
                 fontFamily: textEl.fontFamily || 'Arial, sans-serif',
                 fontSize: `${effectiveFontSize}px`,
-                color: textEl.color || '#000000',
-                backgroundColor: textEl.backgroundColor || 'transparent',
+                color: textEl.whiteOnBlack ? '#ffffff' : textEl.color || '#000000',
+                backgroundColor: borderFill !== 'transparent' ? borderFill : textEl.whiteOnBlack ? '#000000' : textEl.backgroundColor || 'transparent',
                 lineHeight: textEl.lineHeight || 1.25,
+                border: hasBorder ? `${borderWidthPx}px ${borderStyle} ${border?.color || '#000'}` : undefined,
+                borderRadius: !isEllipseBorder && cornerRadiusPx > 0 ? `${cornerRadiusPx}px` : undefined,
+                paddingTop: `${mTop}px`,
+                paddingLeft: `${mLeft}px`,
+                paddingBottom: `${mBottom}px`,
+                paddingRight: `${mRight}px`,
               }}
               dangerouslySetInnerHTML={{ __html: htmlToRender }}
             />
           );
         }
 
-        // Standard Single-Line / Multi-Line / Symbol Font text
+        // Standard Single-Line / Paragraph / Multi-Line text
+        const isUnderline = textEl.underline || textEl.textDecoration === 'underline';
+        const isStrikeout = textEl.strikeout || textEl.textDecoration === 'line-through';
+        const textDecor = isUnderline && isStrikeout ? 'underline line-through' : isUnderline ? 'underline' : isStrikeout ? 'line-through' : 'none';
+        const fontScale = (textEl.fontWidthScale || 100) / 100;
+
         return (
           <div
-            className="w-full h-full overflow-hidden flex"
+            className={`w-full h-full overflow-hidden flex ${isEllipseBorder ? 'rounded-full' : ''}`}
             style={{
               fontFamily: textEl.fontFamily || 'Arial, sans-serif',
               fontSize: `${effectiveFontSize}px`,
               fontWeight: textEl.fontWeight || 'normal',
               fontStyle: textEl.fontStyle || 'normal',
-              textDecoration: textEl.textDecoration || 'none',
-              color: textEl.color || '#000000',
-              backgroundColor: textEl.backgroundColor || 'transparent',
+              textDecoration: textDecor,
+              color: textEl.whiteOnBlack ? '#ffffff' : textEl.color || '#000000',
+              backgroundColor: borderFill !== 'transparent' ? borderFill : textEl.whiteOnBlack ? '#000000' : textEl.backgroundColor || 'transparent',
               letterSpacing: `${textEl.letterSpacing || 0}px`,
               lineHeight: textEl.lineHeight || 1.15,
+              transform: fontScale !== 1 ? `scaleX(${fontScale})` : undefined,
+              transformOrigin: textEl.textAlign === 'center' ? 'center' : textEl.textAlign === 'right' ? 'right' : 'left',
+              border: hasBorder ? `${borderWidthPx}px ${borderStyle} ${border?.color || '#000'}` : undefined,
+              borderRadius: !isEllipseBorder && cornerRadiusPx > 0 ? `${cornerRadiusPx}px` : undefined,
+              paddingTop: `${mTop}px`,
+              paddingLeft: `${mLeft}px`,
+              paddingBottom: `${mBottom}px`,
+              paddingRight: `${mRight}px`,
               justifyContent:
-                textEl.textAlign === 'center'
+                textEl.textAlign === 'center' || textEl.horizontalAlignment === 'center'
                   ? 'center'
-                  : textEl.textAlign === 'right'
+                  : textEl.textAlign === 'right' || textEl.horizontalAlignment === 'right'
                   ? 'flex-end'
                   : 'flex-start',
               alignItems:
-                textEl.verticalAlign === 'middle'
+                textEl.verticalAlign === 'middle' || textEl.verticalAlignment === 'middle'
                   ? 'center'
-                  : textEl.verticalAlign === 'bottom'
+                  : textEl.verticalAlign === 'bottom' || textEl.verticalAlignment === 'bottom'
                   ? 'flex-end'
                   : 'flex-start',
-              whiteSpace: textEl.multiline || textEl.textType === 'multi-line' ? 'pre-wrap' : 'nowrap',
+              whiteSpace: textEl.multiline || textEl.textType === 'multi-line' || textEl.textFormatType === 'paragraph' ? 'pre-wrap' : 'nowrap',
             }}
           >
             {evaluatedContent}

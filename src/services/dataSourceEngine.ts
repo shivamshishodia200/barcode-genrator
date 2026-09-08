@@ -1,6 +1,7 @@
-import { DataSourceItem, LabelElement, VariableDefinition, NamedDataSource } from '../types';
-import { applyTransformPipeline } from './transformEngine';
+import { DataSourceItem, LabelElement, TextElement, VariableDefinition, NamedDataSource } from '../types';
+import { applyTransformPipeline, executeEnterpriseTransformPipeline } from './transformEngine';
 import { evaluateFormula } from './formulaEngine';
+import { evaluateSerializedValue } from './serializationEngine';
 
 export interface EvaluationContext {
   record?: Record<string, any>;
@@ -18,6 +19,7 @@ export interface EvaluationContext {
   pageNumber?: number;
   totalPages?: number;
   copyNumber?: number;
+  printIndex?: number;
 }
 
 let globalDatasetsRegistry: any[] = [];
@@ -145,56 +147,43 @@ export function evaluateDataSourceItem(
 
     case 'database':
     case 'database-field': {
-      const field = item.field || item.databaseField;
+      const field = item.field || item.databaseField || (item.value ? item.value.replace(/[{}]/g, '') : '');
       const datasetId = item.datasetId || (item as any).connectionId;
-      const datasets = ctx.datasets || globalDatasetsRegistry;
 
-      // 1. Verify dataset existence if datasetId is bound
-      if (datasetId && datasets && datasets.length > 0) {
-        const matchedDataset = datasets.find((d: any) => d.id === datasetId || d.name?.toLowerCase() === datasetId.toLowerCase());
-        if (!matchedDataset) {
-          return `⚠ Dataset unavailable`;
-        }
-
-        // 2. Verify column existence in detected schema
-        if (field) {
-          const rawCols = matchedDataset.columns || matchedDataset.fields || [];
-          const colNames: string[] = rawCols.map((c: any) => (typeof c === 'string' ? c : c.name || ''));
-          const hasCol = colNames.some((c) => c.toLowerCase() === field.toLowerCase());
-          if (colNames.length > 0 && !hasCol) {
-            return `⚠ Missing Field: ${field}`;
-          }
-        }
-      } else if (ctx.connectedDataset && field) {
-        const rawCols = ctx.connectedDataset.fields || ctx.connectedDataset.columns || [];
-        const colNames: string[] = rawCols.map((c: any) => (typeof c === 'string' ? c : c.name || ''));
-        if (colNames.length > 0 && !colNames.some((c) => c.toLowerCase() === field.toLowerCase())) {
-          return `⚠ Missing Field: ${field}`;
-        }
-      }
-
-      if (!field) {
-        raw = item.value || '';
-        break;
-      }
-
-      // 3. Resolve value from current active record
-      if (ctx.record) {
+      // 1. Direct record resolution if ctx.record is present
+      if (ctx.record && field) {
         if (ctx.record[field] !== undefined && ctx.record[field] !== null) {
           raw = String(ctx.record[field]);
-        } else {
-          // Case-insensitive lookup fallback
-          const matchKey = Object.keys(ctx.record).find((k) => k.toLowerCase() === field.toLowerCase());
-          if (matchKey !== undefined && ctx.record[matchKey] !== undefined && ctx.record[matchKey] !== null) {
-            raw = String(ctx.record[matchKey]);
-          } else if (datasetId) {
-            return `⚠ Missing Field: ${field}`;
-          } else {
-            raw = item.value || `[${field}]`;
+          break;
+        }
+        // Case-insensitive lookup fallback
+        const matchKey = Object.keys(ctx.record).find((k) => k.toLowerCase() === field.toLowerCase());
+        if (matchKey !== undefined && ctx.record[matchKey] !== undefined && ctx.record[matchKey] !== null) {
+          raw = String(ctx.record[matchKey]);
+          break;
+        }
+      }
+
+      // 2. Lookup in connected dataset or datasets registry
+      const datasets = ctx.datasets || globalDatasetsRegistry;
+      if (datasetId && datasets && datasets.length > 0) {
+        const matchedDataset = datasets.find(
+          (d: any) => d.id === datasetId || d.name?.toLowerCase() === datasetId.toLowerCase()
+        );
+        if (matchedDataset && matchedDataset.records && matchedDataset.records.length > 0) {
+          const recIdx = ctx.currentRecordIndex ?? 0;
+          const targetRec = matchedDataset.records[recIdx] || matchedDataset.records[0];
+          if (targetRec && targetRec[field] !== undefined) {
+            raw = String(targetRec[field]);
+            break;
           }
         }
-      } else {
+      }
+
+      if (field) {
         raw = item.value || `[${field}]`;
+      } else {
+        raw = item.value || '';
       }
       break;
     }
@@ -310,12 +299,65 @@ export function evaluateDataSourceItem(
       break;
     }
 
+    case 'formula': {
+      const expr = item.formulaExpression || (item as any).formula || item.value || '';
+      if (expr) {
+        const cleanExpr = expr.startsWith('=') ? expr.slice(1) : expr;
+        const evalRes = evaluateFormula(cleanExpr, {
+          record: ctx.record || {},
+          variables: ctx.variables ? Object.fromEntries(ctx.variables.map((v) => [v.name, v.defaultValue])) : {},
+          namedSources: ctx.namedDataSources ? Object.fromEntries(ctx.namedDataSources.map((n) => [n.name, n.defaultValue])) : {},
+          system: {
+            DATE: formatCustomDate(new Date(), 'YYYY-MM-DD'),
+            TIME: formatCustomDate(new Date(), 'HH:mm:ss'),
+            USER: ctx.userName || 'Current User',
+            PRINTER: ctx.printerName || 'Default Zebra ZT410',
+            JOB_ID: ctx.jobId || 'JOB-001',
+            RECORD_NUMBER: (ctx.currentRecordIndex ?? 0) + 1,
+            TOTAL_RECORDS: ctx.totalRecords || 1,
+          },
+        });
+        raw = evalRes.success ? String(evalRes.value) : `[Formula Error: ${evalRes.error}]`;
+      }
+      break;
+    }
+
     default:
       raw = item.value || '';
   }
 
-  // Apply per-data-source transform rules pipeline
-  return applyTransformPipeline(raw, item.transforms);
+  // 1. If item has structured transformConfig, run complete enterprise pipeline
+  if (item.transformConfig) {
+    raw = executeEnterpriseTransformPipeline(raw, item.transformConfig, {
+      record: ctx.record,
+      printIndex: ctx.printIndex ?? ctx.currentRecordIndex ?? 0,
+      recordIndex: ctx.currentRecordIndex ?? 0,
+      copyIndex: ctx.copyNumber ?? 0,
+    });
+  }
+
+  // 2. If item has serialization directly attached
+  if (item.serialization && item.serialization.action !== 'none') {
+    raw = evaluateSerializedValue(raw, item.serialization, {
+      printIndex: ctx.printIndex ?? ctx.currentRecordIndex ?? 0,
+      recordIndex: ctx.currentRecordIndex ?? 0,
+      copyIndex: ctx.copyNumber ?? 0,
+    });
+  }
+
+  // 3. If item has prefixSuffix directly attached
+  if (item.prefixSuffix) {
+    const pfx = item.prefixSuffix.prefix ?? '';
+    const sfx = item.prefixSuffix.suffix ?? '';
+    raw = `${pfx}${raw}${sfx}`;
+  }
+
+  // 4. Apply legacy/rules-based transforms pipeline
+  if (item.transforms && item.transforms.length > 0) {
+    raw = applyTransformPipeline(raw, item.transforms);
+  }
+
+  return raw;
 }
 
 /**
@@ -366,27 +408,86 @@ export function interpolateDynamicTokens(text: string, ctx: EvaluationContext): 
 }
 
 /**
- * Evaluates the full concatenated value for an element
+ * Central text evaluator conforming to Phase 16 & 17
  */
-export function evaluateElementData(element: LabelElement, ctx: EvaluationContext = {}): string {
+export function evaluateTextElement(element: TextElement, ctx: EvaluationContext = {}): string {
   // If element has multi-data sources defined and populated
   if (element.dataSources && element.dataSources.length > 0) {
     const combined = element.dataSources.map((item, idx) => evaluateDataSourceItem(item, ctx, idx)).join('');
     return applyTransformPipeline(combined, element.transforms);
   }
 
-  // Fallback to single value / text with dynamic token interpolation
-  let baseValue = '';
+  let baseValue = element.text || '';
+  const binding = element.dataBinding;
+  if (binding) {
+    if (typeof binding === 'string' && binding.startsWith('=')) {
+      const cleanExpr = binding.slice(1);
+      const evalRes = evaluateFormula(cleanExpr, {
+        record: ctx.record || {},
+        variables: ctx.variables ? Object.fromEntries(ctx.variables.map((v) => [v.name, v.defaultValue])) : {},
+        namedSources: ctx.namedDataSources ? Object.fromEntries(ctx.namedDataSources.map((n) => [n.name, n.defaultValue])) : {},
+        system: {
+          DATE: formatCustomDate(new Date(), 'YYYY-MM-DD'),
+          TIME: formatCustomDate(new Date(), 'HH:mm:ss'),
+          USER: ctx.userName || 'Current User',
+          PRINTER: ctx.printerName || 'Default Zebra ZT410',
+          JOB_ID: ctx.jobId || 'JOB-001',
+          RECORD_NUMBER: (ctx.currentRecordIndex ?? 0) + 1,
+          TOTAL_RECORDS: ctx.totalRecords || 1,
+        },
+      });
+      baseValue = evalRes.success ? String(evalRes.value) : `[Formula Error: ${evalRes.error}]`;
+    } else {
+      baseValue = interpolateDynamicTokens(binding, ctx);
+    }
+  } else {
+    baseValue = interpolateDynamicTokens(baseValue, ctx);
+  }
+
+  return applyTransformPipeline(baseValue, element.transforms);
+}
+
+/**
+ * Evaluates the full concatenated value for any element
+ */
+export function evaluateElementData(element: LabelElement, ctx: EvaluationContext = {}): string {
   if (element.type === 'text') {
-    baseValue = element.text || (element as any).content || '';
-  } else if (element.type === 'barcode') {
+    return evaluateTextElement(element as TextElement, ctx);
+  }
+
+  // Barcodes and other elements
+  if (element.dataSources && element.dataSources.length > 0) {
+    const combined = element.dataSources.map((item, idx) => evaluateDataSourceItem(item, ctx, idx)).join('');
+    return applyTransformPipeline(combined, element.transforms);
+  }
+
+  let baseValue = '';
+  if (element.type === 'barcode') {
     baseValue = element.value || (element as any).barcodeValue || (element as any).content || '';
   }
 
-  // Check dataBinding or interpolate tokens
   const binding = (element as any).dataBinding;
   if (binding) {
-    baseValue = interpolateDynamicTokens(binding, ctx);
+    if (typeof binding === 'string' && binding.startsWith('=')) {
+      const cleanExpr = binding.slice(1);
+      const evalRes = evaluateFormula(cleanExpr, {
+        record: ctx.record || {},
+        variables: ctx.variables ? Object.fromEntries(ctx.variables.map((v) => [v.name, v.defaultValue])) : {},
+        namedSources: ctx.namedDataSources ? Object.fromEntries(ctx.namedDataSources.map((n) => [n.name, n.defaultValue])) : {},
+        system: {
+          DATE: formatCustomDate(new Date(), 'YYYY-MM-DD'),
+          TIME: formatCustomDate(new Date(), 'HH:mm:ss'),
+          USER: ctx.userName || 'Current User',
+          PRINTER: ctx.printerName || 'Default Zebra ZT410',
+          JOB_ID: ctx.jobId || 'JOB-001',
+          RECORD_NUMBER: (ctx.currentRecordIndex ?? 0) + 1,
+          TOTAL_RECORDS: ctx.totalRecords || 1,
+        },
+      });
+      baseValue = evalRes.success ? String(evalRes.value) : `[Formula Error: ${evalRes.error}]`;
+    } else {
+      baseValue = interpolateDynamicTokens(binding, ctx);
+    }
   } else {
     baseValue = interpolateDynamicTokens(baseValue, ctx);
   }

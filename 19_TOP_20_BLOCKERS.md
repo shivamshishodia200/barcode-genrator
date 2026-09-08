@@ -1,0 +1,31 @@
+# 19. Top 20 Technical Blockers & Release Risks
+
+**Product:** BarcodeFlow Enterprise Suite  
+**Scope:** Ranked Inventory of Critical Blockers, Gaps, and Technical Risks  
+
+---
+
+## Top 20 Ranked Blockers Table
+
+| Rank | Blocker / Issue Title | Category | Impact | Evidence in Codebase | Recommended Fix | Effort |
+| :-: | :--- | :--- | :--- | :--- | :--- | :---: |
+| **#1** | **Physical Thermal Printer Calibration Untested** | Hardware | Risk of label misalignment or unreadable barcodes on physical Zebra/TSC thermal rolls | `src/printing/renderers/zplRenderer.ts` has code but no physical printer run log | Run physical label roll tests (50x25, 100x50 mm) on Zebra ZT410 & TSC TTP-244 | 18 hrs |
+| **#2** | **CSV / Delimited Text Lacks Provider Wrapper** | Database | CSV import is client-only and bypasses `IDataSourceProvider` architecture | `src/components/dialogs/CsvImportModal.tsx` operates separately from `ProviderRegistry` | Implement `TextFileDataSourceProvider` conforming to `IDataSourceProvider` | 20 hrs |
+| **#3** | **Unsigned Executable SmartScreen Warning** | Deployment | Windows Defender SmartScreen blocks unsigned installer on client PCs | `electron-builder.unsigned.json` does not configure code signing | Procure EV Authenticode Certificate and sign the NSIS `.exe` installer | 14 hrs |
+| **#4** | **SQL Server Wizard Connect Unhooked** | Database | Users clicking SQL Server in wizard cannot connect to real databases | `DatabaseConnectionModal.tsx` lines 450–520 have stubs | Implement `SqlServerDataSourceProvider` via pure TypeScript `tedious` TDS driver | 38 hrs |
+| **#5** | **Windows ODBC Subsystem Bridge Missing** | Database | Cannot connect to corporate DSN data sources (Oracle, DB2, Postgres, MySQL) | Wizard shows ODBC tab with no backend execution | Implement PowerShell / C++ ADO.NET ODBC bridge in `electron/main.ts` | 32 hrs |
+| **#6** | **Print-Time Data Entry Forms Visual Builder Missing** | Forms | Cannot prompt operators for manual lot/weight input prior to printing | `src/types/formTypes.ts` defines types, but visual builder is missing | Build Form Designer canvas and interactive print-time popup dialog | 48 hrs |
+| **#7** | **Headless Folder Watcher Automation Missing** | Automation | Cannot automatically print when ERP drops a `.csv` or `.xml` file in a hot folder | REST API exists, but no background directory polling service | Build `scripts/folderWatcherService.ts` headless integration daemon | 52 hrs |
+| **#8** | **Document Event Scripts Not Executing in Spooler** | Scripting | PrePrint/PostPrint event scripts do not execute during actual batch printing | `DocumentEventScriptsModal.tsx` tests scripts, but `printSpoolerService.ts` doesn't call them | Hook event evaluator into `EnterprisePrintSpooler.dispatchJob()` | 12 hrs |
+| **#9** | **Shared Multi-Station Serial Counters Missing** | Serialization | Two print stations printing concurrently will generate duplicate serial numbers | `SerialNumberWizardModal.tsx` maintains only local client-side state | Store serial counters in centralized SQLite backend with atomic increment transactions | 24 hrs |
+| **#10** | **RFID Tag Object Lacks Binary Chip Encoding** | RFID | Cannot encode RFID smart labels on Zebra/TSC RFID printers | `ObjectToolbar.tsx` places visual icon, but `zplRenderer.ts` generates no `^RF` | Implement EPC Gen2 SGTIN-96 bit-packer and ZPL `^RF`/`^RW` command generators | 44 hrs |
+| **#11** | **Composite Nested Object Grouping Missing** | Designer | Grouped elements cannot be saved and reopened as a single composite object | `src/App.tsx` has selection grouping, but no hierarchy container model | Implement composite `group` element type with recursive bounding box transforms | 18 hrs |
+| **#12** | **Smart Guides Equidistant Snapping Missing** | Designer | Operators cannot easily distribute 3+ objects with magnetic visual snapping | `Canvas.tsx` snaps only to bounding box edges, not equidistant intervals | Implement multi-object center and spacing interval guide calculator | 14 hrs |
+| **#13** | **Access Database (.mdb/.accdb) Driver Missing** | Database | Cannot connect to legacy Microsoft Access databases | Wizard shows Access tab with no backend connection handler | Implement Windows ADO.NET OLE DB bridge in Electron main process | 28 hrs |
+| **#14** | **Oracle Database Native Driver Missing** | Database | Enterprise Oracle ERP databases cannot be queried directly | Wizard shows Oracle tab with no backend connection handler | Implement `OracleDataSourceProvider` using thin-mode `oracledb` | 40 hrs |
+| **#15** | **Auto-Update Background Service Missing** | Maintenance | Customers must manually re-download installers for product updates | `electron-updater` is not hooked in `electron/main.ts` | Configure `electron-updater` with GitHub Releases / S3 backend | 24 hrs |
+| **#16** | **Freeform 1-Degree Canvas Rotation Snapped to 90°** | Designer | Labels requiring angled text (e.g. 45° caution labels) cannot rotate smoothly | `Canvas.tsx` snaps rotation to 0°, 90°, 180°, 270° | Add freeform rotation handle with Shift-key 15° discrete snapping | 8 hrs |
+| **#17** | **Database Passwords Stored in Plaintext Config** | Security | Saved connection strings in project files store DB passwords unencrypted | `src/services/documentFileService.ts` serializes raw connection config | Encrypt passwords using Electron `safeStorage` API | 10 hrs |
+| **#18** | **Bidirectional Printer Hardware Status Polling** | Hardware | Application cannot detect physical paper jams, head open, or out-of-ribbon | `printerDiscovery.ts` queries Windows spooler status, but not live bi-directional MIB | Add SNMP / TCP Port 9100 bidirectional status query loop | 22 hrs |
+| **#19** | **SAP IDoc XML Segment Parser Missing** | Enterprise | Cannot parse SAP IDoc XML files directly into label fields | Wizard shows SAP IDoc tab without segment extraction engine | Implement XML parser extracting `<IDOC>` data segments into tabular rows | 48 hrs |
+| **#20** | **Enterprise Active Directory / SSO Missing** | Enterprise | Multi-user enterprise facilities require domain authentication | `apiService.ts` supports local SQLite users only | Add LDAP / Windows Active Directory authentication module | 36 hrs |

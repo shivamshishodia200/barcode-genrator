@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { LabelTemplate, LabelElement, CanvasGuide, ViewportState, OpenDocument } from '../../types';
-import { HorizontalRuler, VerticalRuler } from './Rulers';
+import { HorizontalRuler, VerticalRuler, RulerCorner } from './Rulers';
 import { CanvasElement } from './CanvasElement';
 import { ContextMenu } from './ContextMenu';
 import { RightVerticalToolbar } from './RightVerticalToolbar';
@@ -598,14 +598,64 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
     innerBorderRadius = '0px';
   }
 
+  // Status Bar Metrics & Unit Scaling
+  const unitLabel = viewport.unit === 'inch' ? 'in' : viewport.unit;
+  const unitMultiplier = viewport.unit === 'inch' ? 1 / 25.4 : viewport.unit === 'px' ? 96 / 25.4 : 1;
+  const unitDecimals = viewport.unit === 'inch' ? 3 : viewport.unit === 'px' ? 0 : 1;
+  const formatUnitVal = (valMm: number) => (valMm * unitMultiplier).toFixed(unitDecimals);
+
+  // Selected Object Identification & Bounding Box
+  let objectLabel = 'Object: None (Label Page)';
+  let coordX = '0.0';
+  let coordY = '0.0';
+  let angleStr = '0.0°';
+  let widthStr = formatUnitVal(template.dimensions.width);
+  let heightStr = formatUnitVal(template.dimensions.height);
+  let xDimDisplay = '--';
+
+  if (selectedElementIds.length === 1 && selectedElement) {
+    objectLabel = `Object: ${selectedElement.name}`;
+    coordX = formatUnitVal(selectedElement.x);
+    coordY = formatUnitVal(selectedElement.y);
+    angleStr = `${(selectedElement.rotation || 0).toFixed(1)}°`;
+    widthStr = formatUnitVal(selectedElement.width);
+    heightStr = formatUnitVal(selectedElement.height);
+
+    if (selectedElement.type === 'barcode') {
+      const rawModuleWidth = (selectedElement as any).moduleWidth || (selectedElement as any).xDimension || (selectedElement.width / 50);
+      const xDimMm = typeof rawModuleWidth === 'number' ? rawModuleWidth : parseFloat(rawModuleWidth) || 0.33;
+      xDimDisplay = `${(xDimMm * unitMultiplier).toFixed(2)}${unitLabel}`;
+    }
+  } else if (selectedElementIds.length > 1) {
+    const selectedList = template.elements.filter(e => selectedElementIds.includes(e.id));
+    if (selectedList.length > 0) {
+      const minX = Math.min(...selectedList.map(e => e.x));
+      const minY = Math.min(...selectedList.map(e => e.y));
+      const maxX = Math.max(...selectedList.map(e => e.x + e.width));
+      const maxY = Math.max(...selectedList.map(e => e.y + e.height));
+      objectLabel = `Object: ${selectedElementIds.length} Objects Selected`;
+      coordX = formatUnitVal(minX);
+      coordY = formatUnitVal(minY);
+      angleStr = '--';
+      widthStr = formatUnitVal(maxX - minX);
+      heightStr = formatUnitVal(maxY - minY);
+    }
+  } else {
+    // When no object is selected, show label origin (0.0, 0.0)
+    coordX = '0.0';
+    coordY = '0.0';
+    angleStr = '0.0°';
+  }
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[#9fbddb] relative overflow-hidden select-none">
       {/* 1. Top Horizontal Ruler */}
       {viewport.showRulers && (
         <div className="flex h-5 bg-[#e4ebf5]">
-          <div className="w-5 h-5 bg-[#d8e2ee] border-r border-b border-[#cbd5e1] shrink-0 flex items-center justify-center text-[8px] font-sans font-bold text-slate-700">
-            {viewport.unit}
-          </div>
+          <RulerCorner
+            unit={viewport.unit}
+            onToggleUnit={() => setViewport(v => ({ ...v, unit: v.unit === 'mm' ? 'inch' : 'mm' }))}
+          />
           <div className="flex-1 overflow-hidden">
             <HorizontalRuler
               widthMm={template.dimensions.width}
@@ -616,6 +666,7 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
               cursorY={cursorMm.y}
               panX={viewport.panX}
               panY={viewport.panY}
+              guides={guides}
               onAddGuide={(type, pos) => setGuides(g => [...g, { id: `g-${Date.now()}`, type, position: pos }])}
             />
           </div>
@@ -638,6 +689,7 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
               cursorY={cursorMm.y}
               panX={viewport.panX}
               panY={viewport.panY}
+              guides={guides}
               onAddGuide={(type, pos) => setGuides(g => [...g, { id: `g-${Date.now()}`, type, position: pos }])}
             />
           </div>
@@ -884,23 +936,23 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
 
         {/* Segment 2: Object identification */}
         <div className="flex items-center gap-1.5 border-r border-[#cbd5e1] pr-3 hidden sm:flex shrink-0">
-          <span className="truncate max-w-[150px]">
-            {selectedElement ? `Object: ${selectedElement.name}` : 'Object: None (Label Page)'}
+          <span className="truncate max-w-[160px] md:max-w-[240px]">
+            {objectLabel}
           </span>
         </div>
 
         {/* Segment 3: Coordinates */}
         <div className="flex items-center gap-2 border-r border-[#cbd5e1] pr-3 font-mono text-[10px] sm:text-[10.5px] shrink-0">
-          <span>X: {selectedElement ? selectedElement.x.toFixed(1) : cursorMm.x.toFixed(1)}mm</span>
-          <span>Y: {selectedElement ? selectedElement.y.toFixed(1) : cursorMm.y.toFixed(1)}mm</span>
-          <span>Angle: {selectedElement ? `${(selectedElement.rotation || 0).toFixed(1)}°` : '0.0°'}</span>
+          <span>X: {coordX}{unitLabel}</span>
+          <span>Y: {coordY}{unitLabel}</span>
+          <span>Angle: {angleStr}</span>
         </div>
 
         {/* Segment 4: Dimensions */}
         <div className="flex items-center gap-2 border-r border-[#cbd5e1] pr-3 font-mono text-[10px] sm:text-[10.5px] hidden lg:flex shrink-0">
-          <span>Width: {selectedElement ? selectedElement.width.toFixed(1) : template.dimensions.width.toFixed(1)}mm</span>
-          <span>Height: {selectedElement ? selectedElement.height.toFixed(1) : template.dimensions.height.toFixed(1)}mm</span>
-          <span>X Dim: 0.78mm</span>
+          <span>Width: {widthStr}{unitLabel}</span>
+          <span>Height: {heightStr}{unitLabel}</span>
+          <span>X Dim: {xDimDisplay}</span>
         </div>
 
         {/* Segment 5: Zoom & Centering Controls */}

@@ -25,6 +25,7 @@ export interface RecordNavigatorProps {
   selectedCount?: number;
   connection?: DatabaseConnectionConfig;
   currentRecordData?: Record<string, any>;
+  codeVal?: string;
   onFirst: () => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -46,6 +47,7 @@ export const RecordNavigator: React.FC<RecordNavigatorProps> = ({
   selectedCount = 0,
   connection,
   currentRecordData,
+  codeVal,
   onFirst,
   onPrevious,
   onNext,
@@ -91,7 +93,6 @@ export const RecordNavigator: React.FC<RecordNavigatorProps> = ({
       const msg = `Record must be between 1 and ${displayTotal}.`;
       setErrorMessage(msg);
       setInputVal(String(currentHumanRecord));
-      // Auto-hide validation error after 3 seconds
       setTimeout(() => setErrorMessage(null), 3000);
       return;
     }
@@ -115,7 +116,7 @@ export const RecordNavigator: React.FC<RecordNavigatorProps> = ({
   const canGoNext = !isLoading && displayTotal > 0 && currentRecordIndex < displayTotal - 1;
   const canGoLast = !isLoading && displayTotal > 0 && currentRecordIndex < displayTotal - 1;
 
-  const isLinked = connection?.filePath || connection?.type === 'excel';
+  const isLinked = !!(connection?.filePath || (connection?.type === 'excel' && connection?.records && connection.records.length > 0));
   const isFiltered = unfilteredTotal !== undefined && unfilteredTotal !== displayTotal;
 
   return (
@@ -131,7 +132,7 @@ export const RecordNavigator: React.FC<RecordNavigatorProps> = ({
           <button
             type="button"
             onClick={() => setErrorMessage(null)}
-            className="ml-1 text-amber-600 hover:text-amber-900 font-bold"
+            className="ml-1 text-amber-600 hover:text-amber-900 font-bold cursor-pointer"
           >
             ×
           </button>
@@ -174,8 +175,8 @@ export const RecordNavigator: React.FC<RecordNavigatorProps> = ({
           <button
             type="button"
             onClick={onRefresh}
-            disabled={isLoading}
-            title="Refresh Excel File Records (re-reads source spreadsheet)"
+            disabled={isLoading || !connection}
+            title={connection ? "Refresh Excel File Records (re-reads source spreadsheet)" : "No active dataset to refresh"}
             className="p-1 bg-white hover:bg-slate-50 active:bg-slate-200 border border-slate-300 rounded text-slate-600 hover:text-blue-600 disabled:opacity-40 cursor-pointer transition-colors shrink-0"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
@@ -183,27 +184,37 @@ export const RecordNavigator: React.FC<RecordNavigatorProps> = ({
         )}
 
         {/* View Grid Browser */}
-        {onOpenRecordBrowser && displayTotal > 0 && (
+        {onOpenRecordBrowser && (
           <button
             type="button"
             onClick={onOpenRecordBrowser}
+            disabled={displayTotal === 0}
             title="Open Record Browser Table & Filter Manager"
-            className="hidden sm:flex items-center gap-1 px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 text-indigo-800 border border-indigo-200 rounded text-[11px] font-medium cursor-pointer transition-colors shrink-0"
+            className="hidden sm:flex items-center gap-1 px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 text-indigo-800 border border-indigo-200 rounded text-[11px] font-medium disabled:opacity-40 cursor-pointer transition-colors shrink-0"
           >
             <Table className="w-3.5 h-3.5 text-indigo-600" />
             <span>View Records</span>
           </button>
         )}
 
+        {/* Resolved CODE VAL Indicator */}
+        <div
+          className="flex items-center gap-1 text-[10.5px] font-mono px-2 py-0.5 bg-white border border-slate-300 rounded text-slate-700 shrink-0 shadow-2xs"
+          title="Active Barcode Encoded Value"
+        >
+          <span className="font-semibold text-slate-500 text-[10px]">CODE_VAL:</span>
+          <span className="font-bold text-blue-700 truncate max-w-[130px] sm:max-w-[180px]">{codeVal || '--'}</span>
+        </div>
+
         {/* Live Active Record Preview Strip */}
         {displayTotal > 0 && currentRecordData && (
           <div
-            className="hidden xl:flex items-center gap-2 text-[10px] text-slate-500 font-mono pl-2 border-l border-slate-300 truncate max-w-md"
+            className="hidden 2xl:flex items-center gap-2 text-[10px] text-slate-500 font-mono pl-2 border-l border-slate-300 truncate max-w-sm"
             title="Active record values preview"
           >
             {Object.entries(currentRecordData)
-              .filter(([k]) => !k.startsWith('__'))
-              .slice(0, 3)
+              .filter(([k]) => !k.startsWith('__') && k.toLowerCase() !== 'code_val')
+              .slice(0, 2)
               .map(([k, v]) => (
                 <span key={k} className="truncate">
                   <strong className="text-slate-700">{k}:</strong> {String(v ?? '')}
@@ -236,7 +247,7 @@ export const RecordNavigator: React.FC<RecordNavigatorProps> = ({
                     onSearchFilterChange('');
                     setIsSearchOpen(false);
                   }}
-                  className="text-slate-400 hover:text-slate-600 ml-0.5"
+                  className="text-slate-400 hover:text-slate-600 ml-0.5 cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -245,8 +256,9 @@ export const RecordNavigator: React.FC<RecordNavigatorProps> = ({
               <button
                 type="button"
                 onClick={() => setIsSearchOpen(true)}
+                disabled={displayTotal === 0}
                 title={searchFilter ? `Active filter: "${searchFilter}"` : 'Quick Filter Records'}
-                className={`p-1 border rounded cursor-pointer transition-colors ${
+                className={`p-1 border rounded disabled:opacity-40 cursor-pointer transition-colors ${
                   searchFilter
                     ? 'bg-amber-50 text-amber-700 border-amber-300'
                     : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-300'
@@ -302,7 +314,7 @@ export const RecordNavigator: React.FC<RecordNavigatorProps> = ({
               <ChevronLeft className="w-4 h-4" />
             </button>
 
-            {/* [ 5 ] of 7 editable input */}
+            {/* [ 1 ] of N editable input */}
             <div className="flex items-center gap-1 font-mono text-xs">
               <input
                 type="text"

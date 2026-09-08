@@ -242,6 +242,8 @@ export const excelService = {
   readWorkbook,
   getWorkbookSheetNames,
   parseSheet,
+  inferColumnType,
+  formatExcelDate,
   createSampleProductsWorkbookRaw: createSampleProductsWorkbook,
 
   async inspectExcelFile(file: File, selectedSheet?: string, headerRow: number = 1) {

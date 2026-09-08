@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { DataSourceItem } from '../../types';
+import { DataSourceItem, DatabaseConnectionConfig } from '../../types';
 import { apiService } from '../../services/apiService';
-import { Database, FileSpreadsheet, AlertCircle, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Database, FileSpreadsheet, AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 export interface DatabaseFieldSourceConfigProps {
   dataSource: DataSourceItem;
   onUpdate: (updates: Partial<DataSourceItem>) => void;
   datasets?: any[];
   currentRecord?: Record<string, any>;
+  currentConnection?: DatabaseConnectionConfig;
   onConnectDatasetToTemplate?: (dataset: any) => void;
 }
 
@@ -16,6 +17,7 @@ export const DatabaseFieldSourceConfig: React.FC<DatabaseFieldSourceConfigProps>
   onUpdate,
   datasets: propDatasets,
   currentRecord,
+  currentConnection,
   onConnectDatasetToTemplate,
 }) => {
   const [internalDatasets, setInternalDatasets] = useState<any[]>(propDatasets || []);
@@ -39,18 +41,55 @@ export const DatabaseFieldSourceConfig: React.FC<DatabaseFieldSourceConfigProps>
     }
   }, [propDatasets]);
 
+  // Combine propDatasets/API datasets with the template's current active connection
+  const effectiveDatasets = useMemo(() => {
+    const list = [...internalDatasets];
+    if (currentConnection && currentConnection.records && currentConnection.records.length > 0) {
+      const connObj = {
+        id: currentConnection.id || 'current-active-conn',
+        name: currentConnection.name,
+        sourceType: currentConnection.type === 'excel' ? 'excel' : currentConnection.type === 'csv' ? 'csv' : 'sql',
+        sheetName: currentConnection.sheetName || 'Sheet1',
+        availableSheets: currentConnection.sheetName ? [currentConnection.sheetName] : ['Sheet1'],
+        columns: currentConnection.fields || (currentConnection.records[0] ? Object.keys(currentConnection.records[0]) : []),
+        fields: currentConnection.fields || (currentConnection.records[0] ? Object.keys(currentConnection.records[0]) : []),
+        records: currentConnection.records,
+        recordCount: currentConnection.records.length,
+      };
+
+      const existingIdx = list.findIndex((d) => d.id === connObj.id || d.name === connObj.name);
+      if (existingIdx >= 0) {
+        list[existingIdx] = { ...list[existingIdx], ...connObj };
+      } else {
+        list.unshift(connObj);
+      }
+    }
+    return list;
+  }, [internalDatasets, currentConnection]);
+
   // Current selected dataset
   const activeDataset = useMemo(() => {
-    if (!dataSource.datasetId && internalDatasets.length > 0) {
-      // Default to first dataset if only 1 exists or not yet bound
-      return internalDatasets[0];
+    if (dataSource.datasetId) {
+      const found = effectiveDatasets.find((d) => d.id === dataSource.datasetId || d.name === dataSource.datasetId);
+      if (found) return found;
     }
-    return internalDatasets.find((d) => d.id === dataSource.datasetId) || null;
-  }, [dataSource.datasetId, internalDatasets]);
+    if (dataSource.datasetName) {
+      const found = effectiveDatasets.find((d) => d.name === dataSource.datasetName);
+      if (found) return found;
+    }
+    // If template has an active connection, default to it
+    if (currentConnection) {
+      const found = effectiveDatasets.find(
+        (d) => d.name === currentConnection.name || d.id === currentConnection.id || d.id === 'current-active-conn'
+      );
+      if (found) return found;
+    }
+    return effectiveDatasets[0] || null;
+  }, [dataSource.datasetId, dataSource.datasetName, effectiveDatasets, currentConnection]);
 
   // Detected sheets (for Excel workbooks)
   const availableSheets = useMemo(() => {
-    if (!activeDataset) return [];
+    if (!activeDataset) return ['Sheet1'];
     if (Array.isArray(activeDataset.availableSheets) && activeDataset.availableSheets.length > 0) {
       return activeDataset.availableSheets;
     }
@@ -62,20 +101,33 @@ export const DatabaseFieldSourceConfig: React.FC<DatabaseFieldSourceConfigProps>
 
   const currentSheet = dataSource.sheetName || activeDataset?.sheetName || availableSheets[0] || 'Sheet1';
 
-  // Detected column fields from dataset schema (Source of truth)
+  // Detected column fields from dataset schema and current record (Source of truth)
   const availableColumns = useMemo<string[]>(() => {
-    if (!activeDataset) return [];
-    if (Array.isArray(activeDataset.columns) && activeDataset.columns.length > 0) {
-      return activeDataset.columns;
+    const set = new Set<string>();
+    if (activeDataset) {
+      if (Array.isArray(activeDataset.columns)) {
+        activeDataset.columns.forEach((c: any) => set.add(typeof c === 'string' ? c : c.name || ''));
+      }
+      if (Array.isArray(activeDataset.fields)) {
+        activeDataset.fields.forEach((f: any) => set.add(typeof f === 'string' ? f : f.name || ''));
+      }
+      if (Array.isArray(activeDataset.records) && activeDataset.records.length > 0) {
+        Object.keys(activeDataset.records[0] || {}).forEach((k) => set.add(k));
+      }
     }
-    if (Array.isArray(activeDataset.fields) && activeDataset.fields.length > 0) {
-      return activeDataset.fields.map((f: any) => (typeof f === 'string' ? f : f.name || ''));
+    if (currentConnection) {
+      if (Array.isArray(currentConnection.fields)) {
+        currentConnection.fields.forEach((f) => set.add(f));
+      }
+      if (Array.isArray(currentConnection.records) && currentConnection.records.length > 0) {
+        Object.keys(currentConnection.records[0] || {}).forEach((k) => set.add(k));
+      }
     }
-    if (Array.isArray(activeDataset.records) && activeDataset.records.length > 0) {
-      return Object.keys(activeDataset.records[0] || {});
+    if (currentRecord) {
+      Object.keys(currentRecord).forEach((k) => set.add(k));
     }
-    return [];
-  }, [activeDataset]);
+    return Array.from(set).filter(Boolean);
+  }, [activeDataset, currentConnection, currentRecord]);
 
   const activeField = dataSource.field || dataSource.databaseField || '';
 
@@ -94,6 +146,11 @@ export const DatabaseFieldSourceConfig: React.FC<DatabaseFieldSourceConfigProps>
     if (currentRecord && currentRecord[activeField] !== undefined) {
       return String(currentRecord[activeField]);
     }
+    // Case-insensitive lookup in currentRecord
+    if (currentRecord) {
+      const match = Object.keys(currentRecord).find((k) => k.toLowerCase() === activeField.toLowerCase());
+      if (match && currentRecord[match] !== undefined) return String(currentRecord[match]);
+    }
     if (activeDataset?.records && activeDataset.records.length > 0) {
       const rec = activeDataset.records[0];
       if (rec && rec[activeField] !== undefined) {
@@ -105,13 +162,13 @@ export const DatabaseFieldSourceConfig: React.FC<DatabaseFieldSourceConfigProps>
 
   // Handle Dataset selection change
   const handleDatasetChange = (datasetId: string) => {
-    const ds = internalDatasets.find((d) => d.id === datasetId);
+    const ds = effectiveDatasets.find((d) => d.id === datasetId || d.name === datasetId);
     if (!ds) return;
 
     const cols: string[] = ds.columns || (ds.fields ? ds.fields.map((f: any) => typeof f === 'string' ? f : f.name) : []);
     const defSheet = ds.sheetName || (ds.availableSheets && ds.availableSheets[0]) || 'Sheet1';
 
-    // Check if the current field exists in new dataset
+    // Check if current field exists in new dataset
     const stillValidField = cols.find((c) => c.toLowerCase() === activeField.toLowerCase()) || '';
 
     onUpdate({
@@ -138,19 +195,22 @@ export const DatabaseFieldSourceConfig: React.FC<DatabaseFieldSourceConfigProps>
 
   // Handle Field selection change
   const handleFieldChange = (fieldName: string) => {
+    const targetDataset = activeDataset || (effectiveDatasets.length > 0 ? effectiveDatasets[0] : null);
+    const dsId = targetDataset ? targetDataset.id : dataSource.datasetId || 'current-active-conn';
+    const dsName = targetDataset ? targetDataset.name : dataSource.datasetName || currentConnection?.name || 'Active Database';
+
     onUpdate({
       type: 'database',
-      datasetId: activeDataset ? activeDataset.id : dataSource.datasetId,
-      datasetName: activeDataset ? activeDataset.name : dataSource.datasetName,
+      datasetId: dsId,
+      datasetName: dsName,
       sheetName: currentSheet,
       field: fieldName,
       databaseField: fieldName,
       value: fieldName ? `{{${fieldName}}}` : '',
     });
 
-    // Ensure dataset is connected to template
-    if (activeDataset && onConnectDatasetToTemplate) {
-      onConnectDatasetToTemplate(activeDataset);
+    if (targetDataset && onConnectDatasetToTemplate) {
+      onConnectDatasetToTemplate(targetDataset);
     }
   };
 
@@ -163,12 +223,12 @@ export const DatabaseFieldSourceConfig: React.FC<DatabaseFieldSourceConfigProps>
           <span>Connection:</span>
         </label>
         <select
-          value={activeDataset?.id || dataSource.datasetId || ''}
+          value={activeDataset?.id || dataSource.datasetId || (effectiveDatasets[0]?.id || '')}
           onChange={(e) => handleDatasetChange(e.target.value)}
           className="flex-1 bg-white border border-[#94a3b8] rounded px-2.5 py-1 text-slate-900 font-medium cursor-pointer focus:ring-1 focus:ring-blue-500"
         >
           <option value="">-- Select Data Connection --</option>
-          {internalDatasets.map((ds) => (
+          {effectiveDatasets.map((ds) => (
             <option key={ds.id} value={ds.id}>
               {ds.name} ({ds.recordCount || ds.records?.length || 0} records
               {ds.sourceType === 'excel' ? ' • Microsoft Excel' : ds.sourceType === 'csv' ? ' • CSV' : ''})

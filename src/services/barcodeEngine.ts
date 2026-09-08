@@ -442,15 +442,21 @@ export async function renderBarcodeToCanvas(
 
     if (!is2D) {
       options.height = Math.max(8, Math.round((element.barHeight || 12) * 1.5));
-      options.includetext = Boolean(element.includeText);
-      options.textxalign = element.humanReadableAlignment || 'center';
+      options.includetext = Boolean(element.includeText !== false);
+      options.textxalign = element.humanReadableAlignment || element.textAlign || 'center';
       options.textyalign = element.textPosition === 'above' ? 'above' : 'below';
 
-      if (element.humanReadableFontSize) {
-        options.textsize = Math.max(6, Math.min(24, Math.round(element.humanReadableFontSize)));
+      const fSize = element.humanReadableFontSize || element.fontSize;
+      if (fSize) {
+        options.textsize = Math.max(6, Math.min(24, Math.round(fSize)));
       }
-      if (element.humanReadableColor || element.foregroundColor) {
-        const col = (element.humanReadableColor || element.foregroundColor || '#000000').replace('#', '');
+      const fontName = element.humanReadableFont || element.fontFamily;
+      if (fontName) {
+        options.textfont = fontName;
+      }
+      const textCol = element.humanReadableColor || element.color || element.foregroundColor;
+      if (textCol) {
+        const col = textCol.replace('#', '');
         if (/^[0-9A-Fa-f]{6}$/.test(col)) {
           options.textcolor = col;
         }

@@ -96,8 +96,8 @@ export const WizardLabelRollPreview: React.FC<WizardLabelRollPreviewProps> = ({
   const labelHIn = (safeLabelH / 25.4).toFixed(2);
 
   // Available container bounds in pixels for scale-to-fit
-  const viewportW = 168;
-  const viewportH = 188;
+  const viewportW = 175;
+  const viewportH = 195;
 
   // Scale-to-fit calculation
   const baseScale = Math.min(viewportW / visualSheetW, viewportH / visualSheetH);
@@ -144,7 +144,7 @@ export const WizardLabelRollPreview: React.FC<WizardLabelRollPreviewProps> = ({
       {/* Header with Title & Zoom Controls */}
       <div className="w-full flex items-center justify-between mb-1 px-0.5">
         <span className="font-semibold text-[11px] text-[#1e293b]">
-          Live Preview:
+          Preview:
         </span>
         <div className="flex items-center gap-1 bg-[#e2e8f0] rounded-[2px] p-0.5 border border-[#cbd5e1]">
           <button
@@ -179,7 +179,7 @@ export const WizardLabelRollPreview: React.FC<WizardLabelRollPreviewProps> = ({
 
       {/* Main BarTender Gradient Outer Frame */}
       <div
-        className="w-[195px] sm:w-[210px] h-[215px] sm:h-[225px] border border-[#7a98b8] rounded-[2px] p-2 flex items-center justify-center relative overflow-hidden shadow-inner bg-[#b8d4ee]"
+        className="w-[195px] sm:w-[210px] h-[215px] sm:h-[230px] border border-[#7a98b8] rounded-[2px] p-2 flex items-center justify-center relative overflow-hidden shadow-inner bg-[#b8d4ee]"
         style={{
           background: 'linear-gradient(to bottom, #dbe8f5 0%, #b8d4ee 45%, #92bce2 100%)',
         }}
@@ -194,21 +194,6 @@ export const WizardLabelRollPreview: React.FC<WizardLabelRollPreviewProps> = ({
             maxHeight: '100%',
           }}
         >
-          {/* Top Scalloped Perforation Edge for Continuous/Roll */}
-          {selectedMediaType !== 'continuous' && (
-            <div className="absolute -top-1.5 left-0 right-0 h-3 flex justify-between overflow-hidden z-20 pointer-events-none px-0.5">
-              {Array.from({ length: Math.max(3, Math.min(8, Math.floor(renderSheetW / 18))) }).map((_, i) => (
-                <div
-                  key={i}
-                  className="w-4 h-2.5 rounded-b-full border-b border-[#7a98b8]"
-                  style={{
-                    background: 'linear-gradient(to bottom, #dbe8f5, #c8ddf0)',
-                  }}
-                />
-              ))}
-            </div>
-          )}
-
           {/* Roll Carrier Paper / Liner Web */}
           <div
             className="w-full h-full border border-[#7a98b8] shadow-[0_4px_14px_rgba(0,0,0,0.25)] flex flex-col justify-center relative z-10 overflow-hidden"
@@ -242,8 +227,8 @@ export const WizardLabelRollPreview: React.FC<WizardLabelRollPreviewProps> = ({
                         transform: is180 ? 'rotate(180deg)' : 'none',
                       }}
                     >
-                      {/* Content Preview */}
-                      {startingPoint === 'template' ? (
+                      {/* Content Preview: ONLY rendered when a specific template is selected from the library */}
+                      {startingPoint === 'template' && (
                         selectedTemplateId === 'shipping-4x6' ? (
                           <div className="w-full h-full flex flex-col justify-between text-[4.5px] text-slate-800 leading-tight select-none overflow-hidden">
                             <div className="font-bold border-b border-slate-300 pb-0.5 truncate text-[5.5px] text-slate-900">
@@ -285,78 +270,6 @@ export const WizardLabelRollPreview: React.FC<WizardLabelRollPreviewProps> = ({
                             </div>
                           </div>
                         )
-                      ) : (
-                        /* Blank Template: Dynamic Representative Placeholder Vector */
-                        <div className="w-full h-full flex flex-col justify-between text-[4.5px] text-slate-700 leading-none select-none overflow-hidden p-0.5">
-                          {isWide ? (
-                            /* Wide Horizontal Label Layout (e.g. 4.1 x 1 in) */
-                            <div className="w-full h-full flex items-center justify-between gap-1">
-                              <div className="flex flex-col justify-center gap-0.5 flex-1 min-w-0">
-                                <div className="h-1 bg-slate-800 rounded-[0.5px] w-4/5" />
-                                <div className="h-0.5 bg-slate-400 rounded-[0.5px] w-3/5" />
-                                <div className="text-[4px] font-mono text-slate-500 font-semibold truncate pt-0.5">
-                                  {totalItems > 1 ? `LABEL #${orderNum}` : 'BLANK TEMPLATE'}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <div className="flex h-3.5 gap-[1px] items-end overflow-hidden bg-slate-50 p-[1px] border border-slate-200">
-                                  {[1, 2, 1, 3, 1, 2, 1, 2, 1, 3, 1].map((w, i) => (
-                                    <div key={i} style={{ width: `${w}px` }} className="bg-black h-full" />
-                                  ))}
-                                </div>
-                                <div className="w-3 h-3 bg-slate-900 p-[0.5px] grid grid-cols-2 grid-rows-2 gap-[0.5px] shrink-0">
-                                  <div className="bg-white" />
-                                  <div className="bg-black" />
-                                  <div className="bg-black" />
-                                  <div className="bg-white" />
-                                </div>
-                              </div>
-                            </div>
-                          ) : isTall ? (
-                            /* Tall Vertical Label Layout (e.g. 1 x 4.1 in) */
-                            <div className="w-full h-full flex flex-col justify-between items-center text-center gap-0.5">
-                              <div className="w-full flex flex-col items-center gap-0.5">
-                                <div className="h-1 bg-slate-800 rounded-[0.5px] w-3/4" />
-                                <div className="h-0.5 bg-slate-400 rounded-[0.5px] w-1/2" />
-                              </div>
-                              <div className="w-3.5 h-3.5 bg-slate-900 p-[0.5px] grid grid-cols-2 grid-rows-2 gap-[0.5px]">
-                                <div className="bg-white" />
-                                <div className="bg-black" />
-                                <div className="bg-black" />
-                                <div className="bg-white" />
-                              </div>
-                              <div className="flex h-3 gap-[1px] items-end overflow-hidden w-full justify-center">
-                                {[1, 2, 1, 3, 1, 2, 1, 2, 1].map((w, i) => (
-                                  <div key={i} style={{ width: `${w}px` }} className="bg-black h-full" />
-                                ))}
-                              </div>
-                              <div className="text-[4px] font-mono text-slate-600 font-bold truncate">
-                                {totalItems > 1 ? `#${orderNum}` : 'BLANK'}
-                              </div>
-                            </div>
-                          ) : (
-                            /* Standard / Square Label Layout (e.g. 2 x 2 in, 50 x 25 mm) */
-                            <div className="w-full h-full flex flex-col justify-between">
-                              <div className="flex items-center justify-between">
-                                <div className="h-1 bg-slate-800 rounded-[0.5px] w-2/3" />
-                                {totalItems > 1 && (
-                                  <span className="text-[5px] font-bold text-slate-500 font-mono">
-                                    #{orderNum}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex h-2.5 gap-[1px] items-end justify-center overflow-hidden my-0.5">
-                                {[1, 2, 1, 3, 1, 2, 1, 2, 1, 3, 2, 1].map((w, i) => (
-                                  <div key={i} style={{ width: `${w}px` }} className="bg-black h-full" />
-                                ))}
-                              </div>
-                              <div className="flex items-center justify-between text-[4px] font-mono text-slate-600 font-semibold">
-                                <span>890123456</span>
-                                <span>MRP ₹</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
                       )}
 
                       {/* Black Mark indicator if reflective tracking is selected */}
@@ -369,21 +282,6 @@ export const WizardLabelRollPreview: React.FC<WizardLabelRollPreviewProps> = ({
               )}
             </div>
           </div>
-
-          {/* Bottom Scalloped Perforation Edge */}
-          {selectedMediaType !== 'continuous' && (
-            <div className="absolute -bottom-1.5 left-0 right-0 h-3 flex justify-between overflow-hidden z-20 pointer-events-none px-0.5">
-              {Array.from({ length: Math.max(3, Math.min(8, Math.floor(renderSheetW / 18))) }).map((_, i) => (
-                <div
-                  key={i}
-                  className="w-4 h-2.5 rounded-t-full border-t border-[#7a98b8]"
-                  style={{
-                    background: 'linear-gradient(to top, #92bce2, #a8cceb)',
-                  }}
-                />
-              ))}
-            </div>
-          )}
         </div>
       </div>
 

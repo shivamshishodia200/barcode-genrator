@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('document:check-file-exists', filePath),
   openDocumentLocation: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke('document:open-location', filePath),
+  getFonts: (): Promise<string[]> =>
+    ipcRenderer.invoke('fonts:list'),
   exitApp: (): Promise<boolean> =>
     ipcRenderer.invoke('app:exit'),
 });
@@ -74,6 +76,60 @@ contextBridge.exposeInMainWorld('barcodeFlow', {
       ipcRenderer.invoke('printers:test-print', req),
     openProperties: (printerName: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('printers:open-properties', printerName),
+  },
+  fonts: {
+    list: (): Promise<string[]> => ipcRenderer.invoke('fonts:list'),
+  },
+  dataSources: {
+    excel: {
+      selectFile: (): Promise<{ canceled: boolean; filePath?: string; fileName?: string; sizeBytes?: number; lastModified?: string }> =>
+        ipcRenderer.invoke('barcodeFlow:excel:select-file'),
+      locateFile: (oldPath?: string): Promise<{ canceled: boolean; filePath?: string; fileName?: string; sizeBytes?: number; lastModified?: string }> =>
+        ipcRenderer.invoke('barcodeFlow:excel:locate-file', oldPath),
+      inspectWorkbook: (payload: { filePath: string; projectDir?: string }): Promise<any> =>
+        ipcRenderer.invoke('barcodeFlow:excel:inspect-workbook', payload),
+      getSheets: (payload: { filePath: string; projectDir?: string }): Promise<any> =>
+        ipcRenderer.invoke('barcodeFlow:excel:get-sheets', payload),
+      getFields: (payload: { filePath: string; sheetName: string; headerRow?: number; hasHeaders?: boolean; projectDir?: string }): Promise<any> =>
+        ipcRenderer.invoke('barcodeFlow:excel:get-fields', payload),
+      getPreview: (payload: {
+        filePath: string;
+        sheetName: string;
+        headerRow?: number;
+        hasHeaders?: boolean;
+        page?: number;
+        pageSize?: number;
+        projectDir?: string;
+        sort?: any;
+        filters?: any;
+        search?: any;
+      }): Promise<any> =>
+        ipcRenderer.invoke('barcodeFlow:excel:get-preview', payload),
+      getRecords: (payload: {
+        filePath: string;
+        sheetName: string;
+        headerRow?: number;
+        hasHeaders?: boolean;
+        query?: any;
+        projectDir?: string;
+      }): Promise<any> =>
+        ipcRenderer.invoke('barcodeFlow:excel:get-records', payload),
+      watch: (payload: { filePath: string; connectionId: string; projectDir?: string }): Promise<boolean> =>
+        ipcRenderer.invoke('barcodeFlow:excel:watch', payload),
+      unwatch: (connectionId: string): Promise<boolean> =>
+        ipcRenderer.invoke('barcodeFlow:excel:unwatch', connectionId),
+      onFileChanged: (callback: (data: { filePath: string; connectionId: string }) => void) => {
+        const listener = (_event: any, data: any) => callback(data);
+        ipcRenderer.on('barcodeFlow:excel:file-changed', listener);
+        return () => {
+          ipcRenderer.removeListener('barcodeFlow:excel:file-changed', listener);
+        };
+      },
+      openFile: (filePath: string): Promise<boolean> =>
+        ipcRenderer.invoke('excel:open-file', filePath),
+      openLocation: (filePath: string): Promise<boolean> =>
+        ipcRenderer.invoke('excel:open-location', filePath),
+    },
   },
 });
 

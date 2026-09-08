@@ -94,6 +94,7 @@ import {
   removeRecentDocument,
   clearRecentDocuments,
 } from './services/documentFileService';
+import { excelDataSourceProvider } from './services/providers/ExcelDataSourceProvider';
 import { RecentDocumentEntry } from './types';
 import { ZoomIn, ZoomOut, Maximize2, ShieldCheck, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from 'lucide-react';
 
@@ -1477,16 +1478,10 @@ export default function App() {
     }
   };
 
-  const handleExportJSON = () => {
-    const jsonStr = JSON.stringify(currentTemplate, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${currentTemplate.name.replace(/\s+/g, '_')}.template.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('Template JSON exported', 'success');
+  const handleExportJSON = async () => {
+    if (activeDocumentInstanceId) {
+      await handleSaveDocumentAs(activeDocumentInstanceId);
+    }
   };
 
   const handleZoomFit = useCallback(() => {
@@ -1509,33 +1504,8 @@ export default function App() {
     }));
   }, [currentTemplate.dimensions.width, currentTemplate.dimensions.height, showLeftDock, showRightDock]);
 
-  const handleImportJSON = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = (e: any) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        try {
-          const imported = JSON.parse(evt.target?.result as string) as LabelTemplate;
-          if (imported.name && imported.dimensions && Array.isArray(imported.elements)) {
-            imported.id = `tmpl-imported-${Date.now()}`;
-            setTemplates((prev) => [imported, ...prev]);
-            setCurrentTemplateId(imported.id);
-            showToast(`Imported "${imported.name}" successfully`, 'success');
-            logAction('CREATE_TEMPLATE', `Imported template JSON "${imported.name}"`);
-          } else {
-            showToast('Invalid template JSON format', 'error');
-          }
-        } catch {
-          showToast('Failed to parse JSON file', 'error');
-        }
-      };
-      reader.readAsText(file);
-    };
-    input.click();
+  const handleImportJSON = async () => {
+    await handleOpenDocumentFile();
   };
 
   const handleNewTemplate = () => {
@@ -1966,27 +1936,29 @@ export default function App() {
   };
 
   const handleSaveAllDocuments = useCallback(async () => {
-    const dirtyDocs = openDocuments.filter((d) => d.isDirty);
-    if (dirtyDocs.length === 0) {
-      showToast('All open documents are already saved.', 'info');
+    if (!openDocuments || openDocuments.length === 0) {
+      showToast('No open documents to save.', 'info');
       return;
     }
 
     const successfulInstanceIds: string[] = [];
     const failedNames: string[] = [];
+    let savedCount = 0;
 
-    for (const doc of dirtyDocs) {
+    for (const doc of openDocuments) {
       if (doc.type === 'template') {
         if (!doc.filePath) {
-          // Unsaved new document -> prompt Save As dialog
+          // Unsaved new document -> prompt native Windows Save As dialog to choose location on PC
           try {
             await handleSaveDocumentAs(doc.instanceId);
             successfulInstanceIds.push(doc.instanceId);
-          } catch {
+            savedCount++;
+          } catch (err) {
+            console.error(`Save As failed for document "${doc.name}":`, err);
             failedNames.push(doc.name);
           }
         } else {
-          // Direct disk save to existing file path
+          // Direct disk save to existing local file path
           const tpl = doc.template || currentTemplate;
           const savedTemplate: LabelTemplate = {
             ...tpl,
@@ -1995,33 +1967,44 @@ export default function App() {
             updatedAt: new Date().toISOString(),
             createdBy: tpl.createdBy || currentUser.name,
           };
-          const saveRes = await saveDocumentToDisk(doc.filePath, { ...doc, template: savedTemplate });
-          if (saveRes.success) {
-            successfulInstanceIds.push(doc.instanceId);
-            try {
-              await apiService.templates.save(savedTemplate);
-            } catch { }
-            addRecentDocument(doc.filePath, saveRes.fileName || doc.name);
-          } else {
+          const targetDoc: OpenDocument = {
+            ...doc,
+            template: savedTemplate,
+          };
+          try {
+            const saveRes = await saveDocumentToDisk(doc.filePath, targetDoc, currentUser.name);
+            if (saveRes.success) {
+              successfulInstanceIds.push(doc.instanceId);
+              savedCount++;
+              try {
+                await apiService.templates.save(savedTemplate);
+              } catch { }
+              addRecentDocument(doc.filePath, saveRes.fileName || doc.name);
+            } else {
+              failedNames.push(doc.name);
+            }
+          } catch (err) {
+            console.error(`Disk save failed for "${doc.filePath}":`, err);
             failedNames.push(doc.name);
           }
         }
       } else {
         successfulInstanceIds.push(doc.instanceId);
+        savedCount++;
       }
     }
 
-    // Only clear dirty state for documents that succeeded
+    // Clear dirty state for successfully saved documents
     setOpenDocuments((prev) =>
       prev.map((d) => (successfulInstanceIds.includes(d.instanceId) ? { ...d, isDirty: false, isNew: false } : d))
     );
     setRecentDocuments(getRecentDocuments());
 
     if (failedNames.length === 0) {
-      showToast(`Successfully saved all ${successfulInstanceIds.length} modified document(s)!`, 'success');
-      logAction('SYSTEM_CONFIG', `Saved all ${successfulInstanceIds.length} dirty open documents`);
+      showToast(`Successfully saved all ${savedCount} document(s) to local PC!`, 'success');
+      logAction('SYSTEM_CONFIG', `Saved all ${savedCount} open documents to local PC`);
     } else {
-      showToast(`Saved ${successfulInstanceIds.length} document(s). Failed: ${failedNames.join(', ')}`, 'error');
+      showToast(`Saved ${savedCount} document(s). Failed: ${failedNames.join(', ')}`, 'error');
     }
   }, [openDocuments, currentTemplate, currentUser.name, handleSaveDocumentAs]);
 
@@ -2061,6 +2044,44 @@ export default function App() {
       // Deserialize .bfl or JSON into BarcodeFlow document
       const docFile = deserializeBarcodeFlowDocument(fileContent, filePath);
       const loadedTemplate = docFile.template || INITIAL_TEMPLATES[0];
+
+      // Reconnect and refresh live Excel data source if configured
+      if (loadedTemplate.databaseConnection?.filePath && (loadedTemplate.databaseConnection.type === 'excel' || (loadedTemplate.databaseConnection as any).type === 'ms_excel')) {
+        try {
+          const rawSheet = (loadedTemplate.databaseConnection.sheetName || '').replace(/^'|'\$$|\$$/g, '');
+          const liveRes = await excelDataSourceProvider.getPreview(
+            {
+              filePath: loadedTemplate.databaseConnection.filePath,
+              sheetName: rawSheet,
+              headerRow: loadedTemplate.databaseConnection.headerRow || 1,
+              hasHeaders: true,
+              pageSize: 100000,
+            },
+            rawSheet
+          );
+          if (liveRes && liveRes.rows && liveRes.rows.length > 0) {
+            const detectedFields = liveRes.fields?.map((f) => f.name) || Object.keys(liveRes.rows[0]);
+            loadedTemplate.databaseConnection = {
+              ...loadedTemplate.databaseConnection,
+              records: liveRes.rows,
+              columns: liveRes.fields?.map((f) => ({ name: f.name, dataType: f.dataType as any })) || detectedFields.map((f) => ({ name: f, dataType: 'text' })),
+              fields: detectedFields,
+              status: 'CONNECTED',
+            };
+            loadedTemplate.sampleRecords = liveRes.rows;
+            if (window.barcodeFlow?.dataSources?.excel?.watch) {
+              await window.barcodeFlow.dataSources.excel.watch({
+                filePath: loadedTemplate.databaseConnection.filePath,
+                connectionId: loadedTemplate.databaseConnection.id || loadedTemplate.id,
+              });
+            }
+          } else {
+            loadedTemplate.databaseConnection.status = 'FILE_MISSING';
+          }
+        } catch {
+          loadedTemplate.databaseConnection.status = 'FILE_MISSING';
+        }
+      }
 
       const newDoc: OpenDocument = {
         instanceId: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -2136,6 +2157,44 @@ export default function App() {
 
         const docFile = deserializeBarcodeFlowDocument(readRes.content, filePath);
         const loadedTemplate = docFile.template || INITIAL_TEMPLATES[0];
+
+        // Reconnect and refresh live Excel data source if configured
+        if (loadedTemplate.databaseConnection?.filePath && (loadedTemplate.databaseConnection.type === 'excel' || (loadedTemplate.databaseConnection as any).type === 'ms_excel')) {
+          try {
+            const rawSheet = (loadedTemplate.databaseConnection.sheetName || '').replace(/^'|'\$$|\$$/g, '');
+            const liveRes = await excelDataSourceProvider.getPreview(
+              {
+                filePath: loadedTemplate.databaseConnection.filePath,
+                sheetName: rawSheet,
+                headerRow: loadedTemplate.databaseConnection.headerRow || 1,
+                hasHeaders: true,
+                pageSize: 100000,
+              },
+              rawSheet
+            );
+            if (liveRes && liveRes.rows && liveRes.rows.length > 0) {
+              const detectedFields = liveRes.fields?.map((f) => f.name) || Object.keys(liveRes.rows[0]);
+              loadedTemplate.databaseConnection = {
+                ...loadedTemplate.databaseConnection,
+                records: liveRes.rows,
+                columns: liveRes.fields?.map((f) => ({ name: f.name, dataType: f.dataType as any })) || detectedFields.map((f) => ({ name: f, dataType: 'text' })),
+                fields: detectedFields,
+                status: 'CONNECTED',
+              };
+              loadedTemplate.sampleRecords = liveRes.rows;
+              if (window.barcodeFlow?.dataSources?.excel?.watch) {
+                await window.barcodeFlow.dataSources.excel.watch({
+                  filePath: loadedTemplate.databaseConnection.filePath,
+                  connectionId: loadedTemplate.databaseConnection.id || loadedTemplate.id,
+                });
+              }
+            } else {
+              loadedTemplate.databaseConnection.status = 'FILE_MISSING';
+            }
+          } catch {
+            loadedTemplate.databaseConnection.status = 'FILE_MISSING';
+          }
+        }
 
         const newDoc: OpenDocument = {
           instanceId: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -2658,6 +2717,25 @@ export default function App() {
   const currentRecordData = activeRecordMeta ? activeRecordMeta.data : (rawActiveRecords[0] || {});
   const activeDatasetRecords = visibleRecordSet.length > 0 ? visibleRecordSet.map((r) => r.data) : [{}];
 
+  // Unified datasets list combining global datasets + currentTemplate.databaseConnection
+  const combinedDatasets = useMemo(() => {
+    const conn = currentTemplate.databaseConnection;
+    if (!conn || !conn.records || conn.records.length === 0) return datasets;
+    const connObj = {
+      id: conn.id || `conn-${conn.name}`,
+      name: conn.name,
+      sourceType: conn.type === 'excel' ? 'excel' : conn.type === 'csv' ? 'csv' : 'sql',
+      sheetName: conn.sheetName || 'Sheet1',
+      availableSheets: conn.sheetName ? [conn.sheetName] : ['Sheet1'],
+      columns: conn.fields || (conn.records[0] ? Object.keys(conn.records[0]) : []),
+      fields: conn.fields || (conn.records[0] ? Object.keys(conn.records[0]) : []),
+      records: conn.records,
+      recordCount: conn.records.length,
+    };
+    const filtered = (datasets || []).filter((d) => d.id !== connObj.id && d.name !== connObj.name);
+    return [connObj, ...filtered];
+  }, [currentTemplate.databaseConnection, datasets]);
+
   // Section 10.20, 10.21, 10.22: Refresh Data Source Records
   const handleRefreshActiveDataset = useCallback(async () => {
     const conn = currentTemplate.databaseConnection;
@@ -2669,14 +2747,16 @@ export default function App() {
     setIsRefreshingRecords(true);
     try {
       let refreshedRecords: any[] = [];
+      let updatedColumns: string[] | undefined = undefined;
       const electronAPI = (window as any).electronAPI;
 
       if (electronAPI?.readExcelWorkbook && conn.filePath) {
-        const wb = await electronAPI.readExcelWorkbook(conn.filePath, conn.headerRow || 1);
-        const targetSheet = conn.sheetName || wb.sheets?.[0]?.name || Object.keys(wb.sheets || {})[0];
-        if (targetSheet) {
-          const sheetInfo = wb.sheets.find((s: any) => s.name === targetSheet);
-          refreshedRecords = sheetInfo?.previewRows || [];
+        const res = await electronAPI.readExcelWorkbook(conn.filePath, conn.sheetName, conn.headerRow || 1);
+        if (res.success && res.records) {
+          refreshedRecords = res.records;
+          updatedColumns = res.columns;
+        } else {
+          throw new Error(res.error || 'Failed to read workbook.');
         }
       } else if (conn.id) {
         const res = await apiService.datasets.refresh(conn.id);
@@ -2687,12 +2767,15 @@ export default function App() {
 
       if (refreshedRecords.length > 0) {
         const newTotal = refreshedRecords.length;
-        // Section 10.21: If record still exists, remain on it; if new total is smaller, safely clamp
         const nextIndex = Math.min(viewport.previewRecordIndex, newTotal - 1);
+        const newCols = updatedColumns || conn.fields || (refreshedRecords[0] ? Object.keys(refreshedRecords[0]) : []);
         updateTemplate({
           databaseConnection: {
             ...conn,
             records: refreshedRecords,
+            columns: newCols.map((c: string) => ({ name: c, dataType: 'text' })),
+            fields: newCols,
+            status: 'CONNECTED',
           },
           sampleRecords: refreshedRecords,
         });
@@ -2710,6 +2793,105 @@ export default function App() {
       setIsRefreshingRecords(false);
     }
   }, [currentTemplate.databaseConnection, viewport.previewRecordIndex, updateTemplate, refreshDatasets]);
+
+  // Section 20-21: Locate missing or moved Excel file
+  const handleLocateConnectionFile = useCallback(
+    async (connId?: string, currentPath?: string) => {
+      const electronAPI = (window as any).electronAPI;
+      if (!electronAPI?.locateExcelFile) {
+        showToast('Native file dialog is only available in Desktop Electron environment.', 'info');
+        return;
+      }
+      try {
+        const res = await electronAPI.locateExcelFile(currentPath || currentTemplate.databaseConnection?.filePath);
+        if (res.canceled || !res.filePath) return;
+
+        const newPath = res.filePath;
+        const currentConn = currentTemplate.databaseConnection;
+        const readRes = await electronAPI.readExcelWorkbook(
+          newPath,
+          currentConn?.sheetName,
+          currentConn?.headerRow || 1
+        );
+
+        if (readRes.success && readRes.records) {
+          const newCols = readRes.columns || [];
+          const updatedConn: DatabaseConnectionConfig = {
+            id: currentConn?.id || connId || 'excel-primary',
+            name: res.fileName || currentConn?.name || 'Excel Data',
+            type: 'excel',
+            mode: 'linked',
+            filePath: newPath,
+            sheetName: currentConn?.sheetName,
+            headerRow: currentConn?.headerRow || 1,
+            records: readRes.records,
+            columns: newCols.map((c: string) => ({ name: c, dataType: 'text' })),
+            fields: newCols,
+            status: 'CONNECTED',
+          };
+          updateTemplate({
+            databaseConnection: updatedConn,
+            sampleRecords: readRes.records,
+          });
+
+          if (electronAPI.watchExcelFile) {
+            await electronAPI.watchExcelFile(newPath, currentConn?.id || 'excel-primary');
+          }
+
+          showToast(`Relinked Excel data source to: ${newPath}`, 'success');
+        } else {
+          showToast(`Failed to parse relocated workbook: ${readRes.error}`, 'error');
+        }
+      } catch (err: any) {
+        showToast(`Locate file error: ${err?.message || err}`, 'error');
+      }
+    },
+    [currentTemplate.databaseConnection, updateTemplate]
+  );
+
+  // Section 17-18: Live file watcher subscription for active template database connection
+  useEffect(() => {
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI?.onExcelFileChanged) return;
+
+    const unsubscribe = electronAPI.onExcelFileChanged(async (data: { filePath: string; datasetId: string }) => {
+      const activeConn = currentTemplate.databaseConnection;
+      if (!activeConn || !activeConn.filePath) return;
+
+      const normWatch = data.filePath.toLowerCase().replace(/\\/g, '/');
+      const normConn = activeConn.filePath.toLowerCase().replace(/\\/g, '/');
+
+      if (normWatch === normConn || data.datasetId === activeConn.id) {
+        try {
+          const res = await electronAPI.readExcelWorkbook(
+            activeConn.filePath,
+            activeConn.sheetName,
+            activeConn.headerRow || 1
+          );
+          if (res.success && res.records) {
+            const newCols = res.columns || [];
+            updateTemplate({
+              databaseConnection: {
+                ...activeConn,
+                records: res.records,
+                columns: newCols.map((c: string) => ({ name: c, dataType: 'text' })),
+                fields: newCols,
+                status: 'CONNECTED',
+              },
+              sampleRecords: res.records,
+            });
+            showToast(`Auto-refreshed: ${res.records.length} records updated from Excel`, 'info');
+          }
+        } catch (err: any) {
+          console.warn('Auto-reload Excel failed:', err);
+        }
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [currentTemplate.databaseConnection, updateTemplate]);
 
   const handleConnectDatasetToTemplate = useCallback(
     (dataset: any) => {
@@ -3086,8 +3268,7 @@ export default function App() {
             onSave={handleSaveTemplate}
             onSaveAll={handleSaveAllDocuments}
             onSaveAs={() => handleSaveDocumentAs(activeDocumentInstanceId)}
-            onPrintPreview={() => setIsPrintDialogOpen(true)}
-            onOpenDatabaseConnection={() => setIsExcelWizardOpen(true)}
+            onOpenDatabaseConnection={() => setIsDatabaseConnectionModalOpen(true)}
             onOpenWelcome={() => setIsWelcomeOpen(true)}
             onOpenPreferences={() => {
               setSettingsInitialTab('general');
@@ -3145,7 +3326,7 @@ export default function App() {
             onOpenBarcodePicker={() => setIsBarcodePickerOpen(true)}
             onOpenBarcodeProperties={() => setIsBarcodePropertiesOpen(true)}
             onOpenPrintDialog={() => setIsPrintDialogOpen(true)}
-            onOpenBatchPrint={() => setIsPrintDialogOpen(true)}
+            onOpenBatchPrint={() => setActiveView('viewer')}
             onOpenApproval={() => setIsApprovalModalOpen(true)}
             onOpenAuditLogs={() => setIsAuditLogsOpen(true)}
             onOpenAiAssistant={() => setIsAiAssistantOpen(true)}
@@ -3226,7 +3407,10 @@ export default function App() {
               onOpen={handleOpenDocumentFile}
               onSave={handleSaveTemplate}
               onSaveAs={() => handleSaveDocumentAs(activeDocumentInstanceId)}
+              onPageSetup={() => setIsPageSetupOpen(true)}
+              onDatabaseSetup={() => setIsDatabaseConnectionModalOpen(true)}
               onPrint={() => setIsPrintDialogOpen(true)}
+              onPrintPreview={() => setIsPrintDialogOpen(true)}
               onCut={handleCut}
               onCopy={handleCopy}
               onPaste={handlePaste}
@@ -3354,6 +3538,7 @@ export default function App() {
                   onInsertBoundElement={handleInsertBoundElementAt}
                   onOpenConnectWizard={() => setIsExcelWizardOpen(true)}
                   onRefreshConnection={handleRefreshActiveDataset}
+                  onLocateConnectionFile={handleLocateConnectionFile}
                 />
               )}
 
@@ -3926,7 +4111,7 @@ export default function App() {
         recordData={currentRecordData}
         activeRecordIndex={viewport.previewRecordIndex}
         selectedRecordIndices={selectedRecordIndices}
-        onOpenDatabaseSetup={() => setIsExcelWizardOpen(true)}
+        onOpenDatabaseSetup={() => setIsDatabaseConnectionModalOpen(true)}
         onUpdateTemplate={(updatedTmpl) => updateTemplate(updatedTmpl)}
         onJobSubmitted={async (job) => {
           setPrintJobs((prev) => [job, ...prev]);
@@ -4203,8 +4388,9 @@ export default function App() {
         }}
         availableVariables={currentTemplate.variables}
         onOpenGs1Wizard={() => setIsGs1WizardOpen(true)}
-        datasets={datasets}
+        datasets={combinedDatasets}
         currentRecord={currentRecordData}
+        currentConnection={currentTemplate.databaseConnection}
         onConnectDataset={handleConnectDatasetToTemplate}
       />
 
@@ -4409,17 +4595,33 @@ export default function App() {
         }}
       />
 
-      {/* Database Connection Manager Modal */}
+      {/* Database Connection Manager Modal (BarTender Database Setup Wizard) */}
       <DatabaseConnectionModal
         isOpen={isDatabaseConnectionModalOpen}
         onClose={() => setIsDatabaseConnectionModalOpen(false)}
         currentConnection={currentTemplate.databaseConnection}
+        onOpenExcelWizard={() => setIsExcelWizardOpen(true)}
         onApplyConnection={(conn) => {
           updateTemplate({
             databaseConnection: conn,
             sampleRecords: conn.records,
           });
           setViewport((p) => ({ ...p, previewRecordIndex: 0 }));
+          setDatasets((prev) => {
+            const datasetObj = {
+              id: conn.id,
+              name: conn.name,
+              sourceType: conn.type === 'excel' ? 'excel' : conn.type === 'csv' ? 'csv' : 'sql',
+              sheetName: conn.sheetName || 'Sheet1',
+              availableSheets: conn.sheetName ? [conn.sheetName] : ['Sheet1'],
+              columns: conn.fields,
+              fields: conn.fields,
+              records: conn.records,
+              recordCount: conn.records.length,
+            };
+            const filtered = prev.filter((d) => d.id !== conn.id && d.name !== conn.name);
+            return [datasetObj, ...filtered];
+          });
           logAction('IMPORT_DATA', `Connected database "${conn.name}" with ${conn.records.length} records`);
           showToast(`Connected database "${conn.name}" (${conn.records.length} records)`, 'success');
         }}
@@ -4461,8 +4663,9 @@ export default function App() {
         }
         onUpdateElement={updateSingleElement}
         availableVariables={currentTemplate.variables}
-        datasets={datasets}
+        datasets={combinedDatasets}
         currentRecord={currentRecordData}
+        currentConnection={currentTemplate.databaseConnection}
         onConnectDataset={handleConnectDatasetToTemplate}
       />
 
@@ -4484,8 +4687,16 @@ export default function App() {
         onClose={() => setIsNamedDataSourcesOpen(false)}
         variables={currentTemplate.variables}
         onUpdateVariables={(vars) => {
-          updateTemplate({ variables: vars });
-          showToast('Updated Named Data Sources', 'success');
+          updateTemplate({
+            variables: vars,
+            namedDataSources: vars.map((v) => ({
+              id: v.id,
+              name: v.name,
+              type: (v.type === 'static' ? 'embedded' : v.type === 'counter' ? 'serial' : v.type) as any,
+              defaultValue: v.defaultValue,
+            })),
+          });
+          showToast('Updated Named Data Sources & Global Variables', 'success');
         }}
       />
 
@@ -4493,8 +4704,13 @@ export default function App() {
       <DocumentEventScriptsModal
         isOpen={isDocumentScriptsOpen}
         onClose={() => setIsDocumentScriptsOpen(false)}
+        initialScripts={(currentTemplate as any).eventScripts || {}}
         onSaveScripts={(scripts) => {
-          showToast('Saved Document Event Scripts', 'success');
+          updateTemplate({
+            ...currentTemplate,
+            eventScripts: scripts,
+          } as any);
+          showToast('Saved Document Event Scripts to template', 'success');
         }}
       />
 
@@ -4502,13 +4718,153 @@ export default function App() {
       <FormulaBuilderModal
         isOpen={isFormulaBuilderOpen}
         onClose={() => setIsFormulaBuilderOpen(false)}
-        initialExpression=""
+        initialExpression={
+          (() => {
+            const sel = currentTemplate.elements.find((e) => selectedElementIds.includes(e.id));
+            const binding = (sel as any)?.dataBinding;
+            return typeof binding === 'string' && binding.startsWith('=') ? binding.slice(1) : '';
+          })()
+        }
         onApplyFormula={(formula) => {
-          showToast(`Formula applied: ${formula}`, 'success');
+          const selectedEl = currentTemplate.elements.find((e) => selectedElementIds.includes(e.id));
+          if (selectedEl) {
+            const formulaSource: DataSourceItem = {
+              id: `ds-${Date.now()}`,
+              name: `Formula Expression`,
+              type: 'formula' as any,
+              formulaExpression: formula,
+              value: `=${formula}`,
+              enabled: true,
+            };
+            const updates: Partial<LabelElement> = {
+              dataBinding: `=${formula}`,
+              dataSources: [formulaSource],
+            };
+            if (selectedEl.type === 'text') {
+              (updates as any).text = `=${formula}`;
+            } else if (selectedEl.type === 'barcode') {
+              (updates as any).value = `=${formula}`;
+            }
+            updateSingleElement(selectedEl.id, updates);
+            showToast(`Applied formula to "${selectedEl.name}"`, 'success');
+          } else {
+            const newFormulaText: LabelElement = {
+              id: `el-formula-${Date.now()}`,
+              name: `Formula Object`,
+              type: 'text',
+              text: `=${formula}`,
+              dataBinding: `=${formula}`,
+              dataSources: [
+                {
+                  id: `ds-${Date.now()}`,
+                  name: `Formula Expression`,
+                  type: 'formula' as any,
+                  formulaExpression: formula,
+                  value: `=${formula}`,
+                  enabled: true,
+                },
+              ],
+              fontFamily: 'Helvetica',
+              fontSize: 12,
+              fontWeight: 'bold',
+              fontStyle: 'normal',
+              textDecoration: 'none',
+              textAlign: 'left',
+              verticalAlign: 'top',
+              color: '#000000',
+              lineHeight: 1.2,
+              letterSpacing: 0,
+              x: 15,
+              y: 15,
+              width: 50,
+              height: 12,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              visible: true,
+              zIndex: currentTemplate.elements.length + 1,
+            };
+            updateElements([...currentTemplate.elements, newFormulaText]);
+            setSelectedElementIds([newFormulaText.id]);
+            showToast(`Created new Formula Text object on canvas`, 'success');
+          }
         }}
-        sampleRecord={currentTemplate.sampleRecords[viewport.previewRecordIndex] || {}}
+        sampleRecord={currentTemplate.sampleRecords[viewport.previewRecordIndex] || (currentTemplate.databaseConnection?.records?.[viewport.previewRecordIndex] || {})}
+        availableFields={currentTemplate.databaseConnection?.fields || (currentTemplate.sampleRecords[0] ? Object.keys(currentTemplate.sampleRecords[0]) : [])}
         variables={currentTemplate.variables}
         namedDataSources={currentTemplate.namedDataSources}
+      />
+
+      {/* GS1 Application Identifier (AI) Builder Modal */}
+      <GS1ApplicationIdentifierWizardModal
+        isOpen={isGs1WizardOpen}
+        onClose={() => setIsGs1WizardOpen(false)}
+        onApply={(fields) => {
+          const gs1Data = fields.map((f) => `(${f.ai})${f.value}`).join('');
+          const selectedEl = currentTemplate.elements.find((e) => selectedElementIds.includes(e.id));
+          if (selectedEl) {
+            if (selectedEl.type === 'barcode') {
+              updateSingleElement(selectedEl.id, {
+                value: gs1Data,
+                dataBinding: gs1Data,
+                symbology: (selectedEl as any).symbology === 'datamatrix' ? 'datamatrix' : 'gs1-128',
+                dataSources: fields.map((f) => ({
+                  id: `ds-gs1-${Date.now()}-${f.ai}`,
+                  name: `GS1 (${f.ai}) ${f.dataTitle || ''}`,
+                  type: 'gs1_ai',
+                  gs1AI: f.ai,
+                  value: f.value,
+                  enabled: true,
+                })),
+              });
+              showToast(`Updated Barcode with ${fields.length} GS1 AI segments`, 'success');
+            } else {
+              updateSingleElement(selectedEl.id, {
+                text: gs1Data,
+                dataBinding: gs1Data,
+              });
+              showToast(`Updated Text with GS1 data`, 'success');
+            }
+          } else {
+            const newBarcode: LabelElement = {
+              id: `el-gs1-${Date.now()}`,
+              name: `GS1 Barcode (${fields[0]?.ai || '01'})`,
+              type: 'barcode',
+              symbology: 'gs1-128',
+              value: gs1Data,
+              dataBinding: gs1Data,
+              includeText: true,
+              textPosition: 'below',
+              barWidth: 1.5,
+              barHeight: 18,
+              quietZone: true,
+              foregroundColor: '#000000',
+              backgroundColor: '#ffffff',
+              checkDigit: true,
+              x: 15,
+              y: 15,
+              width: 65,
+              height: 24,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              visible: true,
+              zIndex: currentTemplate.elements.length + 1,
+              dataSources: fields.map((f) => ({
+                id: `ds-gs1-${Date.now()}-${f.ai}`,
+                name: `GS1 (${f.ai}) ${f.dataTitle || ''}`,
+                type: 'gs1_ai',
+                gs1AI: f.ai,
+                value: f.value,
+                enabled: true,
+              })),
+            };
+            updateElements([...currentTemplate.elements, newBarcode]);
+            setSelectedElementIds([newBarcode.id]);
+            showToast(`Inserted new GS1 Barcode with ${fields.length} AI fields`, 'success');
+          }
+        }}
+        availableVariables={currentTemplate.variables.map((v) => ({ name: v.name, label: v.name }))}
       />
 
       {/* Print-Time Data Entry Form Designer Modal */}
@@ -4703,6 +5059,25 @@ export default function App() {
         onClose={() => setIsPrinterManagerOpen(false)}
         onPrinterSelected={(p) => {
           showToast(`Selected printer: ${p.name}`, 'info');
+        }}
+      />
+
+      {/* Page Setup Modal */}
+      <PageSetupModal
+        isOpen={isPageSetupOpen}
+        onClose={() => setIsPageSetupOpen(false)}
+        template={currentTemplate}
+        onApplyPageSetup={(updates) => {
+          updateTemplate({
+            dimensions: updates.dimensions,
+            margins: updates.margins,
+            sheetGrid: updates.sheetGrid,
+            shape: updates.shape,
+            cornerRadius: updates.cornerRadius,
+            mediaType: updates.mediaType,
+          });
+          setIsPageSetupOpen(false);
+          showToast('Page setup applied successfully!', 'success');
         }}
       />
 

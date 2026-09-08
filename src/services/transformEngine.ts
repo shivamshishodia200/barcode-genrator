@@ -1,7 +1,305 @@
-import { TransformRule } from '../types';
+import { TransformRule, TransformConfig, DataTypeFormatConfig } from '../types';
+import { evaluateSerializedValue } from './serializationEngine';
 
 /**
- * Applies a single transformation rule to an input string
+ * Formats a value according to DataType configuration (Number, Date, Currency, etc.)
+ */
+export function applyDataTypeFormatting(input: any, config?: DataTypeFormatConfig): string {
+  if (input === null || input === undefined) return '';
+  if (!config) return String(input);
+
+  const rawStr = String(input).trim();
+
+  switch (config.dataType) {
+    case 'number':
+    case 'integer':
+    case 'decimal':
+    case 'currency': {
+      const cleanNum = parseFloat(rawStr.replace(/[^0-9.-]+/g, ''));
+      if (isNaN(cleanNum)) return rawStr;
+
+      let decimals = config.decimalPlaces ?? (config.dataType === 'integer' ? 0 : 2);
+      let formattedNumber = cleanNum.toFixed(decimals);
+
+      if (config.thousandSeparator) {
+        const parts = formattedNumber.split('.');
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        if (config.decimalSeparator && config.decimalSeparator !== '.') {
+          formattedNumber = parts.join(config.decimalSeparator);
+        } else {
+          formattedNumber = parts.join('.');
+        }
+      }
+
+      if (config.leadingZeros && config.leadingZeros > 0) {
+        const parts = formattedNumber.split(config.decimalSeparator || '.');
+        const intPart = parts[0].replace(/,/g, '');
+        if (intPart.length < config.leadingZeros) {
+          parts[0] = intPart.padStart(config.leadingZeros, '0');
+          formattedNumber = parts.join(config.decimalSeparator || '.');
+        }
+      }
+
+      if (config.dataType === 'currency') {
+        const sym = config.currencySymbol || '$';
+        return config.currencySymbolPosition === 'suffix' ? `${formattedNumber} ${sym}` : `${sym}${formattedNumber}`;
+      }
+
+      return formattedNumber;
+    }
+
+    case 'date':
+    case 'time':
+    case 'datetime': {
+      const d = new Date(rawStr);
+      if (isNaN(d.getTime())) return rawStr;
+      const mask = config.dateFormat || (config.dataType === 'time' ? 'HH:mm:ss' : 'YYYY-MM-DD');
+      
+      const yyyy = d.getFullYear().toString();
+      const yy = yyyy.slice(-2);
+      const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+      const dd = d.getDate().toString().padStart(2, '0');
+      const hh = d.getHours().toString().padStart(2, '0');
+      const min = d.getMinutes().toString().padStart(2, '0');
+      const ss = d.getSeconds().toString().padStart(2, '0');
+      const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const mmm = monthsShort[d.getMonth()];
+
+      let out = mask;
+      out = out.replace(/YYYY/g, yyyy);
+      out = out.replace(/YY/g, yy);
+      out = out.replace(/MMM/g, mmm);
+      out = out.replace(/MM/g, mm);
+      out = out.replace(/DD/g, dd);
+      out = out.replace(/dd/g, dd);
+      out = out.replace(/HH/g, hh);
+      out = out.replace(/mm/g, min);
+      out = out.replace(/ss/g, ss);
+      return out;
+    }
+
+    case 'boolean': {
+      const lower = rawStr.toLowerCase();
+      return lower === 'true' || lower === '1' || lower === 'yes' ? 'True' : 'False';
+    }
+
+    default:
+      return rawStr;
+  }
+}
+
+/**
+ * Character Template Masking: e.g. template "AAA-9999", input "ABC1234" -> "ABC-1234"
+ * A = letter, 9/# = digit, * = any character
+ */
+export function applyCharacterTemplate(input: string, template?: string): string {
+  if (!template || !template.trim() || !input) return input;
+  
+  let inputIdx = 0;
+  let result = '';
+
+  for (let i = 0; i < template.length && inputIdx < input.length; i++) {
+    const maskChar = template[i];
+    const inChar = input[inputIdx];
+
+    if (maskChar === '9' || maskChar === '#') {
+      if (/\d/.test(inChar)) {
+        result += inChar;
+        inputIdx++;
+      } else {
+        // Skip non-matching input character or keep trying
+        inputIdx++;
+        i--;
+      }
+    } else if (maskChar === 'A' || maskChar === 'a') {
+      if (/[a-zA-Z]/.test(inChar)) {
+        result += maskChar === 'A' ? inChar.toUpperCase() : inChar.toLowerCase();
+        inputIdx++;
+      } else {
+        inputIdx++;
+        i--;
+      }
+    } else if (maskChar === '*' || maskChar === '?') {
+      result += inChar;
+      inputIdx++;
+    } else {
+      // Literal template delimiter (e.g. '-', '/', ':', ' ')
+      result += maskChar;
+      if (inChar === maskChar) {
+        inputIdx++;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Applies the deterministic Enterprise Transform Pipeline to an input value:
+ * 1. raw
+ * 2. dataType
+ * 3. suppression
+ * 4. characterFilter
+ * 5. truncation
+ * 6. characterLength
+ * 7. template
+ * 8. searchReplace
+ * 9. script
+ * 10. serialization
+ * 11. prefixSuffix
+ */
+export function executeEnterpriseTransformPipeline(
+  rawValue: any,
+  config?: TransformConfig,
+  context?: {
+    record?: Record<string, any>;
+    printIndex?: number;
+    recordIndex?: number;
+    copyIndex?: number;
+  }
+): string {
+  if (rawValue === null || rawValue === undefined) return '';
+  let str = String(rawValue);
+
+  if (!config) return str;
+
+  // 1. Data Type & Formatting
+  if (config.dataTypeFormat) {
+    str = applyDataTypeFormatting(str, config.dataTypeFormat);
+  }
+
+  // 2. Suppression
+  if (config.suppression && config.suppression.type !== 'never') {
+    const sType = config.suppression.type;
+    if (sType === 'always') return '';
+    if (sType === 'empty' && str.trim() === '') return '';
+    if (sType === 'equals' && str === (config.suppression.value ?? '')) return '';
+    if (sType === 'not_equals' && str !== (config.suppression.value ?? '')) return '';
+  }
+
+  // 3. Character Filter
+  if (config.characterFilter && config.characterFilter.type !== 'none') {
+    const cf = config.characterFilter;
+    if (cf.type === 'digits') {
+      str = str.replace(/\D/g, '');
+    } else if (cf.type === 'letters') {
+      str = str.replace(/[^a-zA-Z]/g, '');
+    } else if (cf.type === 'alphanumeric') {
+      str = str.replace(/[^a-zA-Z0-9]/g, '');
+    } else if (cf.type === 'uppercase') {
+      str = str.toUpperCase();
+    } else if (cf.type === 'lowercase') {
+      str = str.toLowerCase();
+    } else if (cf.type === 'custom_allowed' && cf.customChars) {
+      const allowedSet = new Set(cf.customChars.split(''));
+      str = str.split('').filter((c) => allowedSet.has(c)).join('');
+    } else if (cf.type === 'custom_blocked' && cf.customChars) {
+      const blockedSet = new Set(cf.customChars.split(''));
+      str = str.split('').filter((c) => !blockedSet.has(c)).join('');
+    }
+  }
+
+  // 4. Truncation
+  if (config.truncation && config.truncation.type !== 'none') {
+    const count = Math.max(0, config.truncation.count || 0);
+    if (config.truncation.type === 'keep_first') {
+      str = str.substring(0, count);
+    } else if (config.truncation.type === 'keep_last') {
+      str = str.substring(Math.max(0, str.length - count));
+    } else if (config.truncation.type === 'delete_first') {
+      str = str.substring(count);
+    } else if (config.truncation.type === 'delete_last') {
+      str = str.substring(0, Math.max(0, str.length - count));
+    }
+  }
+
+  // 5. Character Length & Padding
+  if (config.characterLength) {
+    const cl = config.characterLength;
+    if (cl.min && str.length < cl.min) {
+      const padChar = cl.padChar || '0';
+      if (cl.padSide === 'right') {
+        str = str.padEnd(cl.min, padChar);
+      } else {
+        str = str.padStart(cl.min, padChar);
+      }
+    }
+    if (cl.max && str.length > cl.max && cl.overflowAction !== 'none') {
+      str = str.substring(0, cl.max);
+    }
+  }
+
+  // 6. Character Template
+  if (config.characterTemplate?.template) {
+    str = applyCharacterTemplate(str, config.characterTemplate.template);
+  }
+
+  // 7. Search & Replace Rules
+  if (config.searchReplace && Array.isArray(config.searchReplace)) {
+    for (const rule of config.searchReplace) {
+      if (!rule.find) continue;
+      const rep = rule.replace ?? '';
+      if (rule.isRegex) {
+        try {
+          const flags = rule.caseSensitive ? 'g' : 'gi';
+          const reg = new RegExp(rule.find, flags);
+          str = str.replace(reg, rep);
+        } catch {
+          str = str.split(rule.find).join(rep);
+        }
+      } else if (rule.wholeWord) {
+        const flags = rule.caseSensitive ? 'g' : 'gi';
+        const reg = new RegExp(`\\b${rule.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, flags);
+        str = str.replace(reg, rep);
+      } else if (rule.caseSensitive) {
+        str = str.split(rule.find).join(rep);
+      } else {
+        const reg = new RegExp(rule.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        str = str.replace(reg, rep);
+      }
+    }
+  }
+
+  // 8. Script Execution
+  if (config.script?.code) {
+    try {
+      const scope = {
+        value: str,
+        input: str,
+        record: context?.record || {},
+        Date,
+        Math,
+        String,
+        Number,
+      };
+      const code = config.script.code;
+      const fn = new Function(...Object.keys(scope), `return (function() { ${code.includes('return') ? code : 'return ' + code} })()`);
+      const scriptRes = fn(...Object.values(scope));
+      if (scriptRes !== undefined && scriptRes !== null) {
+        str = String(scriptRes);
+      }
+    } catch (err) {
+      console.warn('Transform Script evaluation warning:', err);
+    }
+  }
+
+  // 9. Serialization
+  if (config.serialization && config.serialization.action !== 'none') {
+    str = evaluateSerializedValue(str, config.serialization, context);
+  }
+
+  // 10. Prefix & Suffix
+  if (config.prefixSuffix) {
+    const p = config.prefixSuffix.prefix ?? '';
+    const s = config.prefixSuffix.suffix ?? '';
+    str = `${p}${str}${s}`;
+  }
+
+  return str;
+}
+
+/**
+ * Backward compatible single rule executor
  */
 export function applyTransformRule(input: string, rule: TransformRule): string {
   if (input === undefined || input === null) return '';
@@ -89,36 +387,6 @@ export function applyTransformRule(input: string, rule: TransformRule): string {
       else if (params.mathOperation === 'divide' && opVal !== 0) res = num / opVal;
       else if (params.mathOperation === 'round') res = Math.round(num);
       return String(res);
-    }
-
-    case 'encode_decode': {
-      if (params.encodeType === 'base64') {
-        try {
-          if (params.encodeAction === 'decode') return atob(str);
-          return btoa(str);
-        } catch {
-          return str;
-        }
-      }
-      if (params.encodeType === 'hex') {
-        if (params.encodeAction === 'decode') {
-          try {
-            return str.match(/.{1,2}/g)?.map(byte => String.fromCharCode(parseInt(byte, 16))).join('') || '';
-          } catch {
-            return str;
-          }
-        }
-        return Array.from(str).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
-      }
-      if (params.encodeType === 'url') {
-        try {
-          if (params.encodeAction === 'decode') return decodeURIComponent(str);
-          return encodeURIComponent(str);
-        } catch {
-          return str;
-        }
-      }
-      return str;
     }
 
     default:

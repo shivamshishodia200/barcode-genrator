@@ -34,6 +34,7 @@ import {
 
 import { GS1ApplicationIdentifierWizardModal } from './GS1ApplicationIdentifierWizardModal';
 import { DatabaseFieldSourceConfig } from './DatabaseFieldSourceConfig';
+import { NewDataSourceWizardModal } from './NewDataSourceWizardModal';
 
 interface BarcodePropertiesModalProps {
   isOpen: boolean;
@@ -44,6 +45,7 @@ interface BarcodePropertiesModalProps {
   onOpenGs1Wizard?: () => void;
   datasets?: any[];
   currentRecord?: Record<string, any>;
+  currentConnection?: any;
   onConnectDataset?: (dataset: any) => void;
 }
 
@@ -68,6 +70,7 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
   onOpenGs1Wizard,
   datasets,
   currentRecord,
+  currentConnection,
   onConnectDataset,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<PropertyCategory>('datasource-item');
@@ -75,6 +78,7 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
   const [activeDsTab, setActiveDsTab] = useState<DataSourceTab>('source');
   const [isAddMenuOpen, setIsAddMenuOpen] = useState<boolean>(false);
   const [isGs1AiWizardOpen, setIsGs1AiWizardOpen] = useState<boolean>(false);
+  const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
 
   // Form local state mirrored from selected element
@@ -181,9 +185,18 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
     const simulatedElement = { ...element, dataSources: newSources };
     const compiled = evaluateElementData(simulatedElement as any, { record: currentRecord, datasets });
     setValue(compiled);
+    const primaryDs = newSources[0];
+    const dataBinding = primaryDs?.field
+      ? `{{${primaryDs.field}}}`
+      : primaryDs?.value && primaryDs.value.includes('{')
+      ? primaryDs.value
+      : undefined;
+
     applyChange({
       dataSources: newSources,
-      value: compiled,
+      value: compiled || (primaryDs?.field && currentRecord ? String(currentRecord[primaryDs.field] ?? '') : element.value),
+      ...(dataBinding ? { dataBinding } : {}),
+      ...(primaryDs?.field ? { databaseField: primaryDs.field } : {}),
     });
   };
 
@@ -192,58 +205,21 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
     updateDataSourcesState(updated);
   };
 
+  const handleWizardAddDataSource = (newDs: DataSourceItem) => {
+    const nextList = [...dataSources, newDs];
+    updateDataSourcesState(nextList);
+    setActiveDsIndex(nextList.length - 1);
+    setSelectedCategory('datasource-item');
+  };
+
   // Add a new Data Source (Supports standard & GS1 Wizards)
-  const handleAddNewDataSource = (type: DataSourceType) => {
+  const handleAddNewDataSource = (type: DataSourceType = 'embedded') => {
     setIsAddMenuOpen(false);
     if (type === 'gs1_ai') {
       setIsGs1AiWizardOpen(true);
       return;
     }
-
-    const newId = `ds-${Date.now()}`;
-    let newDs: DataSourceItem;
-
-    if (type === 'gs1_composite') {
-      newDs = {
-        id: newId,
-        name: 'GS1 Composite Source',
-        type: 'gs1_composite',
-        value: '(01)00850006531234|(10)LOT456(17)261231',
-        gs1CompositeType: 'CC-A',
-        gs1CompositeLinear: '(01)00850006531234',
-        gs1Composite2DData: '(10)LOT456(17)261231',
-        enabled: true,
-      };
-    } else if (type === 'gs1_databar') {
-      newDs = {
-        id: newId,
-        name: 'GS1 DataBar Source',
-        type: 'gs1_databar',
-        value: '(01)00850006531234',
-        gs1DataBarVariant: 'omnidirectional',
-        gs1AIs: [
-          { ai: '01', value: '00850006531234', description: 'GTIN-14 Item Code', dataTitle: 'GTIN' },
-        ],
-        enabled: true,
-      };
-    } else {
-      newDs = {
-        id: newId,
-        name: `Source ${dataSources.length + 1}`,
-        type,
-        value: type === 'embedded' ? '12345678' : type === 'serial' ? '1' : '',
-        serialStart: 1,
-        serialStep: 1,
-        serialPad: 6,
-        dateFormat: 'YYYY-MM-DD',
-        enabled: true,
-      };
-    }
-
-    const nextList = [...dataSources, newDs];
-    updateDataSourcesState(nextList);
-    setActiveDsIndex(nextList.length - 1);
-    setSelectedCategory('datasource-item');
+    setIsWizardOpen(true);
   };
 
   const handleApplyGs1Wizard = (fields: GS1Field[], replaceMode: 'replace' | 'insert' | 'append') => {
@@ -375,12 +351,11 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
               {/* Top Action Bar */}
               <div className="bg-[#e2e8f0] border-b border-[#cbd5e1] p-1 flex items-center gap-1 text-slate-700">
                 <button
-                  title="Add Data Source..."
-                  onClick={() => setIsAddMenuOpen((prev) => !prev)}
+                  title="New Data Source Wizard..."
+                  onClick={() => setIsWizardOpen(true)}
                   className="p-1 hover:bg-[#cbd5e1] rounded-xs text-blue-700 font-bold flex items-center gap-0.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <ChevronDown className="w-2.5 h-2.5" />
                 </button>
                 <button
                   title="GS1 AI Wizard"
@@ -546,11 +521,11 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                 {/* 1. Add (+) Button with GS1 Dropdown Menu */}
                 <div className="relative">
                   <button
-                    title="Add Data Source..."
-                    onClick={() => setIsAddMenuOpen((prev) => !prev)}
-                    className="p-1 hover:bg-[#cbd5e1] rounded-xs text-amber-600 flex items-center cursor-pointer"
+                    title="New Data Source Wizard..."
+                    onClick={() => setIsWizardOpen(true)}
+                    className="p-1 hover:bg-[#cbd5e1] rounded-xs text-emerald-600 flex items-center cursor-pointer border border-[#cbd5e1] bg-white"
                   >
-                    <span className="text-sm font-bold leading-none">🌻</span>
+                    <Plus className="w-3.5 h-3.5 text-emerald-600" />
                   </button>
                 </div>
 
@@ -1422,6 +1397,7 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                         onUpdate={updateActiveDataSource}
                         datasets={datasets}
                         currentRecord={currentRecord}
+                        currentConnection={currentConnection}
                         onConnectDatasetToTemplate={onConnectDataset}
                       />
                     )}
@@ -1679,6 +1655,18 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
           availableVariables={availableVariables}
         />
       )}
+
+      {/* New Data Source Wizard Modal */}
+      <NewDataSourceWizardModal
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        onAddDataSource={handleWizardAddDataSource}
+        datasets={datasets}
+        currentRecord={currentRecord}
+        availableVariables={availableVariables}
+        currentConnection={currentConnection}
+        existingCount={dataSources.length}
+      />
     </div>
   );
 };

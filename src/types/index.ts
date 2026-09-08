@@ -159,6 +159,7 @@ export type DataSourceType =
   | 'database-field'
   | 'serial' 
   | 'clock' 
+  | 'formula'
   | 'prompt' 
   | 'script' 
   | 'variable' 
@@ -193,11 +194,151 @@ export interface TransformRule {
   };
 }
 
+export interface SerializationConfig {
+  action: 'none' | 'increment' | 'decrement';
+  method: 'alphanumeric' | 'numeric' | 'alphabetic';
+  letterCase?: 'uppercase' | 'lowercase';
+  preserveCharacters: boolean;
+  incrementBy: number;
+  event: 'standard' | 'item' | 'record' | 'interval';
+  eventInterval: number;
+  copies: number;
+  resetRule?: 'never' | 'manual' | 'start' | 'daily' | 'weekly' | 'monthly' | 'record' | 'change';
+  resetValue?: string;
+  currentValue?: string;
+  lastResetAt?: string;
+  lastResetReason?: string;
+}
+
+export interface DataTypeFormatConfig {
+  dataType: 'text' | 'number' | 'integer' | 'decimal' | 'currency' | 'date' | 'time' | 'datetime' | 'boolean';
+  decimalPlaces?: number;
+  thousandSeparator?: boolean;
+  decimalSeparator?: string;
+  minDigits?: number;
+  leadingZeros?: number;
+  currencySymbol?: string;
+  currencySymbolPosition?: 'prefix' | 'suffix';
+  dateFormat?: string;
+}
+
+export interface TransformConfig {
+  suppression?: {
+    type: 'never' | 'always' | 'empty' | 'equals' | 'not_equals' | 'expression';
+    value?: string;
+  };
+  characterFilter?: {
+    type: 'none' | 'digits' | 'letters' | 'alphanumeric' | 'uppercase' | 'lowercase' | 'custom_allowed' | 'custom_blocked';
+    customChars?: string;
+  };
+  truncation?: {
+    type: 'none' | 'keep_first' | 'keep_last' | 'delete_first' | 'delete_last';
+    count: number;
+  };
+  characterLength?: {
+    min?: number;
+    max?: number;
+    padChar?: string;
+    padSide?: 'left' | 'right';
+    overflowAction?: 'truncate' | 'error' | 'none';
+  };
+  characterTemplate?: {
+    template?: string;
+  };
+  searchReplace?: Array<{
+    find: string;
+    replace: string;
+    caseSensitive?: boolean;
+    wholeWord?: boolean;
+    isRegex?: boolean;
+  }>;
+  script?: {
+    language: 'javascript' | 'vbscript';
+    code: string;
+  };
+  serialization?: SerializationConfig;
+  prefixSuffix?: {
+    prefix?: string;
+    suffix?: string;
+  };
+  dataTypeFormat?: DataTypeFormatConfig;
+}
+
+export interface BorderConfig {
+  type: 'none' | 'rectangle' | 'ellipse';
+  marginTop?: number;
+  marginLeft?: number;
+  marginBottom?: number;
+  marginRight?: number;
+  thickness: number;
+  color: string;
+  transparency?: number;
+  dashStyle?: 'solid' | 'dashed' | 'dotted';
+  compoundStyle?: 'single' | 'double' | 'thick-thin';
+  joinType?: 'mitered' | 'round' | 'bevel';
+  fillColor?: string;
+  fillTransparency?: number;
+  cornerType?: 'square' | 'rounded' | 'concave';
+  cornerSize?: number;
+  sides?: {
+    top: boolean;
+    right: boolean;
+    bottom: boolean;
+    left: boolean;
+  };
+}
+
+export interface ArcConfig {
+  radius: number;
+  startAngle: number;
+  sweepAngle: number;
+  direction: 'clockwise' | 'counter-clockwise';
+  insidePath: boolean;
+  characterSpacing: number;
+}
+
+export interface AutoSizeConfig {
+  enabled: boolean;
+  minFontSize: number;
+  maxFontSize: number;
+  minWidthScale: number;
+  maxWidthScale: number;
+  objectWidth?: number;
+  objectHeight?: number;
+  horizontalAlignment?: 'left' | 'center' | 'right' | 'justify';
+  verticalAlignment?: 'top' | 'middle' | 'bottom';
+}
+
 export interface DataSourceItem {
   id: string;
   name: string;
   type: DataSourceType;
   value: string;
+  // Data Type & Formatting
+  dataType?: 'text' | 'number' | 'integer' | 'decimal' | 'currency' | 'date' | 'time' | 'datetime' | 'boolean';
+  numberFormat?: {
+    decimalPlaces?: number;
+    thousandSeparator?: boolean;
+    decimalSeparator?: string;
+    minDigits?: number;
+    leadingZeros?: number;
+  };
+  dateFormat?: string;
+  // Transforms & Serialization
+  transforms?: TransformRule[];
+  transformConfig?: TransformConfig;
+  serialization?: SerializationConfig;
+  prefixSuffix?: {
+    prefix?: string;
+    suffix?: string;
+  };
+  fontOverride?: {
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: 'normal' | 'bold';
+    fontStyle?: 'normal' | 'italic';
+    color?: string;
+  };
   // Database
   databaseField?: string;
   field?: string;
@@ -206,7 +347,7 @@ export interface DataSourceItem {
   sheetName?: string;
   // Variable
   variableName?: string;
-  // Serial / Counter
+  // Legacy Serial fields for backward compatibility
   serialStart?: number;
   serialStep?: number;
   serialPad?: number;
@@ -216,7 +357,6 @@ export interface DataSourceItem {
   serialResetRule?: 'never' | 'daily' | 'monthly' | 'yearly' | 'job';
   currentSerialValue?: number;
   // Date / Clock
-  dateFormat?: string;
   dateOffsetDays?: number;
   dateOffsetMonths?: number;
   dateOffsetYears?: number;
@@ -228,7 +368,7 @@ export interface DataSourceItem {
   promptLabel?: string;
   promptDefault?: string;
   // System variable
-  systemVarName?: 'SYSTEM.DATE' | 'SYSTEM.TIME' | 'SYSTEM.USER' | 'SYSTEM.PRINTER' | 'SYSTEM.JOB_ID' | 'SYSTEM.PAGE_NUMBER' | 'SYSTEM.TOTAL_PAGES';
+  systemVarName?: 'SYSTEM.DATE' | 'SYSTEM.TIME' | 'SYSTEM.USER' | 'SYSTEM.PRINTER' | 'SYSTEM.JOB_ID' | 'SYSTEM.PAGE_NUMBER' | 'SYSTEM.TOTAL_PAGES' | 'SYSTEM.RECORD_NUMBER' | 'SYSTEM.TOTAL_RECORDS' | 'SYSTEM.COPY_NUMBER' | 'SYSTEM.COMPUTER_NAME';
   // Named Data Source & Formula binding
   namedSourceId?: string;
   formulaExpression?: string;
@@ -237,8 +377,6 @@ export interface DataSourceItem {
   // Linked object
   linkedObjectId?: string;
   linkedProperty?: string;
-  // Transforms
-  transforms?: TransformRule[];
   // GS1 Application Identifier Data Source
   gs1AIs?: GS1Field[];
   // GS1 Composite
@@ -276,6 +414,7 @@ export interface BaseElement extends PositionAndSize {
   groupId?: string;
   zIndex: number;
   layer?: string;
+  layerId?: string;
   referencePoint?: ReferencePoint;
   dataSources?: DataSourceItem[];
   dataBinding?: any;
@@ -299,6 +438,7 @@ export interface BaseElement extends PositionAndSize {
 export type TextObjectType = 
   | 'single-line'
   | 'multi-line'
+  | 'paragraph'
   | 'word-processor'
   | 'arc'
   | 'symbol-font'
@@ -310,25 +450,61 @@ export interface TextElement extends BaseElement {
   type: 'text';
   text: string;
   textType?: TextObjectType;
+  textFormatType?: 'single-line' | 'paragraph' | 'arc';
+  // Typography
   fontFamily: string;
   fontSize: number; // in pt
   fontWeight: 'normal' | 'bold' | '600' | '700' | '800';
   fontStyle: 'normal' | 'italic';
   textDecoration: 'none' | 'underline' | 'line-through';
-  textAlign: 'left' | 'center' | 'right' | 'justify';
-  verticalAlign: 'top' | 'middle' | 'bottom';
+  underline?: boolean;
+  strikeout?: boolean;
+  whiteOnBlack?: boolean;
+  foregroundColor?: string;
   color: string;
   backgroundColor?: string;
+  fontWidthScale?: number; // 100% default
   lineHeight: number;
   letterSpacing: number;
   dataBinding?: string; // e.g. "{{PRODUCT_NAME}}"
+  // Format & AutoSize
   autoFit?: boolean;
   autoSize?: boolean;
+  autoSizeConfig?: AutoSizeConfig;
+  minFontSize?: number;
+  maxFontSize?: number;
+  minWidthScale?: number;
+  maxWidthScale?: number;
+  textAlign: 'left' | 'center' | 'right' | 'justify';
+  verticalAlign: 'top' | 'middle' | 'bottom';
+  horizontalAlignment?: 'left' | 'center' | 'right' | 'justify';
+  verticalAlignment?: 'top' | 'middle' | 'bottom';
+  lineSpacing?: number;
+  tabStops?: number[];
   wordWrap?: boolean;
+  wrap?: boolean;
   multiline?: boolean;
+  // Arc configuration
+  arcConfig?: ArcConfig;
   arcRadius?: number;
   arcStartAngle?: number;
   arcSweepAngle?: number;
+  arcDirection?: 'clockwise' | 'counter-clockwise';
+  arcInsidePath?: boolean;
+  arcCharacterSpacing?: number;
+  // Border configuration
+  borderConfig?: BorderConfig;
+  borderType?: 'none' | 'rectangle' | 'ellipse';
+  borderThickness?: number;
+  borderColor?: string;
+  borderDashStyle?: 'solid' | 'dashed' | 'dotted';
+  borderJoinType?: 'mitered' | 'round' | 'bevel';
+  borderFillColor?: string;
+  borderMargins?: { top: number; left: number; bottom: number; right: number };
+  borderCornerType?: 'square' | 'rounded' | 'concave';
+  borderCornerSize?: number;
+  borderSides?: { top: boolean; right: boolean; bottom: boolean; left: boolean };
+  // HTML / Rich
   richContentHtml?: string;
   textOutline?: {
     enabled: boolean;
@@ -365,6 +541,14 @@ export interface BarcodeElement extends BaseElement {
   maskPattern?: number;
   characterSet?: string;
   gs1AIs?: GS1Field[];
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: 'normal' | 'bold' | 'bolder' | 'lighter' | number | string;
+  fontStyle?: 'normal' | 'italic' | 'oblique' | string;
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  color?: string;
+  underline?: boolean;
+  textDecoration?: 'none' | 'underline' | 'line-through';
   humanReadableFont?: string;
   humanReadableFontSize?: number;
   humanReadableFontStyle?: 'regular' | 'italic' | 'bold' | 'bold-italic';
@@ -959,4 +1143,57 @@ export interface RecentDocumentEntry {
   templateName?: string;
 }
 
+export interface BarcodeFlowAPI {
+  printers: {
+    list: () => Promise<any[]>;
+    getDefault: () => Promise<any | null>;
+    getStatus: (printerName: string) => Promise<any>;
+    printDriver: (req: any) => Promise<{ success: boolean; message: string; error?: string }>;
+    printRaw: (req: any) => Promise<{ success: boolean; bytesWritten: number; message: string; error?: string }>;
+    testPrint: (req: any) => Promise<{ success: boolean; message: string; error?: string }>;
+    openProperties?: (printerName: string) => Promise<{ success: boolean; error?: string }>;
+  };
+  dataSources?: {
+    excel?: {
+      selectFile: () => Promise<{ canceled: boolean; filePath?: string; fileName?: string; sizeBytes?: number; lastModified?: string }>;
+      locateFile: (oldPath?: string) => Promise<{ canceled: boolean; filePath?: string; fileName?: string; sizeBytes?: number; lastModified?: string }>;
+      inspectWorkbook: (payload: { filePath: string; projectDir?: string }) => Promise<any>;
+      getSheets: (payload: { filePath: string; projectDir?: string }) => Promise<any>;
+      getFields: (payload: { filePath: string; sheetName: string; headerRow?: number; hasHeaders?: boolean; projectDir?: string }) => Promise<any>;
+      getPreview: (payload: {
+        filePath: string;
+        sheetName: string;
+        headerRow?: number;
+        hasHeaders?: boolean;
+        page?: number;
+        pageSize?: number;
+        projectDir?: string;
+        sort?: any;
+        filters?: any;
+        search?: any;
+      }) => Promise<any>;
+      getRecords: (payload: {
+        filePath: string;
+        sheetName: string;
+        headerRow?: number;
+        hasHeaders?: boolean;
+        query?: any;
+        projectDir?: string;
+      }) => Promise<any>;
+      watch: (payload: { filePath: string; connectionId: string; projectDir?: string }) => Promise<boolean>;
+      unwatch: (connectionId: string) => Promise<boolean>;
+      onFileChanged: (callback: (data: { filePath: string; connectionId: string }) => void) => () => void;
+      openLocation: (filePath: string) => Promise<boolean>;
+      openFile: (filePath: string) => Promise<boolean>;
+    };
+  };
+}
+
+declare global {
+  interface Window {
+    barcodeFlow?: BarcodeFlowAPI;
+  }
+}
+
 export * from './formTypes';
+

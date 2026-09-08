@@ -66,6 +66,7 @@ interface LeftDockPanelProps {
   ) => void;
   onOpenConnectWizard?: () => void;
   onRefreshConnection?: () => Promise<void> | void;
+  onLocateConnectionFile?: (connId?: string, currentPath?: string) => Promise<void> | void;
   isPinned?: boolean;
   onTogglePin?: () => void;
 }
@@ -95,6 +96,7 @@ export const LeftDockPanel: React.FC<LeftDockPanelProps> = ({
   onInsertBoundElement,
   onOpenConnectWizard,
   onRefreshConnection,
+  onLocateConnectionFile,
   isPinned,
   onTogglePin,
 }) => {
@@ -121,6 +123,7 @@ export const LeftDockPanel: React.FC<LeftDockPanelProps> = ({
               onInsertBoundElement={onInsertBoundElement}
               onOpenConnectWizard={onOpenConnectWizard}
               onRefreshConnection={onRefreshConnection}
+              onLocateConnectionFile={onLocateConnectionFile}
               onClose={onClose}
               isPinned={isPinned}
               onTogglePin={onTogglePin}

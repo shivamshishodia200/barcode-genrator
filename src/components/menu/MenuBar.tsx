@@ -288,27 +288,7 @@ export const MenuBar: React.FC<MenuBarProps> = (props) => {
                   />
                 )}
                 <MenuDivider />
-                {(props.onOpenExcelWizard || props.onOpenDatabaseConnection) && (
-                  <MenuItem
-                    icon={<Database className="w-3.5 h-3.5 text-emerald-600" />}
-                    label="Database Connection Setup..."
-                    onClick={() => executeAction(props.onOpenExcelWizard || props.onOpenDatabaseConnection)}
-                  />
-                )}
-                {props.onPageSetup && (
-                  <MenuItem
-                    icon={<Layers className="w-3.5 h-3.5 text-blue-600" />}
-                    label="Page Setup..."
-                    shortcut="Ctrl+D"
-                    onClick={() => executeAction(props.onPageSetup)}
-                  />
-                )}
-                <MenuItem
-                  icon={<Eye className="w-3.5 h-3.5 text-purple-600" />}
-                  label="Print Preview"
-                  shortcut="Ctrl+R"
-                  onClick={() => executeAction(props.onPrintPreview || props.onOpenPrintDialog)}
-                />
+
                 <MenuItem
                   icon={<Printer className="w-3.5 h-3.5 text-blue-700" />}
                   label="Print..."
@@ -702,12 +682,12 @@ export const MenuBar: React.FC<MenuBarProps> = (props) => {
                 <MenuItem
                   icon={<FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />}
                   label="Connect Microsoft Excel File (Live Link)..."
-                  onClick={() => executeAction(props.onOpenExcelWizard || props.onOpenDataImport)}
+                  onClick={() => executeAction(props.onOpenExcelWizard || props.onOpenDatabaseConnection!)}
                 />
                 <MenuItem
                   icon={<Database className="w-3.5 h-3.5 text-emerald-600" />}
-                  label="Database Connection Manager (CSV / SQL / REST)..."
-                  onClick={() => executeAction(props.onOpenDataImport)}
+                  label="Database Connection Setup..."
+                  onClick={() => executeAction(props.onOpenDatabaseConnection || props.onOpenDataImport!)}
                 />
                 {props.onOpenNamedDataSources && (
                   <MenuItem

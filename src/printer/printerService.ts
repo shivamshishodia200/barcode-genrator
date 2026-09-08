@@ -24,21 +24,7 @@ export interface DispatchResult {
   rawPreview?: string;
 }
 
-declare global {
-  interface Window {
-    barcodeFlow?: {
-      printers: {
-        list: () => Promise<any[]>;
-        getDefault: () => Promise<any | null>;
-        getStatus: (printerName: string) => Promise<any>;
-        printDriver: (req: any) => Promise<{ success: boolean; message: string; error?: string }>;
-        printRaw: (req: any) => Promise<{ success: boolean; bytesWritten: number; message: string; error?: string }>;
-        testPrint: (req: any) => Promise<{ success: boolean; message: string; error?: string }>;
-        openProperties?: (printerName: string) => Promise<{ success: boolean; error?: string }>;
-      };
-    };
-  }
-}
+
 
 export interface CentralPrinterState {
   availablePrinters: PrinterModel[];

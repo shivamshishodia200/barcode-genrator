@@ -1,5 +1,6 @@
 import React from 'react';
 import { DatabaseConnectionConfig, LabelTemplate } from '../../types';
+import { evaluateElementData } from '../../services/dataSourceEngine';
 import { RecordNavigator } from './RecordNavigator';
 
 export interface RecordNavigationBarProps {
@@ -55,6 +56,13 @@ export const RecordNavigationBar: React.FC<RecordNavigationBarProps> = ({
   const total = totalRecords ?? records.length;
   const activeRecordData = currentRecordData || records[activeIndex] || {};
 
+  // Compute live resolved CODE VAL for barcode on the template
+  const barcodeEl = template?.elements.find((e) => e.type === 'barcode');
+  let codeVal: string | undefined = undefined;
+  if (barcodeEl) {
+    codeVal = evaluateElementData(barcodeEl, { record: activeRecordData });
+  }
+
   return (
     <RecordNavigator
       currentRecordIndex={activeIndex}
@@ -65,9 +73,10 @@ export const RecordNavigationBar: React.FC<RecordNavigationBarProps> = ({
       selectedCount={selectedCount}
       connection={connection}
       currentRecordData={activeRecordData}
+      codeVal={codeVal}
       onFirst={() => handleSelect(0)}
       onPrevious={() => handleSelect(Math.max(0, activeIndex - 1))}
-      onNext={() => handleSelect(Math.min(total - 1, activeIndex + 1))}
+      onNext={() => handleSelect(Math.min(Math.max(0, total - 1), activeIndex + 1))}
       onLast={() => handleSelect(Math.max(0, total - 1))}
       onGoToRecord={(humanNum) => handleSelect(humanNum - 1)}
       onRefresh={onRefresh}

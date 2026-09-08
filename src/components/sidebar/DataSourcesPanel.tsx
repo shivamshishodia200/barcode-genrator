@@ -64,6 +64,7 @@ export interface DataSourcesPanelProps {
   ) => void;
   onOpenConnectWizard?: () => void;
   onRefreshConnection?: () => Promise<void> | void;
+  onLocateConnectionFile?: (connId?: string, currentPath?: string) => Promise<void> | void;
   onClose?: () => void;
   isPinned?: boolean;
   onTogglePin?: () => void;
@@ -83,6 +84,7 @@ export const DataSourcesPanel: React.FC<DataSourcesPanelProps> = ({
   onInsertBoundElement,
   onOpenConnectWizard,
   onRefreshConnection,
+  onLocateConnectionFile,
   onClose,
   isPinned = true,
   onTogglePin,
@@ -568,10 +570,51 @@ export const DataSourcesPanel: React.FC<DataSourcesPanelProps> = ({
                           <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
                           <span className="truncate">{conn.name}</span>
                         </div>
-                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 shrink-0">
-                          {conn.records.length} rec
+                        <span className={`text-[9px] px-1 py-0.2 rounded font-bold border shrink-0 ${
+                          conn.status === 'MISSING' || conn.status === 'ERROR'
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                        }`}>
+                          {conn.status === 'MISSING' ? 'MISSING' : `${conn.records.length} rec`}
                         </span>
                       </div>
+
+                      {/* Missing / Moved File Alert Banner */}
+                      {(conn.status === 'MISSING' || conn.status === 'ERROR') && (
+                        <div className="p-2 bg-amber-50 border border-amber-300 rounded text-amber-900 space-y-1.5 my-1">
+                          <div className="flex items-center gap-1 font-semibold text-[11px] text-amber-800">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span>Source file not found</span>
+                          </div>
+                          <p className="text-[10px] text-slate-600 truncate font-mono" title={conn.filePath}>
+                            {conn.filePath || 'Path unresolvable'}
+                          </p>
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            {onLocateConnectionFile && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onLocateConnectionFile(conn.id, conn.filePath);
+                                }}
+                                className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-medium cursor-pointer"
+                              >
+                                Locate File...
+                              </button>
+                            )}
+                            {onRefreshConnection && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRefresh();
+                                }}
+                                className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-medium cursor-pointer"
+                              >
+                                Retry
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Sheet & Column Hierarchy */}
                       {isConnExpanded && (

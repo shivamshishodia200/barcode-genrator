@@ -6,25 +6,16 @@ import { apiService } from '../../services/apiService';
 import {
   FileSpreadsheet,
   Link2,
-  Upload,
   CheckCircle2,
   AlertTriangle,
   ArrowRight,
   ArrowLeft,
   RefreshCw,
-  Eye,
-  FileCheck,
   Hash,
   Type,
   Calendar,
-  Barcode,
   Layers,
-  Sparkles,
   Database,
-  Server,
-  FileText,
-  Globe,
-  Sliders,
   Check,
   FolderOpen,
   Info,
@@ -50,16 +41,6 @@ interface ExcelConnectWizardModalProps {
   editConfig?: DatabaseConnectionConfig | null;
 }
 
-export type DataSourceTypeOption =
-  | 'excel'
-  | 'csv'
-  | 'sqlite'
-  | 'sql_server'
-  | 'mysql'
-  | 'postgres'
-  | 'odbc'
-  | 'rest_api';
-
 export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = ({
   isOpen,
   onClose,
@@ -67,24 +48,30 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
   initialMode = 'linked',
   editConfig = null,
 }) => {
-  // Wizard state: 6 Steps
+  // Wizard state: 5 Standard BarTender Steps
+  // 1: Select Excel File & Test Connection
+  // 2: Select Worksheet
+  // 3: Review Fields & Preview Data
+  // 4: Connection Options
+  // 5: Finish & Connect
   const [step, setStep] = useState<number>(1);
-  const [selectedSourceType, setSelectedSourceType] = useState<DataSourceTypeOption>('excel');
-  const [mode, setMode] = useState<ExcelDataSourceMode>(initialMode);
-  const [datasetName, setDatasetName] = useState<string>('Product Master');
+  const [mode, setMode] = useState<ExcelDataSourceMode>(initialMode || 'linked');
+  const [datasetName, setDatasetName] = useState<string>('Products Excel');
 
-  // Step 2: File state & Advanced options
+  // File state
   const [filePath, setFilePath] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
   const [fileSize, setFileSize] = useState<number>(0);
   const [lastModified, setLastModified] = useState<string>('');
   const [rawFile, setRawFile] = useState<File | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+
+  // Connection options
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
+  const [refreshOnOpen, setRefreshOnOpen] = useState<boolean>(true);
   const [headerRow, setHeaderRow] = useState<number>(1);
   const [quantityColumn, setQuantityColumn] = useState<string>('');
 
-  // Step 3: Test Connection state
+  // Diagnostic Test Connection state
   const [isTesting, setIsTesting] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
@@ -101,11 +88,11 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
     pathChecked?: string;
   } | null>(null);
 
-  // Step 4: Sheet Selection
+  // Worksheet state
   const [availableSheets, setAvailableSheets] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
 
-  // Step 5: Preview state
+  // Preview & Fields state
   const [isInspecting, setIsInspecting] = useState<boolean>(false);
   const [inspectError, setInspectError] = useState<string | null>(null);
   const [previewRows, setPreviewRows] = useState<Record<string, any>[]>([]);
@@ -113,17 +100,16 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
   const [columns, setColumns] = useState<ExcelColumnDefinition[]>([]);
   const [totalRecordsCount, setTotalRecordsCount] = useState<number>(0);
 
-  // Step 6: Saving
+  // Finish saving state
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Initialize or reset when modal opens
   useEffect(() => {
     if (isOpen) {
       if (editConfig) {
-        setStep(2);
-        setSelectedSourceType('excel');
+        setStep(1);
         setMode(editConfig.mode || 'linked');
-        setDatasetName(editConfig.name || 'Product Master');
+        setDatasetName(editConfig.name || 'Products Excel');
         setFilePath(editConfig.filePath || editConfig.endpointOrPath || '');
         setFileName(editConfig.fileName || (editConfig.filePath ? editConfig.filePath.split(/[/\\]/).pop() || '' : ''));
         setSelectedSheet(editConfig.sheetName || '');
@@ -135,9 +121,8 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
         }
       } else {
         setStep(1);
-        setSelectedSourceType('excel');
-        setMode(initialMode);
-        setDatasetName(`Product Master Data`);
+        setMode('linked');
+        setDatasetName('Products Excel');
         setFilePath('');
         setFileName('');
         setFileSize(0);
@@ -150,12 +135,12 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
         setAllExtractedRows([]);
         setColumns([]);
         setAutoRefresh(true);
+        setRefreshOnOpen(true);
         setQuantityColumn('');
         setInspectError(null);
-        setShowAdvanced(false);
       }
     }
-  }, [isOpen, editConfig, initialMode]);
+  }, [isOpen, editConfig]);
 
   // Convert File to Base64 for web browser uploads
   const fileToBase64 = (file: File): Promise<string> => {
@@ -167,7 +152,7 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
     });
   };
 
-  // Execute diagnostic connection test (Step 3 or Step 2 button)
+  // Execute diagnostic connection test (Step 1)
   const runTestConnection = async (targetPath: string, targetSheet?: string): Promise<boolean> => {
     setIsTesting(true);
     setTestResult(null);
@@ -177,7 +162,7 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
     if (!pathToCheck && !rawFile) {
       setTestResult({
         success: false,
-        error: 'Please select or enter an Excel file path first.',
+        error: 'Please specify an Excel file path first.',
       });
       setIsTesting(false);
       return false;
@@ -188,7 +173,7 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
       let res: any = null;
 
       // 1. If running in Electron with absolute path, use native Electron IPC
-      if (electronAPI?.testExcelConnection && (pathToCheck.includes(':') || pathToCheck.startsWith('/'))) {
+      if (electronAPI?.testExcelConnection && (pathToCheck.includes(':') || pathToCheck.startsWith('/') || pathToCheck.startsWith('\\\\'))) {
         res = await electronAPI.testExcelConnection(pathToCheck, targetSheet);
       } else {
         // 2. Prepare payload for Express backend: include base64Content if in browser mode with rawFile
@@ -220,6 +205,12 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
         if (res.lastModified) setLastModified(res.lastModified);
         if (res.sizeBytes) setFileSize(res.sizeBytes);
         if (res.filePath) setFilePath(res.filePath);
+
+        // Derive clean dataset connection name from workbook filename
+        const baseDocName = (res.fileName || pathToCheck.split(/[/\\]/).pop() || 'Products').replace(/\.[^/.]+$/, '');
+        if (datasetName === 'Products Excel' || !datasetName) {
+          setDatasetName(`${baseDocName} Excel`);
+        }
 
         setTestResult({
           success: true,
@@ -254,6 +245,11 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
           setAllExtractedRows(sheetData.allRows);
           setTotalRecordsCount(sheetData.allRows.length);
 
+          const baseDocName = rawFile.name.replace(/\.[^/.]+$/, '');
+          if (datasetName === 'Products Excel' || !datasetName) {
+            setDatasetName(`${baseDocName} Excel`);
+          }
+
           setTestResult({
             success: true,
             filePath: rawFile.name,
@@ -283,7 +279,6 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
       setIsTesting(false);
       return false;
     } catch (err: any) {
-      // If error occurs but rawFile is in memory, attempt client-side parse
       if (rawFile) {
         try {
           const inspected = await excelService.inspectExcelFile(rawFile, targetSheet);
@@ -329,7 +324,7 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
     }
   };
 
-  // Inspect & extract sheet contents for Step 5 preview
+  // Inspect & extract sheet contents for Step 3 review
   const inspectAndLoadSheetData = async (targetSheetName: string, targetHeaderRow: number) => {
     setIsInspecting(true);
     setInspectError(null);
@@ -350,10 +345,15 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
       if (electronAPI?.readExcelWorkbook && filePath) {
         const res = await electronAPI.readExcelWorkbook(filePath, targetSheetName, targetHeaderRow);
         if (res.success) {
-          const detectedCols: ExcelColumnDefinition[] = (res.columns || []).map((colName: string) => ({
-            name: colName,
-            type: 'text',
-          }));
+          const detectedCols: ExcelColumnDefinition[] = (res.columns || []).map((colName: string) => {
+            const samples = (res.records || []).slice(0, 30).map((r: any) => r[colName]);
+            const inferred = excelService.inferColumnType(samples);
+            return {
+              name: colName,
+              originalName: colName,
+              dataType: inferred,
+            };
+          });
           setColumns(detectedCols);
           setPreviewRows(res.previewRows || []);
           setAllExtractedRows(res.records || []);
@@ -374,7 +374,7 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
         if (res.success) {
           const detectedCols: ExcelColumnDefinition[] = (res.columns || []).map((colName: string) => ({
             name: colName,
-            type: 'text',
+            dataType: 'text',
           }));
           setColumns(detectedCols);
           setPreviewRows(res.previewRows || []);
@@ -414,6 +414,12 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
           setLastModified(res.lastModified || new Date().toISOString());
           setRawFile(null);
           setTestResult(null);
+
+          const baseDocName = (res.fileName || res.filePath.split(/[/\\]/).pop() || 'Products').replace(/\.[^/.]+$/, '');
+          setDatasetName(`${baseDocName} Excel`);
+
+          // Automatically test connection upon selecting file
+          await runTestConnection(res.filePath);
           return;
         }
       } catch (err) {
@@ -457,60 +463,53 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
       setFileName(file.name);
       setFileSize(file.size);
       setLastModified(new Date(file.lastModified).toISOString());
-      
-      // In Electron environment, File object has full native OS path in file.path
+
       const nativePath = (file as any).path;
       if (nativePath && typeof nativePath === 'string' && nativePath.trim()) {
         setFilePath(nativePath);
       } else {
-        // In sandboxed browser environment, preserve real file name without fake C:\Data path
         setFilePath(file.name);
       }
       setTestResult(null);
+
+      const baseDocName = file.name.replace(/\.[^/.]+$/, '');
+      setDatasetName(`${baseDocName} Excel`);
+
+      await runTestConnection(nativePath || file.name);
     }
   };
 
-  // Clear or reset path
-  const handleClearFile = () => {
-    setFilePath('');
-    setFileName('');
-    setFileSize(0);
-    setRawFile(null);
-    setTestResult(null);
-  };
-
-  // Step advancement handler
+  // Step advancement handler (1 -> 2 -> 3 -> 4 -> 5)
   const handleNextStep = async () => {
     if (step === 1) {
-      setStep(2);
-    } else if (step === 2) {
-      // Run test connection when moving to step 3
-      setStep(3);
-      await runTestConnection(filePath, selectedSheet);
-    } else if (step === 3) {
-      // Ensure test passed before proceeding to sheet selection
+      // Validate file and ensure test passed or run it
       if (!testResult?.success) {
         const ok = await runTestConnection(filePath, selectedSheet);
         if (!ok) return;
       }
+      setStep(2);
+    } else if (step === 2) {
+      // Worksheet selected -> proceed to Step 3 and inspect fields
+      if (!selectedSheet && availableSheets.length > 0) {
+        setSelectedSheet(availableSheets[0]);
+      }
+      setStep(3);
+      await inspectAndLoadSheetData(selectedSheet || availableSheets[0] || 'Sheet1', headerRow);
+    } else if (step === 3) {
       setStep(4);
     } else if (step === 4) {
-      // Load sheet data before showing step 5 preview
       setStep(5);
-      await inspectAndLoadSheetData(selectedSheet, headerRow);
-    } else if (step === 5) {
-      setStep(6);
     }
   };
 
   // Column data type modification
-  const handleColumnTypeChange = (colName: string, newType: ExcelColumnDefinition['type']) => {
+  const handleColumnTypeChange = (colName: string, newType: any) => {
     setColumns((prev) =>
-      prev.map((c) => (c.name === colName ? { ...c, type: newType } : c))
+      prev.map((c) => (c.name === colName ? { ...c, dataType: newType } : c))
     );
   };
 
-  // Save persistent connection
+  // Save persistent connection (Step 5 Finish)
   const handleFinish = async () => {
     setIsSaving(true);
     try {
@@ -524,7 +523,7 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
 
       await onComplete({
         mode,
-        datasetName: datasetName.trim() || fileName || 'Product Master',
+        datasetName: datasetName.trim() || fileName || 'Products Excel',
         filePath: filePath.trim(),
         sheetName: selectedSheet,
         headerRow,
@@ -542,7 +541,7 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
     }
   };
 
-  // Format file size
+  // Format file size helper
   const formatSize = (bytes: number) => {
     if (!bytes) return '0 KB';
     if (bytes < 1024) return `${bytes} B`;
@@ -551,33 +550,31 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
   };
 
   const stepsList = [
-    { num: 1, label: 'Source Type' },
-    { num: 2, label: 'Select File' },
-    { num: 3, label: 'Test Connection' },
-    { num: 4, label: 'Select Sheet' },
-    { num: 5, label: 'Preview' },
-    { num: 6, label: 'Finish' },
+    { num: 1, label: 'Select File' },
+    { num: 2, label: 'Select Worksheet' },
+    { num: 3, label: 'Review Fields' },
+    { num: 4, label: 'Options' },
+    { num: 5, label: 'Finish' },
   ];
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Add Data Source Connection"
+      title="Link Excel Data Source (BarTender Live)"
       subtitle="BarTender-compatible live file data source wizard"
       maxWidth="4xl"
       footer={
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span>Step {step} of 6</span>
+            <span>Step {step} of 5</span>
             <span>•</span>
             <span className="capitalize font-medium text-slate-700">
-              {step === 1 && 'Data Source Type'}
-              {step === 2 && 'Select Excel File'}
-              {step === 3 && 'Test Connection'}
-              {step === 4 && 'Select Sheet'}
-              {step === 5 && 'Preview Data & Columns'}
-              {step === 6 && 'Confirm & Save Connection'}
+              {step === 1 && 'Select Excel File'}
+              {step === 2 && 'Select Worksheet'}
+              {step === 3 && 'Review Fields & Data Preview'}
+              {step === 4 && 'Connection Options'}
+              {step === 5 && 'Finish & Connect'}
             </span>
           </div>
 
@@ -593,19 +590,18 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
               </button>
             )}
 
-            {step < 6 ? (
+            {step < 5 ? (
               <button
                 type="button"
                 disabled={
-                  (step === 2 && !filePath.trim()) ||
-                  (step === 3 && (!testResult || !testResult.success || isTesting)) ||
-                  (step === 4 && !selectedSheet) ||
+                  (step === 1 && (!filePath.trim() || isTesting)) ||
+                  (step === 2 && !selectedSheet) ||
                   isInspecting
                 }
                 onClick={handleNextStep}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
               >
-                Next Step
+                Next &gt;
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             ) : (
@@ -623,7 +619,7 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
                 ) : (
                   <>
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    Finish & Connect
+                    Finish &amp; Connect
                   </>
                 )}
               </button>
@@ -648,13 +644,13 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
             <div
               key={s.num}
               onClick={() => {
-                if (s.num < step || (s.num === 2 && filePath) || (s.num === 4 && testResult?.success)) {
+                if (s.num < step || (s.num === 2 && testResult?.success)) {
                   setStep(s.num);
                 }
               }}
               className={`flex items-center gap-1.5 cursor-pointer transition-colors ${
                 step === s.num
-                  ? 'text-indigo-600 font-semibold'
+                  ? 'text-blue-600 font-semibold'
                   : step > s.num
                   ? 'text-emerald-600 font-medium'
                   : 'text-slate-400'
@@ -663,7 +659,7 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
                   step === s.num
-                    ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                    ? 'bg-blue-100 text-blue-700 border border-blue-300 font-bold'
                     : step > s.num
                     ? 'bg-emerald-100 text-emerald-700'
                     : 'bg-slate-100 text-slate-400'
@@ -687,144 +683,20 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
           </div>
         )}
 
-        {/* STEP 1: SELECT DATA SOURCE TYPE */}
+        {/* STEP 1: SELECT EXCEL FILE */}
         {step === 1 && (
-          <div className="space-y-4">
-            <div>
-              <h4 className="text-sm font-semibold text-slate-800">Select Data Source Type</h4>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Choose the external database or file system to connect with BarcodeFlow.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-              {[
-                { id: 'excel', name: 'Microsoft Excel', icon: FileSpreadsheet, desc: 'Direct workbook connection (.xlsx, .xls)', active: true },
-                { id: 'csv', name: 'CSV / Text File', icon: FileText, desc: 'Delimited text files (.csv, .tsv)', active: false },
-                { id: 'sqlite', name: 'SQLite', icon: Database, desc: 'Embedded local database file', active: false },
-                { id: 'sql_server', name: 'SQL Server', icon: Server, desc: 'Microsoft SQL Server enterprise DB', active: false },
-                { id: 'mysql', name: 'MySQL', icon: Server, desc: 'MySQL production database', active: false },
-                { id: 'postgres', name: 'PostgreSQL', icon: Database, desc: 'Postgres transactional server', active: false },
-                { id: 'odbc', name: 'ODBC Connection', icon: Sliders, desc: 'Windows system DSN data source', active: false },
-                { id: 'rest_api', name: 'REST API', icon: Globe, desc: 'Live HTTP/JSON cloud endpoint', active: false },
-              ].map((opt) => (
-                <div
-                  key={opt.id}
-                  onClick={() => {
-                    if (opt.id === 'excel') setSelectedSourceType('excel');
-                  }}
-                  className={`p-3.5 rounded-xl border-2 transition-all flex flex-col justify-between cursor-pointer relative ${
-                    selectedSourceType === opt.id
-                      ? 'border-indigo-600 bg-indigo-50/40 shadow-xs ring-1 ring-indigo-500'
-                      : opt.active
-                      ? 'border-slate-200 hover:border-slate-300 bg-white'
-                      : 'border-slate-100 bg-slate-50/60 opacity-60 cursor-not-allowed'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <opt.icon className={`w-5 h-5 ${selectedSourceType === opt.id ? 'text-indigo-600' : 'text-slate-500'}`} />
-                      {opt.id === 'excel' && (
-                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                          Ready
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs font-bold text-slate-800">{opt.name}</p>
-                    <p className="text-[10px] text-slate-500 mt-1 leading-tight">{opt.desc}</p>
-                  </div>
-                  {selectedSourceType === opt.id && (
-                    <div className="mt-2 text-[10px] text-indigo-600 font-semibold flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Selected
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Excel Mode Selection */}
-            {selectedSourceType === 'excel' && (
-              <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Excel Connection Mode
-                  </span>
-                  <span className="text-[11px] text-slate-500">
-                    BarTender-compatible live file synchronization
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label
-                    onClick={() => setMode('linked')}
-                    className={`p-3 rounded-lg border-2 flex items-start gap-3 cursor-pointer transition-all ${
-                      mode === 'linked'
-                        ? 'border-indigo-600 bg-white shadow-xs'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="excel-mode"
-                      checked={mode === 'linked'}
-                      onChange={() => setMode('linked')}
-                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-800">Link to Excel File</span>
-                        <span className="text-[9px] px-1.5 py-0.2 bg-indigo-100 text-indigo-700 font-bold rounded">
-                          RECOMMENDED
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Original Excel file on disk remains the authoritative source of truth. Refresh re-reads directly without re-uploading.
-                      </p>
-                    </div>
-                  </label>
-
-                  <label
-                    onClick={() => setMode('imported')}
-                    className={`p-3 rounded-lg border-2 flex items-start gap-3 cursor-pointer transition-all ${
-                      mode === 'imported'
-                        ? 'border-indigo-600 bg-white shadow-xs'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="excel-mode"
-                      checked={mode === 'imported'}
-                      onChange={() => setMode('imported')}
-                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <div>
-                      <span className="text-xs font-bold text-slate-800">Import Excel Data</span>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Copies spreadsheet rows into BarcodeFlow database as an isolated snapshot unaffected by disk file changes.
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* STEP 2: SELECT EXCEL FILE */}
-        {step === 2 && (
           <div className="space-y-4">
             <div>
               <h4 className="text-sm font-semibold text-slate-800">Select Excel File</h4>
               <p className="text-xs text-slate-500 mt-0.5">
-                Specify the file path to your Microsoft Excel workbook (e.g. <code>C:\Data\products.xlsx</code>).
+                Specify the real local path to your Microsoft Excel workbook (<code>*.xlsx</code>, <code>*.xls</code>, <code>*.xlsm</code>, <code>*.csv</code>).
               </p>
             </div>
 
             <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-4 shadow-xs">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  File Name / Path:
+                  Excel File:
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -835,13 +707,13 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
                       setFileName(e.target.value.split(/[/\\]/).pop() || '');
                       setTestResult(null);
                     }}
-                    placeholder="C:\Data\products.xlsx"
-                    className="flex-1 px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    placeholder="C:\Users\...\Products.xlsx"
+                    className="flex-1 px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
                   <button
                     type="button"
                     onClick={handleBrowseFile}
-                    className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-xs shrink-0 flex items-center gap-1.5"
+                    className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-xs shrink-0 flex items-center gap-1.5 cursor-pointer"
                   >
                     <FolderOpen className="w-3.5 h-3.5" />
                     Browse...
@@ -849,499 +721,470 @@ export const ExcelConnectWizardModal: React.FC<ExcelConnectWizardModalProps> = (
                 </div>
               </div>
 
-              {/* Action Buttons: Test Connection & Advanced */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={!filePath.trim() || isTesting}
-                    onClick={() => {
-                      setStep(3);
-                      runTestConnection(filePath, selectedSheet);
-                    }}
-                    className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors flex items-center gap-1.5"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin text-indigo-600' : 'text-slate-600'}`} />
-                    Test Connection...
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors flex items-center gap-1"
-                  >
-                    <Sliders className="w-3.5 h-3.5 text-slate-500" />
-                    Advanced...
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {filePath && (
-                    <button
-                      type="button"
-                      onClick={handleClearFile}
-                      className="text-xs text-slate-500 hover:text-slate-700 font-medium"
-                    >
-                      Clear Path
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleBrowseFile}
-                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
-                  >
-                    <FolderOpen className="w-3 h-3" />
-                    Select Different File
-                  </button>
-                </div>
+              {/* Action Buttons: Test Connection */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={!filePath.trim() || isTesting}
+                  onClick={() => runTestConnection(filePath)}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin text-blue-600' : ''}`} />
+                  <span>{isTesting ? 'Testing Connection...' : 'Test Connection'}</span>
+                </button>
               </div>
 
-              {/* Advanced Options Drawer */}
-              {showAdvanced && (
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-3 text-xs animate-in fade-in">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Connection Name:
-                      </label>
-                      <input
-                        type="text"
-                        value={datasetName}
-                        onChange={(e) => setDatasetName(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-800"
-                        placeholder="Product Master"
-                      />
-                    </div>
+              {/* Diagnostic Test Results Card */}
+              {testResult && (
+                <div
+                  className={`p-3.5 rounded-lg border text-xs transition-all ${
+                    testResult.success
+                      ? 'bg-emerald-50/70 border-emerald-300 text-emerald-900'
+                      : 'bg-red-50/70 border-red-300 text-red-900'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    {testResult.success ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-xs flex items-center gap-2">
+                        <span>{testResult.success ? '✓ Connection successful' : '✗ Connection failed'}</span>
+                        {testResult.errorCode && (
+                          <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-red-100 text-red-700 border border-red-200">
+                            {testResult.errorCode}
+                          </span>
+                        )}
+                      </p>
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Header Row Index:
-                      </label>
-                      <select
-                        value={headerRow}
-                        onChange={(e) => setHeaderRow(parseInt(e.target.value, 10))}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-800"
-                      >
-                        {[1, 2, 3, 4, 5].map((r) => (
-                          <option key={r} value={r}>
-                            Row {r} (Column Headers)
-                          </option>
-                        ))}
-                      </select>
+                      {testResult.success ? (
+                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
+                          <div>
+                            <span className="text-slate-500 font-sans block text-[10px]">Workbook:</span>
+                            <span className="font-bold text-slate-800 truncate block">{testResult.fileName}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 font-sans block text-[10px]">Sheets:</span>
+                            <span className="font-bold text-slate-800">{testResult.sheetCount}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 font-sans block text-[10px]">Rows:</span>
+                            <span className="font-bold text-emerald-700 font-bold">{testResult.totalRecords}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 font-sans block text-[10px]">Size:</span>
+                            <span className="font-bold text-slate-800">{formatSize(testResult.sizeBytes || 0)}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-1 space-y-2">
+                          <p className="text-red-700 text-[11px]">{testResult.error}</p>
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={handleLocateFile}
+                              className="px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-white border border-blue-300 hover:bg-blue-50 rounded shadow-2xs"
+                            >
+                              Locate File...
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => runTestConnection(filePath)}
+                              className="px-2.5 py-1 text-[11px] font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded shadow-2xs"
+                            >
+                              Retry
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="checkbox"
-                      id="auto-refresh-toggle"
-                      checked={autoRefresh}
-                      onChange={(e) => setAutoRefresh(e.target.checked)}
-                      className="rounded text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <label htmlFor="auto-refresh-toggle" className="text-slate-700 font-medium">
-                      Automatically detect file changes on disk and prompt for refresh
-                    </label>
                   </div>
                 </div>
               )}
             </div>
-
-            {/* Quick File Summary if available */}
-            {fileName && (
-              <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-200 flex items-center justify-between text-xs text-emerald-800">
-                <div className="flex items-center gap-2">
-                  <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="font-medium">{fileName}</span>
-                  <span className="text-slate-500 text-[11px] font-mono truncate max-w-md">({filePath})</span>
-                </div>
-                {fileSize > 0 && (
-                  <span className="text-[11px] text-emerald-700 font-semibold">{formatSize(fileSize)}</span>
-                )}
-              </div>
-            )}
           </div>
         )}
 
-        {/* STEP 3: TEST CONNECTION */}
-        {step === 3 && (
+        {/* STEP 2: SELECT WORKSHEET */}
+        {step === 2 && (
           <div className="space-y-4">
             <div>
-              <h4 className="text-sm font-semibold text-slate-800">Test Connection</h4>
+              <h4 className="text-sm font-semibold text-slate-800">Select Worksheet</h4>
               <p className="text-xs text-slate-500 mt-0.5">
-                Validating file path existence, read permissions, workbook format, and schema parsing.
+                Choose the worksheet from <code>{fileName || 'the workbook'}</code> that contains your label data.
               </p>
             </div>
 
-            {isTesting ? (
-              <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-200 flex flex-col items-center gap-3">
-                <RefreshCw className="w-6 h-6 animate-spin text-indigo-600" />
-                <p className="text-xs font-semibold text-slate-700">Validating Excel connection...</p>
-                <p className="text-[11px] text-slate-500 font-mono">{filePath}</p>
-              </div>
-            ) : testResult?.success ? (
-              <div className="p-5 rounded-xl bg-emerald-50 border-2 border-emerald-500/50 space-y-4 shadow-xs">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-                    <CheckCircle2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-sm font-bold text-emerald-900">Connection Successful</h5>
-                    <p className="text-xs text-emerald-700">
-                      The Excel workbook exists on disk, is readable, and can be synchronized.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-white/80 rounded-lg p-3 border border-emerald-200 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                  <div>
-                    <span className="text-slate-500 text-[10.5px] block font-medium">File Path:</span>
-                    <span className="font-bold text-slate-800 font-mono truncate block" title={testResult.filePath}>
-                      {testResult.filePath}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500 text-[10.5px] block font-medium">Worksheets:</span>
-                    <span className="font-bold text-slate-800">
-                      {testResult.sheetCount} {testResult.sheetCount === 1 ? 'Sheet' : 'Sheets'}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500 text-[10.5px] block font-medium">Records:</span>
-                    <span className="font-bold text-slate-800">{testResult.totalRecords} Rows</span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500 text-[10.5px] block font-medium">Selected Sheet:</span>
-                    <span className="font-bold text-indigo-600 font-mono">{selectedSheet || testResult.selectedSheet}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500 text-[10.5px] block font-medium">File Size:</span>
-                    <span className="font-bold text-slate-700">{formatSize(testResult.sizeBytes || fileSize)}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500 text-[10.5px] block font-medium">Connection Mode:</span>
-                    <span className="font-bold text-emerald-700 uppercase">{mode}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => runTestConnection(filePath, selectedSheet)}
-                    className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-colors flex items-center gap-1.5"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Re-Test Connection
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="p-5 rounded-xl bg-red-50 border-2 border-red-400 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
-                    <XCircle className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h5 className="text-sm font-bold text-red-900">Connection Failed</h5>
-                      {testResult?.errorCode && (
-                        <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-red-200 text-red-800 font-bold">
-                          {testResult.errorCode}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-red-700 mt-0.5">
-                      {testResult?.error || 'Unable to open and read the selected Excel file.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-white/90 rounded-lg border border-red-200 text-xs space-y-1.5 font-mono text-slate-700">
-                  <div className="flex items-start gap-1">
-                    <strong className="shrink-0 text-slate-900 font-sans">Path Checked:</strong>
-                    <span className="break-all text-red-950 font-bold">{testResult?.pathChecked || filePath || 'None'}</span>
-                  </div>
-                  <div className="flex items-start gap-1">
-                    <strong className="shrink-0 text-slate-900 font-sans">Diagnosis:</strong>
-                    <span className="text-slate-600 font-sans">
-                      {testResult?.errorCode === 'FILE_NOT_FOUND' && 'File does not exist at this path. Please browse or locate the original workbook.'}
-                      {testResult?.errorCode === 'FILE_LOCKED' && 'Workbook is currently held in exclusive lock by Excel or another process.'}
-                      {testResult?.errorCode === 'PERMISSION_DENIED' && 'Operating system denied read permissions to the file.'}
-                      {testResult?.errorCode === 'UNSUPPORTED_FORMAT' && 'File extension must be .xlsx, .xls, .xlsm, or .csv.'}
-                      {testResult?.errorCode === 'SHEET_MISSING' && 'The specified sheet was not found in the workbook.'}
-                      {testResult?.errorCode === 'INVALID_WORKBOOK' && 'Workbook contains no worksheets or corrupted table headers.'}
-                      {(!testResult?.errorCode || testResult?.errorCode === 'UNEXPECTED_ERROR') && 'Check file path permissions and ensure file is valid.'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setStep(2)}
-                      className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg"
-                    >
-                      ← Change File Path
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleLocateFile}
-                      className="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg flex items-center gap-1.5"
-                    >
-                      <FolderOpen className="w-3.5 h-3.5 text-indigo-600" />
-                      Locate File...
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => runTestConnection(filePath, selectedSheet)}
-                    className="px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-xs flex items-center gap-1.5"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Retry Test
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* STEP 4: SELECT SHEETS */}
-        {step === 4 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800">Select Worksheet</h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Select the worksheet from the workbook to bind to this data source.
-                </p>
+            <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-3 shadow-xs">
+              <div className="text-xs font-bold text-slate-700 mb-2">
+                Available Worksheets ({availableSheets.length}):
               </div>
 
-              <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
-                {availableSheets.length} {availableSheets.length === 1 ? 'Sheet' : 'Sheets'} Available
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700">
-                Available Sheets:
-              </label>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {availableSheets.map((sheetName) => {
-                  const isSelected = selectedSheet === sheetName;
-                  const displaySheetName = sheetName.endsWith('$') ? sheetName : `${sheetName}$`;
-
-                  return (
-                    <div
-                      key={sheetName}
-                      onClick={() => setSelectedSheet(sheetName)}
-                      className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                        isSelected
-                          ? 'border-indigo-600 bg-indigo-50/40 ring-1 ring-indigo-500 text-indigo-900 shadow-xs'
-                          : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] ${
-                            isSelected
-                              ? 'border-indigo-600 bg-indigo-600 text-white'
-                              : 'border-slate-400 bg-white'
-                          }`}
-                        >
-                          {isSelected && <Check className="w-3 h-3" />}
-                        </div>
-                        <div>
-                          <p className="font-bold text-xs font-mono">{displaySheetName}</p>
-                          <p className="text-[11px] text-slate-500">Spreadsheet table</p>
-                        </div>
-                      </div>
-
-                      {isSelected && (
-                        <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">
-                          Active
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs text-slate-600">
-              <div className="flex items-center gap-2">
-                <Info className="w-4 h-4 text-indigo-600 shrink-0" />
-                <span>Selected sheet: <strong className="font-mono text-slate-800">{selectedSheet}$</strong></span>
-              </div>
-              <span className="text-slate-500">Header Row: {headerRow}</span>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 5: PREVIEW */}
-        {step === 5 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800">Preview Data & Columns</h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  First 20 records detected from <strong>{selectedSheet}$</strong> with raw string precision.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full border border-emerald-200">
-                  {totalRecordsCount} Total Rows Detected
-                </span>
-                <span className="text-xs bg-indigo-100 text-indigo-800 font-bold px-2.5 py-1 rounded-full border border-indigo-200">
-                  {columns.length} Columns
-                </span>
-              </div>
-            </div>
-
-            {/* Leading zero token notice */}
-            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800">
-              <div className="flex items-center gap-2">
-                <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>
-                  <strong>BarTender Precision Active:</strong> Leading zeros (e.g. <code>00123456</code>) are strictly preserved as string tokens.
-                </span>
-              </div>
-            </div>
-
-            {/* Data Grid Preview */}
-            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs max-h-[250px] overflow-y-auto">
-              {isInspecting ? (
-                <div className="p-8 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
-                  <RefreshCw className="w-5 h-5 animate-spin text-indigo-600" />
-                  Parsing worksheet rows and headers...
-                </div>
-              ) : previewRows.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-xs">
-                  No records found in this worksheet. Check header row selection in Advanced.
+              {availableSheets.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-500 italic bg-slate-50 rounded-lg">
+                  No worksheets detected. Please test connection again.
                 </div>
               ) : (
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/90 text-slate-700 font-semibold sticky top-0 border-b border-slate-200">
-                    <tr>
-                      <th className="py-2 px-3 w-10 text-center text-slate-400">#</th>
-                      {columns.map((c) => (
-                        <th key={c.name} className="py-2 px-3 whitespace-nowrap font-medium text-slate-700">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-bold">{c.name}</span>
-                            <select
-                              value={c.type || 'text'}
-                              onChange={(e) => handleColumnTypeChange(c.name, e.target.value as any)}
-                              className="text-[10px] font-normal bg-white border border-slate-300 rounded px-1 py-0.5 text-slate-600"
-                            >
-                              <option value="text">Text</option>
-                              <option value="number">Number</option>
-                              <option value="barcode">Barcode</option>
-                              <option value="date">Date</option>
-                            </select>
+                <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                  {availableSheets.map((sheetName) => {
+                    const isSelected = selectedSheet === sheetName;
+                    return (
+                      <label
+                        key={sheetName}
+                        onClick={() => setSelectedSheet(sheetName)}
+                        className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-blue-600 bg-blue-50/40 shadow-xs'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name="selected-sheet"
+                            checked={isSelected}
+                            onChange={() => setSelectedSheet(sheetName)}
+                            className="text-blue-600 focus:ring-blue-500"
+                          />
+                          <div>
+                            <span className="text-xs font-bold text-slate-800">{sheetName}</span>
+                            <span className="text-[11px] text-slate-500 block">Worksheet Table</span>
                           </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
-                    {previewRows.map((row, idx) => (
-                      <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                        <td className="py-1.5 px-3 text-center text-slate-400 text-[10px] font-sans">
-                          {idx + 1}
-                        </td>
-                        {columns.map((c) => (
-                          <td key={c.name} className="py-1.5 px-3 whitespace-nowrap text-slate-700">
-                            {row[c.name] !== undefined ? String(row[c.name]) : ''}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                        {isSelected && (
+                          <span className="text-[11px] font-bold text-blue-600 flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Selected
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
         )}
 
-        {/* STEP 6: FINISH & PERSISTENT CONNECTION SUMMARY */}
-        {step === 6 && (
+        {/* STEP 3: REVIEW FIELDS & PREVIEW DATA */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800">Review Fields &amp; Data Preview</h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Verify detected column headers and field types from sheet <strong>"{selectedSheet}"</strong>.
+                </p>
+              </div>
+
+              {/* Header Row Selector */}
+              <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                <span className="text-xs font-medium text-slate-700">Header Row:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={headerRow}
+                  onChange={(e) => {
+                    const val = Math.max(1, parseInt(e.target.value) || 1);
+                    setHeaderRow(val);
+                    inspectAndLoadSheetData(selectedSheet, val);
+                  }}
+                  className="w-14 px-1.5 py-0.5 text-xs font-mono text-center bg-white border border-slate-300 rounded"
+                />
+              </div>
+            </div>
+
+            {isInspecting ? (
+              <div className="p-8 text-center bg-white border border-slate-200 rounded-xl space-y-2">
+                <RefreshCw className="w-6 h-6 text-blue-600 animate-spin mx-auto" />
+                <p className="text-xs font-medium text-slate-600">Inspecting sheet data &amp; columns...</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Columns Field Types Summary */}
+                <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">
+                      Detected Fields ({columns.length}):
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Total Records: <strong>{totalRecordsCount}</strong>
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-y-auto">
+                    {columns.map((col) => (
+                      <div
+                        key={col.name}
+                        className="flex items-center gap-1 px-2 py-1 rounded bg-slate-100 border border-slate-200 text-xs"
+                      >
+                        {col.dataType === 'number' ? (
+                          <Hash className="w-3 h-3 text-amber-600" />
+                        ) : col.dataType === 'date' ? (
+                          <Calendar className="w-3 h-3 text-blue-600" />
+                        ) : (
+                          <Type className="w-3 h-3 text-slate-600" />
+                        )}
+                        <span className="font-semibold text-slate-800">{col.name}</span>
+                        <select
+                          value={col.dataType || 'text'}
+                          onChange={(e) => handleColumnTypeChange(col.name, e.target.value as any)}
+                          className="text-[10px] bg-white border border-slate-300 rounded px-1 py-0.2 ml-1 text-slate-600"
+                        >
+                          <option value="text">Text</option>
+                          <option value="number">Number</option>
+                          <option value="date">Date</option>
+                          <option value="boolean">Boolean</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Compact Data Preview Table (First 5-10 rows) */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                  <div className="px-3 py-1.5 bg-slate-100 border-b border-slate-200 text-[11px] font-bold text-slate-700 flex items-center justify-between">
+                    <span>Data Preview (First {Math.min(10, previewRows.length)} rows)</span>
+                    <span className="font-normal text-slate-500">Preserves text formatting &amp; leading zeroes</span>
+                  </div>
+
+                  <div className="overflow-x-auto max-h-[160px] overflow-y-auto">
+                    {previewRows.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-slate-400">No rows in worksheet.</div>
+                    ) : (
+                      <table className="w-full text-left text-[11px] border-collapse">
+                        <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
+                          <tr>
+                            <th className="px-2.5 py-1.5 font-bold text-slate-600 w-10 text-center">#</th>
+                            {columns.map((col) => (
+                              <th key={col.name} className="px-2.5 py-1.5 font-bold text-slate-800 whitespace-nowrap">
+                                {col.name}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {previewRows.slice(0, 10).map((row, idx) => (
+                            <tr key={idx} className="hover:bg-blue-50/50">
+                              <td className="px-2.5 py-1 text-slate-400 text-center font-mono text-[10px]">
+                                {idx + 1}
+                              </td>
+                              {columns.map((col) => (
+                                <td key={col.name} className="px-2.5 py-1 text-slate-700 font-mono whitespace-nowrap">
+                                  {String(row[col.name] ?? '')}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* STEP 4: CONNECTION OPTIONS */}
+        {step === 4 && (
           <div className="space-y-4">
             <div>
-              <h4 className="text-sm font-semibold text-slate-800">Connection Complete</h4>
+              <h4 className="text-sm font-semibold text-slate-800">Connection Options</h4>
               <p className="text-xs text-slate-500 mt-0.5">
-                Review your persistent data connection details before finalizing.
+                Configure connection properties and live synchronization options.
               </p>
             </div>
 
-            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                    <FileSpreadsheet className="w-5 h-5" />
+            <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-4 shadow-xs">
+              {/* Connection Name */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Connection Name:
+                </label>
+                <input
+                  type="text"
+                  value={datasetName}
+                  onChange={(e) => setDatasetName(e.target.value)}
+                  placeholder="Products Excel"
+                  className="w-full px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* File & Sheet Summary */}
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-slate-500 text-[11px] block">Selected File:</span>
+                  <span className="font-mono text-slate-800 font-bold truncate block">{fileName || filePath}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 text-[11px] block">Worksheet:</span>
+                  <span className="font-mono text-slate-800 font-bold block">{selectedSheet}</span>
+                </div>
+              </div>
+
+              {/* Mode Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2">
+                  Connection Mode:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label
+                    onClick={() => setMode('linked')}
+                    className={`p-3 rounded-lg border-2 flex items-start gap-3 cursor-pointer transition-all ${
+                      mode === 'linked'
+                        ? 'border-blue-600 bg-blue-50/40 shadow-xs ring-1 ring-blue-500'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="conn-mode"
+                      checked={mode === 'linked'}
+                      onChange={() => setMode('linked')}
+                      className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-800">Live Linked File</span>
+                        <span className="text-[9px] px-1.5 py-0.2 bg-blue-100 text-blue-700 font-bold rounded">
+                          RECOMMENDED
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Original Excel file on disk remains the authoritative source. Automatically refreshes on file changes.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label
+                    onClick={() => setMode('imported')}
+                    className={`p-3 rounded-lg border-2 flex items-start gap-3 cursor-pointer transition-all ${
+                      mode === 'imported'
+                        ? 'border-blue-600 bg-blue-50/40 shadow-xs'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="conn-mode"
+                      checked={mode === 'imported'}
+                      onChange={() => setMode('imported')}
+                      className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800">Embedded Snapshot</span>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Copies rows into template database as a static snapshot unaffected by disk file modifications.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Live Link Options */}
+              {mode === 'linked' && (
+                <div className="space-y-2 pt-2 border-t border-slate-200">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={autoRefresh}
+                      onChange={(e) => setAutoRefresh(e.target.checked)}
+                      className="rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>Refresh automatically when file changes (Live Watcher)</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={refreshOnOpen}
+                      onChange={(e) => setRefreshOnOpen(e.target.checked)}
+                      className="rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>Refresh when document opens</span>
+                  </label>
+                </div>
+              )}
+
+              {/* Optional Quantity Column */}
+              <div className="pt-2 border-t border-slate-200">
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Quantity Column (Optional for print-time copies multiplication):
+                </label>
+                <select
+                  value={quantityColumn}
+                  onChange={(e) => setQuantityColumn(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-800"
+                >
+                  <option value="">-- None (Manual Print Quantity) --</option>
+                  {columns.map((c) => (
+                    <option key={c.name} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 5: FINISH & CONNECT */}
+        {step === 5 && (
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-800">Finish &amp; Connect</h4>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Review your connection parameters before completing setup.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-4 shadow-xs">
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                  <Database className="w-5 h-5 text-blue-600" />
+                  <span className="font-bold text-sm text-slate-900">{datasetName}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold ml-auto uppercase">
+                    {mode === 'linked' ? 'Live Linked' : 'Snapshot'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-500 text-[11px] block">Source Path:</span>
+                    <span className="font-mono text-slate-800 font-medium break-all">{filePath}</span>
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-slate-900">{datasetName}</h3>
-                    <p className="text-xs text-slate-500">Microsoft Excel • {mode === 'linked' ? 'Linked File' : 'Imported Snapshot'}</p>
+                    <span className="text-slate-500 text-[11px] block">Worksheet:</span>
+                    <span className="font-semibold text-slate-800">{selectedSheet}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[11px] block">Total Fields:</span>
+                    <span className="font-semibold text-slate-800">{columns.length} columns</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[11px] block">Total Records:</span>
+                    <span className="font-semibold text-emerald-700">{totalRecordsCount} records</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[11px] block">Auto-Refresh:</span>
+                    <span className="font-semibold text-slate-800">
+                      {autoRefresh ? 'Enabled (File Watcher active)' : 'Manual'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[11px] block">Header Row:</span>
+                    <span className="font-semibold text-slate-800">Row {headerRow}</span>
                   </div>
                 </div>
-
-                <span className="text-xs font-bold px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Connected
-                </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
-                  <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
-                    Source File Path
-                  </span>
-                  <span className="font-mono text-slate-800 font-bold block truncate" title={filePath}>
-                    {filePath}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
-                  <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
-                    Selected Worksheet
-                  </span>
-                  <span className="font-mono text-indigo-700 font-bold block">
-                    {selectedSheet}$
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
-                  <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
-                    Schema Columns ({columns.length})
-                  </span>
-                  <span className="text-slate-700 font-medium block truncate">
-                    {columns.map((c) => c.name).join(', ')}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
-                  <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
-                    Synchronized Records
-                  </span>
-                  <span className="text-slate-800 font-bold block">
-                    {totalRecordsCount} Records Available
-                  </span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-200 text-xs text-indigo-900 flex items-start gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5 text-xs text-blue-900">
+                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <p>
-                  <strong>Live Synchronization Enabled:</strong> Any changes saved to <code>{filePath}</code> in Microsoft Excel will be immediately available in BarcodeFlow via <strong>Refresh</strong> without re-uploading or re-mapping.
+                  Click <strong>Finish &amp; Connect</strong> to bind this Excel workbook to your template. The fields will appear immediately in the <strong>Data Sources</strong> side panel ready to drag and drop onto your label canvas.
                 </p>
               </div>
             </div>

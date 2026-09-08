@@ -5,6 +5,7 @@ import { X, Code2, Play, CheckCircle2, AlertCircle } from 'lucide-react';
 interface DocumentEventScriptsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialScripts?: Record<string, string>;
   onSaveScripts?: (scripts: Record<string, string>) => void;
 }
 
@@ -20,17 +21,19 @@ const EVENTS = [
 export const DocumentEventScriptsModal: React.FC<DocumentEventScriptsModalProps> = ({
   isOpen,
   onClose,
+  initialScripts,
   onSaveScripts,
 }) => {
   const [selectedEvent, setSelectedEvent] = useState<string>('OnNewRecord');
-  const [scripts, setScripts] = useState<Record<string, string>>({
+  const [scripts, setScripts] = useState<Record<string, string>>(() => ({
     OnStartJob: '// Global Job Init\nconsole.log("Print job started at " + new Date().toISOString());',
     OnNewRecord: '// Access fields using record.FIELD_NAME\nif (record.PRICE && Number(record.PRICE) > 100) {\n  record.DISCOUNT = "10%";\n}',
     OnPrePrint: '// Final transform before rasterizing/ZPL generation\n// Value = Value.trim().toUpperCase();',
     OnSerialize: '// Custom serialization\n// Value = "SN-" + pad(Counter, 6);',
     OnPostPrint: '// Post print verification\n// console.log("Label printed successfully");',
     OnEndJob: '// Cleanup at end of print batch',
-  });
+    ...initialScripts,
+  }));
 
   const [testOutput, setTestOutput] = useState<string | null>(null);
 

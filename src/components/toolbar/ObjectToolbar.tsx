@@ -3,7 +3,10 @@ import {
   FileText,
   FolderOpen,
   Save,
+  Layers,
+  Database,
   Printer,
+  Search,
   Scissors,
   Copy,
   Clipboard,
@@ -11,6 +14,7 @@ import {
   Undo2,
   Redo2,
   MousePointer,
+  Paintbrush,
   Type,
   Barcode,
   Image as ImageIcon,
@@ -28,6 +32,9 @@ import {
   Bold,
   Italic,
   Underline,
+  Strikethrough,
+  Subscript,
+  Superscript,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -41,6 +48,8 @@ import {
   Highlighter,
   WrapText,
   ShieldCheck,
+  PaintBucket,
+  PenTool,
   Table as TableIcon,
 } from 'lucide-react';
 import { BarcodeSymbology, LabelElement, TextElement, TextObjectType, BarcodeElement, ShapeElement } from '../../types';
@@ -52,7 +61,10 @@ interface ObjectToolbarProps {
   onOpen: () => void;
   onSave: () => void;
   onSaveAs?: () => void;
+  onPageSetup?: () => void;
+  onDatabaseSetup?: () => void;
   onPrint: () => void;
+  onPrintPreview?: () => void;
   onCut: () => void;
   onCopy: () => void;
   onPaste: () => void;
@@ -61,6 +73,7 @@ interface ObjectToolbarProps {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  onFormatPainter?: () => void;
   onInsertText: () => void;
   onInsertTextType?: (textType: TextObjectType) => void;
   onInsertBarcode: (symbology?: BarcodeSymbology) => void;
@@ -107,12 +120,54 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
   const selectedImageEl = props.selectedElement?.type === 'image' ? (props.selectedElement as any) : null;
   const selectedTableEl = props.selectedElement?.type === 'table' ? (props.selectedElement as any) : null;
 
-  const currentFont = selectedTextEl?.fontFamily || 'Arial';
-  const currentFontSize = selectedTextEl?.fontSize || 12;
-  const isBold = selectedTextEl?.fontWeight === 'bold';
-  const isItalic = selectedTextEl?.fontStyle === 'italic';
-  const isUnderline = selectedTextEl?.textDecoration === 'underline';
-  const textAlign = selectedTextEl?.textAlign || 'left';
+  const isBarcode = props.selectedElement?.type === 'barcode';
+  const isText = props.selectedElement?.type === 'text';
+
+  const currentFont = isText
+    ? selectedTextEl?.fontFamily || 'Arial'
+    : isBarcode
+    ? selectedBarcodeEl?.humanReadableFont || (selectedBarcodeEl as any)?.fontFamily || 'Arial'
+    : 'Arial';
+
+  const currentFontSize = isText
+    ? selectedTextEl?.fontSize || 12
+    : isBarcode
+    ? selectedBarcodeEl?.humanReadableFontSize || (selectedBarcodeEl as any)?.fontSize || 10
+    : 12;
+
+  const isBold = isText
+    ? selectedTextEl?.fontWeight === 'bold'
+    : isBarcode
+    ? selectedBarcodeEl?.humanReadableFontStyle === 'bold' ||
+      selectedBarcodeEl?.humanReadableFontStyle === 'bold-italic' ||
+      (selectedBarcodeEl as any)?.fontWeight === 'bold'
+    : false;
+
+  const isItalic = isText
+    ? selectedTextEl?.fontStyle === 'italic'
+    : isBarcode
+    ? selectedBarcodeEl?.humanReadableFontStyle === 'italic' ||
+      selectedBarcodeEl?.humanReadableFontStyle === 'bold-italic' ||
+      (selectedBarcodeEl as any)?.fontStyle === 'italic'
+    : false;
+
+  const isUnderline = isText
+    ? selectedTextEl?.textDecoration === 'underline' || !!selectedTextEl?.underline
+    : isBarcode
+    ? !!selectedBarcodeEl?.humanReadableUnderline || (selectedBarcodeEl as any)?.textDecoration === 'underline'
+    : false;
+
+  const isWhiteOnBlack = isText
+    ? !!selectedTextEl?.whiteOnBlack
+    : isBarcode
+    ? !!selectedBarcodeEl?.humanReadableWhiteOnBlack
+    : false;
+
+  const textAlign = isText
+    ? selectedTextEl?.textAlign || 'left'
+    : isBarcode
+    ? selectedBarcodeEl?.humanReadableAlignment || 'center'
+    : 'left';
 
   // Dimension & Position Values
   const currentW = props.selectedElement
@@ -162,52 +217,132 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
 
   const fonts = [
     'Arial',
-    'Helvetica',
-    'Times New Roman',
+    'Arial Black',
+    'Arial Narrow',
+    'Bahnschrift',
+    'Calibri',
+    'Cambria',
+    'Century Gothic',
+    'Comic Sans MS',
+    'Consolas',
     'Courier New',
-    'Verdana',
     'Georgia',
-    'Trebuchet MS',
+    'Helvetica',
     'Impact',
+    'Lucida Console',
+    'Microsoft Sans Serif',
     'OCR-A',
     'OCR-B',
+    'Segoe UI',
+    'Tahoma',
+    'Times New Roman',
+    'Trebuchet MS',
+    'Verdana',
   ];
 
   const fontSizes = [6, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72];
 
   const handleFontChange = (newFont: string) => {
     if (props.selectedElement && props.onUpdateSelectedElement) {
-      props.onUpdateSelectedElement({ fontFamily: newFont } as any);
+      if (isBarcode) {
+        props.onUpdateSelectedElement({
+          humanReadableFont: newFont,
+          fontFamily: newFont,
+        } as any);
+      } else {
+        props.onUpdateSelectedElement({ fontFamily: newFont } as any);
+      }
     }
   };
 
   const handleSizeChange = (newSize: number) => {
     if (props.selectedElement && props.onUpdateSelectedElement) {
-      props.onUpdateSelectedElement({ fontSize: newSize } as any);
+      if (isBarcode) {
+        props.onUpdateSelectedElement({
+          humanReadableFontSize: newSize,
+          fontSize: newSize,
+        } as any);
+      } else {
+        props.onUpdateSelectedElement({ fontSize: newSize } as any);
+      }
     }
   };
 
   const toggleBold = () => {
     if (props.selectedElement && props.onUpdateSelectedElement) {
-      props.onUpdateSelectedElement({ fontWeight: isBold ? 'normal' : 'bold' } as any);
+      if (isBarcode) {
+        const nextStyle = isBold
+          ? isItalic ? 'italic' : 'regular'
+          : isItalic ? 'bold-italic' : 'bold';
+        props.onUpdateSelectedElement({
+          humanReadableFontStyle: nextStyle,
+          fontWeight: isBold ? 'normal' : 'bold',
+        } as any);
+      } else {
+        props.onUpdateSelectedElement({ fontWeight: isBold ? 'normal' : 'bold' } as any);
+      }
     }
   };
 
   const toggleItalic = () => {
     if (props.selectedElement && props.onUpdateSelectedElement) {
-      props.onUpdateSelectedElement({ fontStyle: isItalic ? 'normal' : 'italic' } as any);
+      if (isBarcode) {
+        const nextStyle = isItalic
+          ? isBold ? 'bold' : 'regular'
+          : isBold ? 'bold-italic' : 'italic';
+        props.onUpdateSelectedElement({
+          humanReadableFontStyle: nextStyle,
+          fontStyle: isItalic ? 'normal' : 'italic',
+        } as any);
+      } else {
+        props.onUpdateSelectedElement({ fontStyle: isItalic ? 'normal' : 'italic' } as any);
+      }
     }
   };
 
   const toggleUnderline = () => {
     if (props.selectedElement && props.onUpdateSelectedElement) {
-      props.onUpdateSelectedElement({ textDecoration: isUnderline ? 'none' : 'underline' } as any);
+      if (isBarcode) {
+        props.onUpdateSelectedElement({
+          humanReadableUnderline: !isUnderline,
+          textDecoration: isUnderline ? 'none' : 'underline',
+        } as any);
+      } else {
+        props.onUpdateSelectedElement({
+          textDecoration: isUnderline ? 'none' : 'underline',
+          underline: !isUnderline,
+        } as any);
+      }
+    }
+  };
+
+  const toggleWhiteOnBlack = () => {
+    if (props.selectedElement && props.onUpdateSelectedElement) {
+      if (isBarcode) {
+        props.onUpdateSelectedElement({
+          humanReadableWhiteOnBlack: !isWhiteOnBlack,
+          humanReadableColor: !isWhiteOnBlack ? '#ffffff' : '#000000',
+        } as any);
+      } else {
+        props.onUpdateSelectedElement({
+          whiteOnBlack: !isWhiteOnBlack,
+          color: !isWhiteOnBlack ? '#ffffff' : '#000000',
+          backgroundColor: !isWhiteOnBlack ? '#000000' : 'transparent',
+        } as any);
+      }
     }
   };
 
   const handleAlign = (align: 'left' | 'center' | 'right' | 'justify') => {
     if (props.selectedElement && props.onUpdateSelectedElement) {
-      props.onUpdateSelectedElement({ textAlign: align } as any);
+      if (isBarcode) {
+        props.onUpdateSelectedElement({
+          humanReadableAlignment: align === 'justify' ? 'center' : align,
+          textAlign: align,
+        } as any);
+      } else {
+        props.onUpdateSelectedElement({ textAlign: align } as any);
+      }
     }
   };
 
@@ -215,14 +350,23 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
     <div className="flex flex-col select-none bg-[#f0f2f5] border-b border-[#cbd5e1] text-slate-800 text-xs relative z-30">
       {/* ROW 1: STANDARD & CREATION TOOLBAR */}
       <div className="flex items-center gap-0.5 h-8 px-1.5 border-b border-[#e2e8f0] overflow-visible relative z-20 shrink-0 whitespace-nowrap">
-        {/* Standard File/Edit Buttons */}
+        {/* Standard File/Edit Buttons matching BarTender */}
         <ToolBtn icon={<FileText className="w-4 h-4 text-blue-600" />} title="New Document (Ctrl+N)" onClick={props.onNew} />
         <ToolBtn icon={<FolderOpen className="w-4 h-4 text-amber-500" />} title="Open Document (Ctrl+O)" onClick={props.onOpen} />
         <ToolBtn icon={<Save className="w-4 h-4 text-blue-700" />} title="Save Document (Ctrl+S)" onClick={props.onSave} />
         {props.onSaveAs && (
           <ToolBtn icon={<Copy className="w-4 h-4 text-slate-700" />} title="Save As... (Ctrl+Shift+S)" onClick={props.onSaveAs} />
         )}
-        <ToolBtn icon={<Printer className="w-4 h-4 text-slate-800" />} title="Print Production Labels (Ctrl+P)" onClick={props.onPrint} />
+        {props.onPageSetup && (
+          <ToolBtn icon={<Layers className="w-4 h-4 text-blue-600" />} title="Page Setup... (Ctrl+D)" onClick={props.onPageSetup} />
+        )}
+        {props.onDatabaseSetup && (
+          <ToolBtn icon={<Database className="w-4 h-4 text-emerald-600" />} title="Database Connection Setup..." onClick={props.onDatabaseSetup} />
+        )}
+        <ToolBtn icon={<Printer className="w-4 h-4 text-slate-800" />} title="Print (Ctrl+P)" onClick={props.onPrint} />
+        {props.onPrintPreview && (
+          <ToolBtn icon={<Search className="w-4 h-4 text-purple-700" />} title="Print Preview (Ctrl+R)" onClick={props.onPrintPreview} />
+        )}
 
         <Divider />
 
@@ -252,6 +396,13 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
             <path d="M4 2l12 12-5.5 1.5 3.5 6.5-2.5 1-3.5-6.5L4 20V2z" />
           </svg>
         </button>
+
+        {/* Format Painter */}
+        <ToolBtn
+          icon={<Paintbrush className="w-4 h-4 text-slate-700" />}
+          title="Format Painter"
+          onClick={props.onFormatPainter || (() => {})}
+        />
 
         <Divider />
 
@@ -759,6 +910,101 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
         {/* BARCODE ELEMENT SELECTED */}
         {selectedBarcodeEl ? (
           <>
+            {/* 1. Font Family Dropdown for Barcode Human-Readable Text */}
+            <select
+              value={currentFont}
+              onChange={(e) => handleFontChange(e.target.value)}
+              title="Barcode Text Font"
+              className="h-5 bg-white border border-[#cbd5e1] rounded-xs px-1 text-[11px] font-sans text-slate-800 outline-none w-32"
+            >
+              {fonts.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+
+            {/* 2. Font Size Dropdown for Barcode Human-Readable Text */}
+            <select
+              value={currentFontSize}
+              onChange={(e) => handleSizeChange(Number(e.target.value))}
+              title="Barcode Text Size"
+              className="h-5 bg-white border border-[#cbd5e1] rounded-xs px-1 text-[11px] font-sans text-slate-800 outline-none w-14 text-center"
+            >
+              {fontSizes.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+
+            <Divider />
+
+            {/* 3. B, I, U, W buttons for Barcode Human-Readable Text */}
+            <ToolFormatBtn label="B" active={isBold} title="Bold Text" bold onClick={toggleBold} />
+            <ToolFormatBtn label="I" active={isItalic} title="Italic Text" italic onClick={toggleItalic} />
+            <ToolFormatBtn label="U" active={isUnderline} title="Underline Text" underline onClick={toggleUnderline} />
+            <ToolFormatBtn label="W" active={isWhiteOnBlack} title="White on Black Text" onClick={toggleWhiteOnBlack} />
+
+            <Divider />
+
+            {/* 4. Color 'A' with color bar below */}
+            <label className="h-5 px-1.5 rounded-xs flex flex-col items-center justify-center hover:bg-[#d8dfe8] cursor-pointer" title="Barcode Text Color">
+              <span className="font-serif font-bold text-xs leading-none text-slate-900">A</span>
+              <span
+                className="w-3.5 h-1 rounded-2xs mt-0.5"
+                style={{ backgroundColor: selectedBarcodeEl.humanReadableColor || selectedBarcodeEl.foregroundColor || '#000000' }}
+              />
+              <input
+                type="color"
+                value={selectedBarcodeEl.humanReadableColor || selectedBarcodeEl.foregroundColor || '#000000'}
+                onChange={(e) => {
+                  setFontColor(e.target.value);
+                  if (props.selectedElement && props.onUpdateSelectedElement) {
+                    props.onUpdateSelectedElement({
+                      humanReadableColor: e.target.value,
+                      foregroundColor: e.target.value,
+                      color: e.target.value,
+                    } as any);
+                  }
+                }}
+                className="sr-only"
+              />
+            </label>
+
+            {/* 5. Highlight / Background 'ab' with color bar below */}
+            <label className="h-5 px-1.5 rounded-xs flex flex-col items-center justify-center hover:bg-[#d8dfe8] cursor-pointer" title="Barcode Background Color">
+              <span className="font-sans font-bold text-[10px] leading-none text-slate-800">ab</span>
+              <span
+                className="w-3.5 h-1 rounded-2xs mt-0.5"
+                style={{ backgroundColor: selectedBarcodeEl.backgroundColor && selectedBarcodeEl.backgroundColor !== 'transparent' ? selectedBarcodeEl.backgroundColor : '#ffffff' }}
+              />
+              <input
+                type="color"
+                value={selectedBarcodeEl.backgroundColor && selectedBarcodeEl.backgroundColor !== 'transparent' ? selectedBarcodeEl.backgroundColor : '#ffffff'}
+                onChange={(e) => {
+                  setBgColor(e.target.value);
+                  if (props.selectedElement && props.onUpdateSelectedElement) {
+                    props.onUpdateSelectedElement({
+                      backgroundColor: e.target.value,
+                      humanReadableBgColor: e.target.value,
+                    } as any);
+                  }
+                }}
+                className="sr-only"
+              />
+            </label>
+
+            <Divider />
+
+            {/* 6. Alignments */}
+            <ToolBtn icon={<AlignLeft className="w-3.5 h-3.5 text-slate-700" />} title="Align Text Left" onClick={() => handleAlign('left')} />
+            <ToolBtn icon={<AlignCenter className="w-3.5 h-3.5 text-slate-700" />} title="Align Text Center" onClick={() => handleAlign('center')} />
+            <ToolBtn icon={<AlignRight className="w-3.5 h-3.5 text-slate-700" />} title="Align Text Right" onClick={() => handleAlign('right')} />
+
+            <Divider />
+
+            {/* 7. Barcode Symbology & Data */}
             <span className="font-bold text-blue-900 text-[10.5px] shrink-0 flex items-center gap-1">
               <Barcode className="w-3.5 h-3.5 text-blue-700" />
               <span>Barcode:</span>
@@ -772,7 +1018,7 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
                   props.onUpdateSelectedElement({ symbology: e.target.value as any });
                 }
               }}
-              className="h-5 bg-white border border-[#cbd5e1] rounded-xs px-1 text-[11px] font-sans text-slate-800 outline-none max-w-[110px]"
+              className="h-5 bg-white border border-[#cbd5e1] rounded-xs px-1 text-[11px] font-sans text-slate-800 outline-none max-w-[95px]"
             >
               <option value="code128">Code 128</option>
               <option value="posicode-b">PosiCode B</option>
@@ -797,69 +1043,14 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
                     props.onUpdateSelectedElement({ value: e.target.value });
                   }
                 }}
-                className="w-28 text-[11px] font-mono text-slate-900 outline-none bg-transparent"
-                placeholder="Barcode data..."
+                className="w-22 text-[11px] font-mono text-slate-900 outline-none bg-transparent"
+                placeholder="Data..."
               />
             </div>
 
             <Divider />
 
-            {/* Quick Size Presets for Barcode */}
-            <span className="text-[10px] text-slate-600 font-semibold hidden lg:inline">Size:</span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  if (props.onUpdateSelectedElement) {
-                    props.onUpdateSelectedElement({ width: 45, height: 18 });
-                  }
-                }}
-                className="px-1.5 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-medium text-slate-700 cursor-pointer"
-                title="Small Barcode (45 x 18 mm)"
-              >
-                45×18
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (props.onUpdateSelectedElement) {
-                    props.onUpdateSelectedElement({ width: 60, height: 22 });
-                  }
-                }}
-                className="px-1.5 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-medium text-slate-700 cursor-pointer"
-                title="Standard Barcode (60 x 22 mm)"
-              >
-                60×22
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (props.onUpdateSelectedElement) {
-                    props.onUpdateSelectedElement({ width: 80, height: 28 });
-                  }
-                }}
-                className="px-1.5 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-medium text-slate-700 cursor-pointer"
-                title="Wide Barcode (80 x 28 mm)"
-              >
-                80×28
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (props.onUpdateSelectedElement) {
-                    props.onUpdateSelectedElement({ width: 35, height: 35 });
-                  }
-                }}
-                className="px-1.5 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-medium text-slate-700 cursor-pointer"
-                title="Square 2D Matrix (35 x 35 mm)"
-              >
-                35×35
-              </button>
-            </div>
-
-            <Divider />
-
-            {/* Human Readable Text Toggle */}
+            {/* 8. Human Readable Text Toggle */}
             <label className="flex items-center gap-1 cursor-pointer text-[10.5px] text-slate-700 select-none">
               <input
                 type="checkbox"
@@ -869,7 +1060,7 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
                     props.onUpdateSelectedElement({ includeText: e.target.checked });
                   }
                 }}
-                className="rounded text-blue-600 focus:ring-0 w-3 h-3"
+                className="rounded text-blue-600 focus:ring-0 w-3 h-3 accent-[#0078d7]"
               />
               <span>Show Text</span>
             </label>
@@ -1222,8 +1413,80 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
           </>
         ) : (
           <>
-            {/* NO ELEMENT SELECTED: LABEL TEMPLATE QUICK STOCK PRESETS */}
-            <span className="font-bold text-slate-700 text-[10.5px] shrink-0">Label Stock:</span>
+            {/* NO ELEMENT SELECTED: FULL BARTENDER FORMATTING TOOLBAR & LABEL STOCK */}
+            {/* Font Family Dropdown */}
+            <select
+              value={currentFont}
+              onChange={(e) => handleFontChange(e.target.value)}
+              className="h-5 bg-white border border-[#cbd5e1] rounded-xs px-1 text-[11px] font-sans text-slate-800 outline-none w-32"
+              title="Font Family"
+            >
+              {fonts.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+
+            {/* Font Size Dropdown */}
+            <select
+              value={currentFontSize}
+              onChange={(e) => handleSizeChange(Number(e.target.value))}
+              className="h-5 bg-white border border-[#cbd5e1] rounded-xs px-1 text-[11px] font-sans text-slate-800 outline-none w-12 text-center"
+              title="Font Size"
+            >
+              {fontSizes.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+
+            <Divider />
+
+            {/* B, I, U buttons */}
+            <ToolFormatBtn label="B" active={false} title="Bold" bold onClick={() => {}} />
+            <ToolFormatBtn label="I" active={false} title="Italic" italic onClick={() => {}} />
+            <ToolFormatBtn label="U" active={false} title="Underline" underline onClick={() => {}} />
+
+            <Divider />
+
+            {/* Color 'A' with color bar below */}
+            <label className="h-5 px-1.5 rounded-xs flex flex-col items-center justify-center hover:bg-[#d8dfe8] cursor-pointer" title="Font Color">
+              <span className="font-serif font-bold text-xs leading-none text-slate-900">A</span>
+              <span className="w-3.5 h-1 bg-red-600 rounded-2xs mt-0.5" />
+              <input
+                type="color"
+                value={fontColor}
+                onChange={(e) => setFontColor(e.target.value)}
+                className="sr-only"
+              />
+            </label>
+
+            {/* Highlight / Background 'ab' with yellow bar */}
+            <label className="h-5 px-1.5 rounded-xs flex flex-col items-center justify-center hover:bg-[#d8dfe8] cursor-pointer" title="Highlight / Fill Color">
+              <span className="font-sans font-bold text-[10px] leading-none text-slate-800">ab</span>
+              <span className="w-3.5 h-1 bg-yellow-400 rounded-2xs mt-0.5" />
+              <input
+                type="color"
+                value={bgColor}
+                onChange={(e) => setBgColor(e.target.value)}
+                className="sr-only"
+              />
+            </label>
+
+            <Divider />
+
+            {/* Alignments */}
+            <ToolBtn icon={<AlignLeft className="w-3.5 h-3.5 text-slate-700" />} title="Align Left" onClick={() => {}} />
+            <ToolBtn icon={<AlignCenter className="w-3.5 h-3.5 text-slate-700" />} title="Align Center" onClick={() => {}} />
+            <ToolBtn icon={<AlignRight className="w-3.5 h-3.5 text-slate-700" />} title="Align Right" onClick={() => {}} />
+            <ToolBtn icon={<AlignJustify className="w-3.5 h-3.5 text-slate-700" />} title="Justify" onClick={() => {}} />
+
+            <Divider />
+
+            {/* Quick Label Stock Presets */}
+            <span className="font-bold text-slate-700 text-[10.5px] shrink-0">Stock:</span>
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -1231,7 +1494,7 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
                   handleWidthChange(100);
                   handleHeightChange(60);
                 }}
-                className="px-2 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-semibold text-slate-800 cursor-pointer"
+                className="px-1.5 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-semibold text-slate-800 cursor-pointer"
                 title="Set Label to 100 x 60 mm (Standard Shipping)"
               >
                 100×60 mm
@@ -1242,10 +1505,10 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
                   handleWidthChange(101.6);
                   handleHeightChange(152.4);
                 }}
-                className="px-2 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-semibold text-slate-800 cursor-pointer"
+                className="px-1.5 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-semibold text-slate-800 cursor-pointer"
                 title="Set Label to 4x6 inch (101.6 x 152.4 mm)"
               >
-                4×6″ (102×152 mm)
+                4×6″
               </button>
               <button
                 type="button"
@@ -1253,7 +1516,7 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
                   handleWidthChange(50);
                   handleHeightChange(25);
                 }}
-                className="px-2 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-semibold text-slate-800 cursor-pointer"
+                className="px-1.5 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-semibold text-slate-800 cursor-pointer"
                 title="Set Label to 50 x 25 mm (Asset Tag)"
               >
                 50×25 mm
@@ -1264,18 +1527,12 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
                   handleWidthChange(75);
                   handleHeightChange(50);
                 }}
-                className="px-2 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-semibold text-slate-800 cursor-pointer"
+                className="px-1.5 py-0.5 bg-white hover:bg-blue-50 border border-slate-300 rounded text-[10px] font-semibold text-slate-800 cursor-pointer"
                 title="Set Label to 75 x 50 mm"
               >
                 75×50 mm
               </button>
             </div>
-
-            <Divider />
-
-            <span className="text-[10px] text-slate-500">
-              Click any element on canvas to inspect & resize it directly
-            </span>
           </>
         )}
       </div>
