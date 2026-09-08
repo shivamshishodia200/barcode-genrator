@@ -21,6 +21,45 @@ interface NewDocumentWizardModalProps {
   currentUser?: string;
 }
 
+const WindowsRadio: React.FC<{
+  checked: boolean;
+  onChange: () => void;
+  label?: React.ReactNode;
+  disabled?: boolean;
+  className?: string;
+}> = ({ checked, onChange, label, disabled, className = '' }) => {
+  return (
+    <div
+      role="radio"
+      aria-checked={checked}
+      tabIndex={0}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!disabled) onChange();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          if (!disabled) onChange();
+        }
+      }}
+      className={`flex items-center gap-2 cursor-pointer select-none group focus:outline-none ${
+        disabled ? 'opacity-50 cursor-not-allowed' : ''
+      } ${className}`}
+    >
+      <div
+        className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors bg-white ${
+          checked ? 'border-[#0078d7]' : 'border-[#707070] group-hover:border-[#0078d7]'
+        }`}
+      >
+        {checked && <div className="w-[6px] h-[6px] rounded-full bg-[#0078d7]" />}
+      </div>
+      {label && <div className="text-[11px] text-[#000000] leading-tight">{label}</div>}
+    </div>
+  );
+};
+
 export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
   isOpen,
   onClose,
@@ -581,28 +620,18 @@ export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
                 <div className="font-bold text-[#000000] mb-2.5">Starting Point:</div>
 
                 <div className="space-y-2.5 pl-6">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="startingPoint"
-                      checked={startingPoint === 'blank'}
-                      onChange={() => setStartingPoint('blank')}
-                      className="accent-[#0078d7]"
-                    />
-                    <span className="text-[11px] text-[#000000]">Blank template</span>
-                  </label>
+                  <WindowsRadio
+                    checked={startingPoint === 'blank'}
+                    onChange={() => setStartingPoint('blank')}
+                    label="Blank template"
+                  />
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="startingPoint"
-                        checked={startingPoint === 'template'}
-                        onChange={() => setStartingPoint('template')}
-                        className="accent-[#0078d7]"
-                      />
-                      <span className="text-[11px] text-[#000000]">Select template from library</span>
-                    </label>
+                    <WindowsRadio
+                      checked={startingPoint === 'template'}
+                      onChange={() => setStartingPoint('template')}
+                      label="Select template from library"
+                    />
 
                     {/* Select... button underneath */}
                     <div className="pl-6">
@@ -626,10 +655,16 @@ export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
                 <div className="mt-3 p-3 bg-[#f8fafc] border border-[#7a7a7a] rounded-[2px] space-y-2">
                   <div className="font-semibold text-[#000000]">Available Templates:</div>
                   <div className="space-y-1">
-                    <label className="flex items-center gap-2 cursor-pointer p-1 bg-white border border-[#cbd5e1] hover:border-[#0078d7]">
-                      <input
-                        type="radio"
-                        name="templateSubChoice"
+                    <div
+                      onClick={() => {
+                        setSelectedTemplateId('mrp-50x25');
+                        setLabelWidthMm(50);
+                        setLabelHeightMm(25);
+                        setVerticalGapMm(3);
+                      }}
+                      className="flex items-center gap-2 cursor-pointer p-1.5 bg-white border border-[#cbd5e1] hover:border-[#0078d7]"
+                    >
+                      <WindowsRadio
                         checked={selectedTemplateId === 'mrp-50x25'}
                         onChange={() => {
                           setSelectedTemplateId('mrp-50x25');
@@ -637,16 +672,23 @@ export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
                           setLabelHeightMm(25);
                           setVerticalGapMm(3);
                         }}
-                        className="accent-[#0078d7]"
+                        label={
+                          <div>
+                            <strong>MRP Label — 50 × 25 mm</strong> (Pharma / Retail MRP with dynamic barcode & QR)
+                          </div>
+                        }
                       />
-                      <div>
-                        <strong>MRP Label — 50 × 25 mm</strong> (Pharma / Retail MRP with dynamic barcode & QR)
-                      </div>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer p-1 bg-white border border-[#cbd5e1] hover:border-[#0078d7]">
-                      <input
-                        type="radio"
-                        name="templateSubChoice"
+                    </div>
+                    <div
+                      onClick={() => {
+                        setSelectedTemplateId('shipping-4x6');
+                        setLabelWidthMm(101.6);
+                        setLabelHeightMm(152.4);
+                        setVerticalGapMm(3.17);
+                      }}
+                      className="flex items-center gap-2 cursor-pointer p-1.5 bg-white border border-[#cbd5e1] hover:border-[#0078d7]"
+                    >
+                      <WindowsRadio
                         checked={selectedTemplateId === 'shipping-4x6'}
                         onChange={() => {
                           setSelectedTemplateId('shipping-4x6');
@@ -654,12 +696,13 @@ export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
                           setLabelHeightMm(152.4);
                           setVerticalGapMm(3.17);
                         }}
-                        className="accent-[#0078d7]"
+                        label={
+                          <div>
+                            <strong>Shipping Label — 4" × 6"</strong> (101.6 × 152.4 mm GS1-128 carton format)
+                          </div>
+                        }
                       />
-                      <div>
-                        <strong>Shipping Label — 4" × 6"</strong> (101.6 × 152.4 mm GS1-128 carton format)
-                      </div>
-                    </label>
+                    </div>
                   </div>
                 </div>
               )}
@@ -833,28 +876,18 @@ export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
                 </p>
 
                 <div className="pt-1 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="stockMode"
-                      checked={stockMode === 'custom'}
-                      onChange={() => setStockMode('custom')}
-                      className="accent-[#0078d7]"
-                    />
-                    <span className="text-[11px] text-[#000000]">Specify Custom Settings</span>
-                  </label>
+                  <WindowsRadio
+                    checked={stockMode === 'custom'}
+                    onChange={() => setStockMode('custom')}
+                    label="Specify Custom Settings"
+                  />
 
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="stockMode"
-                        checked={stockMode === 'predefined'}
-                        onChange={() => setStockMode('predefined')}
-                        className="accent-[#0078d7]"
-                      />
-                      <span className="text-[11px] text-[#000000]">Use a Predefined Stock</span>
-                    </label>
+                    <WindowsRadio
+                      checked={stockMode === 'predefined'}
+                      onChange={() => setStockMode('predefined')}
+                      label="Use a Predefined Stock"
+                    />
 
                     {/* Predefined dropdowns */}
                     <div className="pl-6 space-y-2 max-w-[340px]">
@@ -910,37 +943,22 @@ export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
                   {/* Media Tracking Type Selection */}
                   <div className="pt-2 border-t border-[#e5e5e5] space-y-1">
                     <div className="text-[11px] font-semibold text-[#000000]">Media Tracking Type:</div>
-                    <div className="flex flex-wrap items-center gap-3 pl-2">
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-[#000000]">
-                        <input
-                          type="radio"
-                          name="wizardMediaType"
-                          checked={selectedMediaType === 'gap'}
-                          onChange={() => setSelectedMediaType('gap')}
-                          className="accent-[#0078d7]"
-                        />
-                        <span>Die-Cut / Gap</span>
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-[#000000]">
-                        <input
-                          type="radio"
-                          name="wizardMediaType"
-                          checked={selectedMediaType === 'continuous'}
-                          onChange={() => setSelectedMediaType('continuous')}
-                          className="accent-[#0078d7]"
-                        />
-                        <span>Continuous Roll</span>
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-[#000000]">
-                        <input
-                          type="radio"
-                          name="wizardMediaType"
-                          checked={selectedMediaType === 'black_mark'}
-                          onChange={() => setSelectedMediaType('black_mark')}
-                          className="accent-[#0078d7]"
-                        />
-                        <span>Black Mark</span>
-                      </label>
+                    <div className="flex flex-wrap items-center gap-4 pl-2">
+                      <WindowsRadio
+                        checked={selectedMediaType === 'gap'}
+                        onChange={() => setSelectedMediaType('gap')}
+                        label="Die-Cut / Gap"
+                      />
+                      <WindowsRadio
+                        checked={selectedMediaType === 'continuous'}
+                        onChange={() => setSelectedMediaType('continuous')}
+                        label="Continuous Roll"
+                      />
+                      <WindowsRadio
+                        checked={selectedMediaType === 'black_mark'}
+                        onChange={() => setSelectedMediaType('black_mark')}
+                        label="Black Mark"
+                      />
                     </div>
                   </div>
                 </div>
@@ -960,45 +978,39 @@ export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
                 </p>
 
                 <div className="space-y-3 pl-2">
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="itemsMode"
-                      checked={itemsMode === 'single'}
-                      onChange={() => {
-                        setItemsMode('single');
-                        setRows(1);
-                        setColumns(1);
-                        setPageWidthMm(labelWidthMm);
-                        setPageHeightMm(labelHeightMm);
-                      }}
-                      className="mt-0.5 accent-[#0078d7]"
-                    />
-                    <div>
-                      <div className="font-semibold text-[#000000]">Single item per page</div>
-                      <div className="text-[11px] text-[#555555]">Standard continuous roll or individual die-cut label.</div>
-                    </div>
-                  </label>
+                  <WindowsRadio
+                    checked={itemsMode === 'single'}
+                    onChange={() => {
+                      setItemsMode('single');
+                      setRows(1);
+                      setColumns(1);
+                      setPageWidthMm(labelWidthMm);
+                      setPageHeightMm(labelHeightMm);
+                    }}
+                    label={
+                      <div>
+                        <div className="font-semibold text-[#000000]">Single item per page</div>
+                        <div className="text-[11px] text-[#555555]">Standard continuous roll or individual die-cut label.</div>
+                      </div>
+                    }
+                  />
 
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="itemsMode"
-                      checked={itemsMode === 'multiple'}
-                      onChange={() => {
-                        setItemsMode('multiple');
-                        const newCols = Math.max(1, columns);
-                        const newRows = Math.max(1, rows);
-                        setPageWidthMm(newCols * labelWidthMm + (newCols - 1) * horizontalGapMm + marginLeft + marginRight);
-                        setPageHeightMm(newRows * labelHeightMm + (newRows - 1) * verticalGapMm + marginTop + marginBottom);
-                      }}
-                      className="mt-0.5 accent-[#0078d7]"
-                    />
-                    <div>
-                      <div className="font-semibold text-[#000000]">Multiple columns and/or rows</div>
-                      <div className="text-[11px] text-[#555555]">Labels arranged in a grid matrix on a sheet or multi-across roll.</div>
-                    </div>
-                  </label>
+                  <WindowsRadio
+                    checked={itemsMode === 'multiple'}
+                    onChange={() => {
+                      setItemsMode('multiple');
+                      const newCols = Math.max(1, columns);
+                      const newRows = Math.max(1, rows);
+                      setPageWidthMm(newCols * labelWidthMm + (newCols - 1) * horizontalGapMm + marginLeft + marginRight);
+                      setPageHeightMm(newRows * labelHeightMm + (newRows - 1) * verticalGapMm + marginTop + marginBottom);
+                    }}
+                    label={
+                      <div>
+                        <div className="font-semibold text-[#000000]">Multiple columns and/or rows</div>
+                        <div className="text-[11px] text-[#555555]">Labels arranged in a grid matrix on a sheet or multi-across roll.</div>
+                      </div>
+                    }
+                  />
 
                   {itemsMode === 'multiple' && (
                     <div className="pl-6 pt-2 space-y-2 max-w-[280px]">
@@ -1158,46 +1170,26 @@ export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
                   <div className="pt-2 border-t border-[#dcdcdc]">
                     <div className="font-bold text-[#000000] mb-2">Orientation:</div>
                     <div className="grid grid-cols-2 gap-2 pl-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="orientation"
-                          checked={orientation === 'portrait'}
-                          onChange={() => setOrientation('portrait')}
-                          className="accent-[#0078d7]"
-                        />
-                        <span>Portrait</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="orientation"
-                          checked={orientation === 'landscape'}
-                          onChange={() => setOrientation('landscape')}
-                          className="accent-[#0078d7]"
-                        />
-                        <span>Landscape</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="orientation"
-                          checked={orientation === 'portrait-180'}
-                          onChange={() => setOrientation('portrait-180')}
-                          className="accent-[#0078d7]"
-                        />
-                        <span>Portrait 180°</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="orientation"
-                          checked={orientation === 'landscape-180'}
-                          onChange={() => setOrientation('landscape-180')}
-                          className="accent-[#0078d7]"
-                        />
-                        <span>Landscape 180°</span>
-                      </label>
+                      <WindowsRadio
+                        checked={orientation === 'portrait'}
+                        onChange={() => setOrientation('portrait')}
+                        label="Portrait"
+                      />
+                      <WindowsRadio
+                        checked={orientation === 'landscape'}
+                        onChange={() => setOrientation('landscape')}
+                        label="Landscape"
+                      />
+                      <WindowsRadio
+                        checked={orientation === 'portrait-180'}
+                        onChange={() => setOrientation('portrait-180')}
+                        label="Portrait 180°"
+                      />
+                      <WindowsRadio
+                        checked={orientation === 'landscape-180'}
+                        onChange={() => setOrientation('landscape-180')}
+                        label="Landscape 180°"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1321,28 +1313,22 @@ export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
                 </p>
 
                 <div className="space-y-2.5 pl-2 max-w-[280px]">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="labelShape"
-                      checked={labelShape === 'rectangle'}
-                      onChange={() => setLabelShape('rectangle')}
-                      className="accent-[#0078d7]"
-                    />
-                    <span className="font-medium text-[#111111]">Rectangle</span>
-                    <span className="text-[10px] text-slate-500">(90° Corners)</span>
-                  </label>
+                  <WindowsRadio
+                    checked={labelShape === 'rectangle'}
+                    onChange={() => setLabelShape('rectangle')}
+                    label={
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-[#111111]">Rectangle</span>
+                        <span className="text-[10px] text-slate-500">(90° Corners)</span>
+                      </div>
+                    }
+                  />
 
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="labelShape"
-                      checked={labelShape === 'rounded'}
-                      onChange={() => setLabelShape('rounded')}
-                      className="accent-[#0078d7]"
-                    />
-                    <span className="font-medium text-[#111111]">Rounded Rectangle</span>
-                  </label>
+                  <WindowsRadio
+                    checked={labelShape === 'rounded'}
+                    onChange={() => setLabelShape('rounded')}
+                    label={<span className="font-medium text-[#111111]">Rounded Rectangle</span>}
+                  />
 
                   {labelShape === 'rounded' && (
                     <div className="pl-6 py-1 flex items-center gap-2 bg-[#f4f7fa] p-2 border border-slate-300 rounded-[2px]">
@@ -1360,27 +1346,17 @@ export const NewDocumentWizardModal: React.FC<NewDocumentWizardModalProps> = ({
                     </div>
                   )}
 
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="labelShape"
-                      checked={labelShape === 'ellipse'}
-                      onChange={() => setLabelShape('ellipse')}
-                      className="accent-[#0078d7]"
-                    />
-                    <span className="font-medium text-[#111111]">Ellipse</span>
-                  </label>
+                  <WindowsRadio
+                    checked={labelShape === 'ellipse'}
+                    onChange={() => setLabelShape('ellipse')}
+                    label={<span className="font-medium text-[#111111]">Ellipse</span>}
+                  />
 
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="labelShape"
-                      checked={labelShape === 'circle'}
-                      onChange={() => setLabelShape('circle')}
-                      className="accent-[#0078d7]"
-                    />
-                    <span className="font-medium text-[#111111]">Circle</span>
-                  </label>
+                  <WindowsRadio
+                    checked={labelShape === 'circle'}
+                    onChange={() => setLabelShape('circle')}
+                    label={<span className="font-medium text-[#111111]">Circle</span>}
+                  />
                 </div>
               </div>
 
