@@ -311,7 +311,17 @@ export default function App() {
     }
   });
 
-  const [isWelcomeOpen, setIsWelcomeOpen] = useState<boolean>(false);
+  const [isWelcomeOpen, setIsWelcomeOpen] = useState<boolean>(() => {
+    try {
+      const savedAuth = localStorage.getItem('barcodeflow_auth_session');
+      const isAuth = savedAuth ? JSON.parse(savedAuth)?.authenticated === true : false;
+      const val = localStorage.getItem('barcodeflow.showWelcomeOnStartup');
+      const shouldShow = val === null ? true : val === 'true';
+      return isAuth && shouldShow;
+    } catch {
+      return false;
+    }
+  });
 
   const handleToggleShowWelcomeOnStartup = useCallback((enabled: boolean) => {
     setShowWelcomeOnStartup(enabled);
@@ -2975,7 +2985,9 @@ export default function App() {
         ];
       });
 
-      setIsWelcomeOpen(false);
+      if (showWelcomeOnStartup) {
+        setIsWelcomeOpen(true);
+      }
       setActiveView('designer');
       showToast(`Welcome ${user.name}! Barcode Automation Studio (Template Builder) loaded.`, 'success');
     }

@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FileText,
-  FolderOpen,
   Clock,
-  Sparkles,
-  QrCode,
-  Barcode,
   X,
   AlertTriangle,
   FolderSearch,
@@ -152,124 +148,195 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      {/* Classic Windows Desktop Dialog Window */}
+      {/* Classic BarTender Windows Desktop Dialog Window */}
       <div
         ref={modalRef}
-        className="relative w-[570px] max-w-[95vw] bg-[#f0f4f9] border border-[#7088a8] rounded-sm shadow-2xl flex flex-col overflow-hidden text-slate-800 font-sans"
+        className="relative w-[560px] max-w-[95vw] bg-[#f0f4f9] border border-[#7088a8] rounded-sm shadow-2xl flex flex-col overflow-hidden text-slate-800 font-sans"
         style={{
-          boxShadow: '0 10px 30px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.2)',
+          boxShadow: '0 12px 36px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25)',
         }}
       >
         {/* 1. Windows Classic Title Bar */}
         <div className="h-7 bg-gradient-to-r from-[#d9e5f4] via-[#e6effa] to-[#d4e2f2] border-b border-[#a6bcd6] flex items-center justify-between px-2.5">
           <div className="flex items-center gap-1.5">
-            {/* BarcodeFlow Icon */}
-            <div className="w-3.5 h-3.5 bg-blue-700 rounded-xs flex items-center justify-center">
+            {/* BarTender Icon */}
+            <div className="w-3.5 h-3.5 bg-[#0052cc] rounded-[2px] flex items-center justify-center shadow-xs">
               <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 text-white fill-current">
                 <path d="M2 4h2v16H2V4zm4 0h1v16H6V4zm3 0h2v16H9V4zm4 0h3v16h-3V4zm5 0h1v16h-1V4zm3 0h1v16h-1V4z" />
               </svg>
             </div>
-            <span className="text-[11.5px] font-semibold text-slate-800 tracking-tight">BarcodeFlow</span>
+            <span className="text-[12px] font-semibold text-slate-800 tracking-tight">BarTender</span>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="w-5 h-5 flex items-center justify-center rounded-xs hover:bg-[#e81123] hover:text-white text-slate-600 transition-colors"
+            className="w-5 h-5 flex items-center justify-center rounded-[2px] hover:bg-[#e81123] hover:text-white text-slate-600 transition-colors cursor-pointer"
             title="Close (Esc)"
           >
-            <X className="w-3 h-3" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* 2. Top Header Graphic / Welcome Banner */}
-        <div className="relative bg-white border-b border-[#cbd7e6] px-5 py-4 flex items-center justify-between overflow-hidden">
+        {/* 2. Top Header Graphic / Welcome Banner (Faithful BarTender Design) */}
+        <div className="relative bg-gradient-to-r from-[#ffffff] via-[#ebf4fd] to-[#bfe0f8] border-b border-[#cbd7e6] px-6 py-3.5 flex items-center justify-between overflow-hidden min-h-[76px]">
+          {/* Watermark barcode numbers, codes and stripes */}
+          <div className="absolute inset-0 pointer-events-none select-none opacity-20 overflow-hidden flex items-center justify-end pr-2">
+            <div className="font-mono text-[13px] font-bold text-sky-900 tracking-widest leading-none whitespace-nowrap select-none">
+              4359700101110001010&nbsp;&nbsp;[A7-118]&nbsp;&nbsp;||| | |||| | |||
+            </div>
+          </div>
+
+          {/* Left: Bold Welcome Header */}
           <div className="z-10">
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Welcome!</h2>
-            <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
-              BarcodeFlow Enterprise Label Design & Automation Suite
+            <h2 className="text-[22px] font-bold text-slate-900 tracking-tight leading-tight">Welcome!</h2>
+            <p className="text-[11px] text-slate-600 mt-0.5 font-medium">
+              Enterprise Label Design & Automation Suite
             </p>
           </div>
 
-          {/* Right Header Illustration (Label, Barcode, Disc Graphics) */}
-          <div className="flex items-center gap-2 pr-1 opacity-90">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-700 via-indigo-600 to-cyan-400 p-[2px] shadow-sm flex items-center justify-center">
-              <div className="w-full h-full bg-white rounded-full flex items-center justify-center">
-                <div className="w-3.5 h-3.5 rounded-full bg-slate-800 border-2 border-white" />
+          {/* Right: BarTender Artwork (CD Disc + Barcode Labels) */}
+          <div className="relative z-10 flex items-center gap-1.5 pr-1 shrink-0">
+            {/* Horizontal Barcode Label */}
+            <div className="w-[52px] h-[26px] bg-white border border-slate-300 rounded-[2px] shadow-xs flex flex-col justify-center px-1">
+              <div className="flex justify-between items-center h-3 w-full px-0.5">
+                <span className="w-0.5 h-full bg-slate-800"></span>
+                <span className="w-1 h-full bg-slate-800"></span>
+                <span className="w-0.5 h-full bg-slate-800"></span>
+                <span className="w-1.5 h-full bg-slate-800"></span>
+                <span className="w-0.5 h-full bg-slate-800"></span>
+                <span className="w-1 h-full bg-slate-800"></span>
+                <span className="w-0.5 h-full bg-slate-800"></span>
+              </div>
+              <div className="text-[6.5px] font-mono text-center text-slate-600 leading-none mt-0.5">A7-118</div>
+            </div>
+
+            {/* Vertical Barcode / DataMatrix Document */}
+            <div className="w-[42px] h-[48px] bg-white border border-slate-300 rounded-[2px] shadow-xs flex flex-col items-center justify-between p-1">
+              {/* 2D DataMatrix code icon */}
+              <div className="w-4 h-4 grid grid-cols-3 grid-rows-3 gap-[1px] bg-slate-800 p-[1px] rounded-[1px]">
+                <div className="bg-white"></div>
+                <div className="bg-slate-800"></div>
+                <div className="bg-white"></div>
+                <div className="bg-slate-800"></div>
+                <div className="bg-white"></div>
+                <div className="bg-slate-800"></div>
+                <div className="bg-white"></div>
+                <div className="bg-slate-800"></div>
+                <div className="bg-white"></div>
+              </div>
+              <div className="w-full space-y-0.5">
+                <div className="w-full h-[1.5px] bg-slate-300 rounded-full"></div>
+                <div className="w-3/4 h-[1.5px] bg-slate-300 rounded-full"></div>
+                <div className="w-full h-[1.5px] bg-slate-300 rounded-full"></div>
+              </div>
+              {/* Mini barcode lines */}
+              <div className="w-full h-1.5 flex justify-between">
+                <span className="w-0.5 h-full bg-slate-800"></span>
+                <span className="w-0.5 h-full bg-slate-800"></span>
+                <span className="w-1 h-full bg-slate-800"></span>
+                <span className="w-0.5 h-full bg-slate-800"></span>
+                <span className="w-1 h-full bg-slate-800"></span>
               </div>
             </div>
 
-            <div className="bg-gradient-to-b from-white to-slate-100 border border-slate-300 rounded-xs px-2 py-1.5 shadow-xs flex flex-col items-center justify-center min-w-[58px]">
-              <Barcode className="w-8 h-4 text-slate-800 stroke-[1.5]" />
-              <div className="w-full h-[1px] bg-slate-300 my-0.5" />
-              <QrCode className="w-3 h-3 text-blue-700" />
+            {/* CD-ROM Disc with Label */}
+            <div className="relative w-12 h-12 rounded-full bg-gradient-to-tr from-[#9bbce2] via-[#e4edf8] to-[#92b5db] border border-[#6b8dae] shadow-sm flex items-center justify-center -ml-2">
+              {/* Disc inner ring */}
+              <div className="w-6 h-6 rounded-full bg-[#cbdcee] border border-[#83a6cb] flex items-center justify-center">
+                {/* Center hole */}
+                <div className="w-2.5 h-2.5 rounded-full bg-[#f0f4f9] border border-slate-400"></div>
+              </div>
+              {/* Mini barcode printed on disc */}
+              <div className="absolute bottom-1 w-5 h-1.5 flex justify-between px-0.5 opacity-80">
+                <span className="w-0.5 h-full bg-slate-800"></span>
+                <span className="w-0.5 h-full bg-slate-800"></span>
+                <span className="w-1 h-full bg-slate-800"></span>
+                <span className="w-0.5 h-full bg-slate-800"></span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* 3. Main Content Body */}
-        <div className="p-5 flex flex-col space-y-3.5 bg-[#f0f4f9]">
-          <p className="text-[12px] font-semibold text-slate-800">What would you like to do?</p>
+        <div className="p-6 flex flex-col space-y-4 bg-[#f0f4f9]">
+          <p className="text-[12.5px] font-semibold text-slate-800">What would you like to do?</p>
 
-          {/* Action 1: Start New Document */}
+          {/* Action 1: Start New BarTender Document */}
           <button
             type="button"
             onClick={() => {
               onClose();
               onNewDocument();
             }}
-            className="group flex items-center gap-3 w-full p-2 text-left rounded-sm hover:bg-[#e2ecf7] active:bg-[#d0e0f3] border border-transparent hover:border-[#b8cfe8] transition-all cursor-pointer"
+            className="group flex items-center gap-3.5 w-full p-2.5 text-left rounded-[3px] bg-[#f8fbfe]/60 hover:bg-[#e2ecf7] active:bg-[#d0e0f3] border border-transparent hover:border-[#8cb0db] transition-all cursor-pointer shadow-2xs hover:shadow-xs"
           >
-            <div className="w-8 h-8 rounded-sm bg-gradient-to-b from-[#fffae6] to-[#fde99a] border border-[#d6b75c] shadow-xs flex items-center justify-center shrink-0 group-hover:shadow-sm">
-              <Sparkles className="w-4 h-4 text-amber-600" />
-            </div>
-            <div>
-              <div className="text-[12px] font-medium text-slate-900 group-hover:text-blue-900">
-                <span className="underline decoration-slate-400 group-hover:decoration-blue-700">S</span>tart a new BarcodeFlow document...
+            {/* Custom BarTender Sunburst New Document Icon */}
+            <div className="relative w-9 h-9 rounded-[2px] bg-white border border-[#9ebcdb] shadow-xs flex items-center justify-center shrink-0 group-hover:border-blue-500">
+              <FileText className="w-5 h-5 text-slate-700" />
+              {/* Golden 8-point Sparkle / Sun Badge */}
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-tr from-amber-400 to-yellow-300 rounded-full border border-amber-600 shadow-xs flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 text-amber-900 fill-current">
+                  <path d="M12 0l2.5 8.5L23 12l-8.5 2.5L12 23l-2.5-8.5L1 12l8.5-2.5z" />
+                </svg>
               </div>
-              <div className="text-[10px] text-slate-500">Create a blank or predefined label template using the wizard</div>
+            </div>
+
+            <div>
+              <div className="text-[12.5px] font-semibold text-slate-900 group-hover:text-blue-900">
+                <span className="underline decoration-slate-400 group-hover:decoration-blue-700">S</span>tart a new BarTender document...
+              </div>
+              <div className="text-[10.5px] text-slate-500 mt-0.5">
+                Create a blank label or choose from predefined industry templates using the New Document Wizard
+              </div>
             </div>
           </button>
 
-          {/* Action 2: Open Existing Document */}
+          {/* Action 2: Open Existing BarTender Document */}
           <button
             type="button"
             onClick={() => {
               onClose();
               onOpenExisting();
             }}
-            className="group flex items-center gap-3 w-full p-2 text-left rounded-sm hover:bg-[#e2ecf7] active:bg-[#d0e0f3] border border-transparent hover:border-[#b8cfe8] transition-all cursor-pointer"
+            className="group flex items-center gap-3.5 w-full p-2.5 text-left rounded-[3px] bg-[#f8fbfe]/60 hover:bg-[#e2ecf7] active:bg-[#d0e0f3] border border-transparent hover:border-[#8cb0db] transition-all cursor-pointer shadow-2xs hover:shadow-xs"
           >
-            <div className="w-8 h-8 rounded-sm bg-gradient-to-b from-[#fbfdf7] to-[#e4f0d3] border border-[#a8c78c] shadow-xs flex items-center justify-center shrink-0 group-hover:shadow-sm">
-              <FolderOpen className="w-4 h-4 text-emerald-700" />
+            {/* Manila Open Folder Icon */}
+            <div className="relative w-9 h-9 rounded-[2px] bg-gradient-to-b from-[#fffbe6] to-[#fce881] border border-[#d6b43b] shadow-xs flex items-center justify-center shrink-0 group-hover:border-amber-600">
+              <svg viewBox="0 0 24 24" className="w-5 h-5 text-amber-800 fill-amber-300">
+                <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+              </svg>
             </div>
+
             <div>
-              <div className="text-[12px] font-medium text-slate-900 group-hover:text-blue-900">
-                <span className="underline decoration-slate-400 group-hover:decoration-blue-700">O</span>pen an existing BarcodeFlow document...
+              <div className="text-[12.5px] font-semibold text-slate-900 group-hover:text-blue-900">
+                <span className="underline decoration-slate-400 group-hover:decoration-blue-700">O</span>pen an existing BarTender document...
               </div>
-              <div className="text-[10px] text-slate-500">Browse disk for saved .bfl, .btw, or JSON document files</div>
+              <div className="text-[10.5px] text-slate-500 mt-0.5">
+                Browse disk for saved .bfl, .btw, or JSON document files
+              </div>
             </div>
           </button>
 
-          {/* Action 3: Recent Documents Header */}
+          {/* Action 3: Recent Documents Section */}
           <div className="pt-1">
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-5 h-5 rounded-xs bg-slate-200 border border-slate-300 flex items-center justify-center">
-                <Clock className="w-3 h-3 text-slate-600" />
+              <div className="w-4 h-4 rounded-[2px] bg-slate-200 border border-slate-300 flex items-center justify-center">
+                <Clock className="w-2.5 h-2.5 text-slate-600" />
               </div>
               <span className="text-[11.5px] font-semibold text-slate-800">
-                Open a <span className="underline decoration-slate-400">r</span>ecently used BarcodeFlow document:
+                Open a <span className="underline decoration-slate-400">r</span>ecently used BarTender document:
               </span>
             </div>
 
-            {/* Classic Desktop Sunken List Box */}
+            {/* Sunken List Box */}
             <div
               ref={listRef}
               tabIndex={0}
-              className="h-32 bg-white border border-[#7f9db9] rounded-xs overflow-y-auto p-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
+              className="h-28 bg-white border border-[#7f9db9] rounded-[2px] overflow-y-auto p-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
             >
               {recentDocuments.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-xs text-slate-400 italic">
+                <div className="h-full flex items-center justify-center text-[11px] text-slate-400 italic">
                   No recently opened documents
                 </div>
               ) : (
@@ -319,8 +386,8 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({
 
         {/* 4. Bottom Footer Bar */}
         <div className="h-12 bg-[#e4ebf5] border-t border-[#cbd5e1] px-5 flex items-center justify-between">
-          {/* Don't show again checkbox */}
-          <label className="flex items-center gap-2 cursor-pointer text-[11.5px] text-slate-700 hover:text-slate-900">
+          {/* Don't show this dialog again checkbox */}
+          <label className="flex items-center gap-2 cursor-pointer text-[11.5px] text-slate-700 hover:text-slate-900 select-none">
             <input
               type="checkbox"
               checked={dontShowAgain}
@@ -329,7 +396,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({
                 setDontShowAgain(checked);
                 onToggleShowWelcomeOnStartup(!checked);
               }}
-              className="rounded-xs text-blue-600 focus:ring-0 border-slate-400 w-3.5 h-3.5 cursor-pointer"
+              className="rounded-[2px] text-blue-600 focus:ring-0 border-slate-400 w-3.5 h-3.5 cursor-pointer"
             />
             <span>Don't show this dialog again</span>
           </label>
@@ -340,7 +407,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleAttemptOpenRecent(recentDocuments[selectedIndex])}
-                className="px-4 py-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xs text-[11.5px] font-semibold shadow-xs transition-colors cursor-pointer"
+                className="px-4 py-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-[2px] text-[11.5px] font-semibold shadow-xs transition-colors cursor-pointer"
               >
                 Open Selected
               </button>
@@ -349,7 +416,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-1 bg-[#e1e1e1] hover:bg-[#d4d4d4] active:bg-[#c4c4c4] border border-[#707070] text-slate-900 rounded-xs text-[11.5px] font-semibold shadow-xs transition-colors cursor-pointer"
+              className="px-6 py-1 bg-[#e1e1e1] hover:bg-[#e5f1fb] hover:border-[#0078d7] active:bg-[#cce4f7] border border-[#707070] text-slate-900 rounded-[2px] text-[11.5px] font-semibold shadow-xs transition-colors cursor-pointer"
             >
               Close
             </button>
@@ -407,7 +474,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({
         </div>
       )}
 
-      {/* 5. Missing File Error Modal */}
+      {/* Missing File Error Modal */}
       {missingFileItem && (
         <div
           className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/50 select-none animate-in fade-in duration-100"
@@ -418,11 +485,11 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({
           <div className="w-[440px] bg-white border border-[#7088a8] rounded-xs shadow-2xl overflow-hidden text-slate-800">
             {/* Title */}
             <div className="h-7 bg-[#e4ebf5] border-b border-[#cbd5e1] px-3 flex items-center justify-between">
-              <span className="text-[11.5px] font-bold text-slate-800">BarcodeFlow - File Not Found</span>
+              <span className="text-[11.5px] font-bold text-slate-800">BarTender - File Not Found</span>
               <button
                 type="button"
                 onClick={() => setMissingFileItem(null)}
-                className="w-4 h-4 flex items-center justify-center hover:bg-red-600 hover:text-white text-slate-500 rounded-xs"
+                className="w-4 h-4 flex items-center justify-center hover:bg-red-600 hover:text-white text-slate-500 rounded-xs cursor-pointer"
               >
                 <X className="w-3 h-3" />
               </button>
