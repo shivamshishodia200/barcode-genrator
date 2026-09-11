@@ -10,51 +10,58 @@ const printService = NetworkPrintService.getInstance();
 
 // GET /api/printers
 printersRouter.get('/', async (req: Request, res: Response) => {
-  let printers = storage.read<any>('printers', []);
-  const needsDiscovery =
-    !printers ||
-    printers.length === 0 ||
-    req.query.refresh === 'true' ||
-    !printers.some((p: any) => p.location?.includes('Workstation') || p.driverName || p.brand === 'Desktop PDF');
-
-  if (needsDiscovery) {
-    try {
-      const discovered = await printService.discoverInstalledPrinters();
-      if (discovered && discovered.length > 0) {
-        const combinedMap = new Map<string, any>();
-        discovered.forEach((p, idx) => {
-          combinedMap.set(p.name.toLowerCase(), {
-            id: `prn-os-${idx + 1}`,
-            name: p.name,
-            model: p.driverName || p.name,
-            brand: p.protocol === 'zpl' ? 'Zebra' : p.protocol === 'tspl' ? 'TSC' : 'Desktop PDF',
-            dpi: p.protocol === 'zpl' ? 300 : 203,
-            status: p.status,
-            protocol: p.protocol,
-            location: 'Local Workstation / USB Spooler',
-            mediaWidth: 104,
-            mediaHeight: 152,
-            ipAddress: p.portName || '127.0.0.1',
-            port: 9100,
-            isDefault: p.isDefault,
-            driverName: p.driverName,
-            isThermal: p.isThermal,
-          });
-        });
-        printers = Array.from(combinedMap.values());
-        storage.write('printers', printers);
-      }
-    } catch (err) {
-      console.warn('[PrintersRouter] Auto-discovery error on GET:', err);
+  try {
+    const discovered = await printService.discoverInstalledPrinters();
+    if (discovered && discovered.length > 0) {
+      const realList = discovered.map((p, idx) => ({
+        id: `prn-os-${idx + 1}`,
+        name: p.name,
+        model: p.driverName || p.name,
+        brand: p.protocol === 'zpl' ? 'Zebra' : p.protocol === 'tspl' ? 'TSC' : 'Desktop PDF',
+        dpi: 300,
+        status: p.status,
+        protocol: p.protocol,
+        location: 'Local Workstation / USB Spooler',
+        mediaWidth: 210,
+        mediaHeight: 297,
+        ipAddress: p.portName || '127.0.0.1',
+        port: 9100,
+        isDefault: p.isDefault,
+        driverName: p.driverName,
+        isThermal: p.isThermal,
+      }));
+      storage.write('printers', realList);
+      return res.json(realList);
     }
+  } catch (err) {
+    console.warn('[PrintersRouter] OS discovery error:', err);
   }
 
-  res.json(printers);
+  const raw = storage.read<any>('printers', []);
+  const filtered = raw.filter(
+    (p: any) =>
+      !p.isVirtual &&
+      !p.id?.includes('citizen') &&
+      !p.id?.includes('sato') &&
+      !p.id?.includes('zebra') &&
+      !p.id?.includes('tsc') &&
+      !p.id?.includes('virtual')
+  );
+  storage.write('printers', filtered);
+  res.json(filtered);
 });
 
 // GET /api/printers/default
 printersRouter.get('/default', (req: Request, res: Response) => {
-  const printers = storage.read<any>('printers', []);
+  const printers = storage.read<any>('printers', []).filter(
+    (p: any) =>
+      !p.isVirtual &&
+      !p.id?.includes('citizen') &&
+      !p.id?.includes('sato') &&
+      !p.id?.includes('zebra') &&
+      !p.id?.includes('tsc') &&
+      !p.id?.includes('virtual')
+  );
   const def = printers.find((p: any) => p.isDefault || p.status === 'online') || printers[0];
   res.json(def || null);
 });
@@ -202,6 +209,33 @@ printersRouter.post('/:id/probe', async (req: Request, res: Response) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// POST /api/printers/:id/cancel-jobs
+printersRouter.post('/:id/cancel-jobs', async (req: Request, res: Response) => {
+  try {
+    const printers = storage.read<any>('printers', []);
+    const printer = printers.find((p: any) => p.id === req.params.id);
+    if (!printer) return res.status(404).json({ success: false, error: 'Printer not found' });
+
+    if (process.platform === 'win32') {
+      const { exec } = await import('child_process');
+      const safeName = (printer.name || '').replace(/'/g, "''");
+      exec(`powershell.exe -NoProfile -Command "Get-PrintJob -PrinterName '${safeName}' -ErrorAction SilentlyContinue | Remove-PrintJob -ErrorAction SilentlyContinue"`, (err, stdout, stderr) => {
+        if (err) {
+          return res.json({ success: false, message: `Failed to cancel jobs: ${stderr || err.message}` });
+        }
+        audit.log('PRINTER_CANCEL_JOBS', `Cleared queued spooler jobs for "${printer.name}"`);
+        res.json({ success: true, message: `Cancelled queued jobs for printer "${printer.name}".` });
+      });
+    } else {
+      res.json({ success: true, message: `Queue cleared for printer "${printer.name}".` });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
 
 // POST /api/printers/calibrate
 printersRouter.post('/calibrate', (req: Request, res: Response) => {

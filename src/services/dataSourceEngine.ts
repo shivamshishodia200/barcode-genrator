@@ -336,8 +336,8 @@ export function evaluateDataSourceItem(
     });
   }
 
-  // 2. If item has serialization directly attached
-  if (item.serialization && item.serialization.action !== 'none') {
+  // 2. If item has serialization directly attached (and not already executed via transformConfig)
+  if (item.serialization && item.serialization.action !== 'none' && !item.transformConfig?.serialization) {
     raw = evaluateSerializedValue(raw, item.serialization, {
       printIndex: ctx.printIndex ?? ctx.currentRecordIndex ?? 0,
       recordIndex: ctx.currentRecordIndex ?? 0,
@@ -345,8 +345,8 @@ export function evaluateDataSourceItem(
     });
   }
 
-  // 3. If item has prefixSuffix directly attached
-  if (item.prefixSuffix) {
+  // 3. If item has prefixSuffix directly attached (and not already executed via transformConfig)
+  if (item.prefixSuffix && !item.transformConfig?.prefixSuffix) {
     const pfx = item.prefixSuffix.prefix ?? '';
     const sfx = item.prefixSuffix.suffix ?? '';
     raw = `${pfx}${raw}${sfx}`;

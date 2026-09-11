@@ -335,13 +335,45 @@ export const SerializationModal: React.FC<SerializationModalProps> = ({
 
                 <div className="flex items-center justify-between gap-3">
                   <label className="w-28 text-slate-600 text-[11.5px]">Reset Value:</label>
-                  <input
-                    type="text"
-                    value={resetValue}
-                    onChange={(e) => setResetValue(e.target.value)}
-                    placeholder="e.g. 000001 or A"
-                    className="flex-1 border border-[#cbd5e1] rounded px-2 py-1 text-[11.5px] text-slate-800 focus:outline-[#0078d7]"
-                  />
+                  <div className="flex-1 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={resetValue}
+                      onChange={(e) => setResetValue(e.target.value)}
+                      placeholder="e.g. 000001 or A"
+                      className="flex-1 border border-[#cbd5e1] rounded px-2 py-1 text-[11.5px] text-slate-800 focus:outline-[#0078d7]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetVal = resetValue || initialValue;
+                        const confirmed = window.confirm(
+                          `Manual Serial Reset Confirmation:\n\nCurrent starting sequence is "${initialValue}".\nResetting counter to "${targetVal}" may cause duplicate serial numbers to be generated.\n\nAre you sure you want to reset the counter now?`
+                        );
+                        if (confirmed) {
+                          onApply({
+                            action,
+                            method,
+                            letterCase,
+                            preserveCharacters,
+                            incrementBy,
+                            event,
+                            eventInterval,
+                            copies,
+                            resetRule: 'manual',
+                            resetValue: targetVal,
+                            currentValue: targetVal,
+                            lastResetAt: new Date().toISOString(),
+                            lastResetReason: 'Manual user reset',
+                          });
+                          alert(`Serial counter has been successfully reset to "${targetVal}".`);
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded text-[11px] font-medium cursor-pointer shadow-2xs whitespace-nowrap"
+                    >
+                      Reset Now
+                    </button>
+                  </div>
                 </div>
 
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded text-[11px] text-blue-900 space-y-1">

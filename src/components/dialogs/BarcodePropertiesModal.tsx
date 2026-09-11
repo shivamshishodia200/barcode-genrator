@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BarcodeElement, BarcodeSymbology, DataSourceItem, DataSourceType, TransformRule, GS1Field } from '../../types';
+import { BarcodeElement, BarcodeSymbology, DataSourceItem, DataSourceType, TransformRule, GS1Field, TransformConfig } from '../../types';
 import { SYMBOLOGY_CATALOG } from '../../services/barcodeEngine';
 import { evaluateElementData, formatCustomDate } from '../../services/dataSourceEngine';
 import {
@@ -35,6 +35,20 @@ import {
 import { GS1ApplicationIdentifierWizardModal } from './GS1ApplicationIdentifierWizardModal';
 import { DatabaseFieldSourceConfig } from './DatabaseFieldSourceConfig';
 import { NewDataSourceWizardModal } from './NewDataSourceWizardModal';
+import { SerializationModal } from './SerializationModal';
+import { SpecialCharacterModal } from './SpecialCharacterModal';
+import {
+  SuppressionModal,
+  CharacterFilterModal,
+  TruncationModal,
+  CharacterLengthModal,
+  CharacterTemplateModal,
+  SearchReplaceModal,
+  ScriptTransformModal,
+  PrefixSuffixModal,
+} from './TransformSubModals';
+import { evaluateSerializedValue } from '../../services/serializationEngine';
+import { HelpCircle } from 'lucide-react';
 
 interface BarcodePropertiesModalProps {
   isOpen: boolean;
@@ -47,9 +61,11 @@ interface BarcodePropertiesModalProps {
   currentRecord?: Record<string, any>;
   currentConnection?: any;
   onConnectDataset?: (dataset: any) => void;
+  initialCategory?: PropertyCategory | string;
+  initialDataSourceIndex?: number;
 }
 
-type PropertyCategory =
+export type PropertyCategory =
   | 'symbology'
   | 'human-readable'
   | 'font'
@@ -72,6 +88,8 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
   currentRecord,
   currentConnection,
   onConnectDataset,
+  initialCategory,
+  initialDataSourceIndex,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<PropertyCategory>('datasource-item');
   const [activeDsIndex, setActiveDsIndex] = useState<number>(0);
@@ -80,6 +98,38 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
   const [isGs1AiWizardOpen, setIsGs1AiWizardOpen] = useState<boolean>(false);
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
+
+  // Sub-modal state for BarTender Transforms & Serialization
+  const [activeTransformModal, setActiveTransformModal] = useState<
+    'suppression' | 'filter' | 'truncation' | 'length' | 'template' | 'searchReplace' | 'script' | 'serialization' | 'prefixSuffix' | null
+  >(null);
+
+  // Special Characters / Symbols Modal
+  const [isSpecialCharModalOpen, setIsSpecialCharModalOpen] = useState<boolean>(false);
+  const barcodeEmbeddedTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleInsertSpecialChar = (symbol: string) => {
+    const textarea = barcodeEmbeddedTextareaRef.current;
+    const currentVal = activeDataSource.value || '';
+    if (textarea) {
+      const start = textarea.selectionStart ?? currentVal.length;
+      const end = textarea.selectionEnd ?? currentVal.length;
+      const nextVal = currentVal.substring(0, start) + symbol + currentVal.substring(end);
+      updateActiveDataSource({ value: nextVal });
+      setTimeout(() => {
+        if (barcodeEmbeddedTextareaRef.current) {
+          barcodeEmbeddedTextareaRef.current.focus();
+          const newPos = start + symbol.length;
+          barcodeEmbeddedTextareaRef.current.setSelectionRange(newPos, newPos);
+        }
+      }, 0);
+    } else {
+      updateActiveDataSource({ value: currentVal + symbol });
+    }
+  };
+
+  // Snapshot ref for guaranteed Cancel Safety
+  const initialSnapshotRef = useRef<BarcodeElement | null>(null);
 
   // Form local state mirrored from selected element
   const [name, setName] = useState('Barcode 2');
@@ -101,14 +151,66 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
   // Font
   const [selectedFont, setSelectedFont] = useState('Arial');
   const [pointSize, setPointSize] = useState(12);
+  const [isBold, setIsBold] = useState(false);
+  const [isItalic, setIsItalic] = useState(false);
+  const [isUnderline, setIsUnderline] = useState(false);
+  const [isStrikeout, setIsStrikeout] = useState(false);
+  const [fontColor, setFontColor] = useState('#000000');
+
+  // Text Format
+  const [textFormatType, setTextFormatType] = useState<'single-line' | 'paragraph'>('single-line');
+  const [activeTextFormatTab, setActiveTextFormatTab] = useState<'auto-size' | 'tabs' | 'effects'>('auto-size');
+  const [autoSize, setAutoSize] = useState(false);
+  const [minFontSize, setMinFontSize] = useState(6);
+  const [maxFontSize, setMaxFontSize] = useState(20);
+  const [minWidthScale, setMinWidthScale] = useState(80);
+  const [maxWidthScale, setMaxWidthScale] = useState(100);
+  const [objWidthMm, setObjWidthMm] = useState(50);
+  const [objHeightMm, setObjHeightMm] = useState(25);
+  const [horizAlign, setHorizAlign] = useState<'left' | 'center' | 'right'>('center');
+  const [vertAlign, setVertAlign] = useState<'top' | 'middle' | 'bottom'>('middle');
+
+  // Tabs Sub-Tab State
+  const [tabsList, setTabsList] = useState<
+    Array<{ id: string; positionMm: number; alignment: 'left' | 'center' | 'right' | 'decimal'; leader: 'none' | 'dots' | 'dashes' | 'line' }>
+  >([]);
+  const [newTabPos, setNewTabPos] = useState<number>(10);
+  const [newTabAlign, setNewTabAlign] = useState<'left' | 'center' | 'right' | 'decimal'>('left');
+  const [newTabLeader, setNewTabLeader] = useState<'none' | 'dots' | 'dashes' | 'line'>('none');
+
+  // Effects Sub-Tab State
+  const [charSpacing, setCharSpacing] = useState(0);
+  const [lineSpacing, setLineSpacing] = useState(1.15);
+  const [textOpacity, setTextOpacity] = useState(100);
+  const [outlineEnabled, setOutlineEnabled] = useState(false);
+  const [outlineColor, setOutlineColor] = useState('#000000');
+  const [outlineWidth, setOutlineWidth] = useState(1);
+  const [shadowEnabled, setShadowEnabled] = useState(false);
+  const [shadowColor, setShadowColor] = useState('#888888');
+  const [shadowBlur, setShadowBlur] = useState(2);
+  const [shadowOffsetX, setShadowOffsetX] = useState(1);
+  const [shadowOffsetY, setShadowOffsetY] = useState(1);
 
   // Border
   const [borderType, setBorderType] = useState<'none' | 'rectangle' | 'ellipse'>('none');
+  const [borderThickness, setBorderThickness] = useState(0.5);
+  const [borderColor, setBorderColor] = useState('#000000');
+  const [borderDashStyle, setBorderDashStyle] = useState<'solid' | 'dashed' | 'dotted'>('solid');
+  const [cornerRadius, setCornerRadius] = useState(0);
+  const [borderPadding, setBorderPadding] = useState(0);
 
   // Position
   const [posX, setPosX] = useState(10.9);
   const [posY, setPosY] = useState(22.1);
+  const [posWidth, setPosWidth] = useState(50);
+  const [posHeight, setPosHeight] = useState(25);
   const [rotationAngle, setRotationAngle] = useState<0 | 90 | 180 | 270>(0);
+
+  // Symbology Specifics
+  const [errorCorrectionLevel, setErrorCorrectionLevel] = useState<'L' | 'M' | 'Q' | 'H'>('M');
+  const [bearerBars, setBearerBars] = useState(false);
+  const [bearerBarType, setBearerBarType] = useState<'top-bottom' | 'complete'>('top-bottom');
+  const [bearerBarThickness, setBearerBarThickness] = useState(1);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -126,7 +228,14 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
   // Sync state when element opens or changes
   useEffect(() => {
     if (element && isOpen) {
-      setName(element.name || 'Barcode 2');
+      initialSnapshotRef.current = JSON.parse(JSON.stringify(element));
+      if (initialCategory) {
+        setSelectedCategory(initialCategory as PropertyCategory);
+      } else {
+        setSelectedCategory('datasource-item');
+      }
+
+      setName(element.name || 'Barcode 1');
       setSymbology(element.symbology || 'code128');
       setValue(element.value || '12345678');
 
@@ -144,7 +253,11 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
         };
         setDataSources([initialDs]);
       }
-      setActiveDsIndex(0);
+      if (initialDataSourceIndex !== undefined) {
+        setActiveDsIndex(initialDataSourceIndex);
+      } else {
+        setActiveDsIndex(0);
+      }
 
       setHeightMm(element.height || 12.7);
       setXDimension(element.barWidth ? Number((element.barWidth * 0.35).toFixed(2)) : 0.78);
@@ -155,20 +268,136 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
       setHrPlacement(element.textPosition === 'above' ? 'Top' : element.textPosition === 'none' ? 'None' : 'Bottom');
       setHrAlignment(element.humanReadableAlignment === 'left' ? 'Left' : element.humanReadableAlignment === 'right' ? 'Right' : 'Centered');
 
-      setSelectedFont(element.humanReadableFont || 'Arial');
-      setPointSize(element.humanReadableFontSize || 12);
-      setBorderType(element.borderType || 'none');
+      // Font
+      setSelectedFont(element.humanReadableFont || element.fontFamily || 'Arial');
+      setPointSize(element.humanReadableFontSize || element.fontSize || 12);
+      setIsBold(element.fontWeight === 'bold' || (element as any).humanReadableFontStyle === 'bold' || (element as any).humanReadableFontStyle === 'bold-italic');
+      setIsItalic(element.fontStyle === 'italic' || (element as any).humanReadableFontStyle === 'italic' || (element as any).humanReadableFontStyle === 'bold-italic');
+      setIsUnderline(!!element.underline || !!(element as any).humanReadableUnderline);
+      setIsStrikeout(!!(element as any).humanReadableStrikeout || (element as any).textDecoration === 'line-through');
+      setFontColor(element.humanReadableColor || element.color || '#000000');
 
+      // Text Format
+      setTextFormatType(element.textFormatType || 'single-line');
+      setAutoSize(!!(element.autoSize || element.autoSizeText));
+      setMinFontSize(element.minFontSize || 6);
+      setMaxFontSize(element.maxFontSize || 20);
+      setMinWidthScale(element.minWidthScale || 80);
+      setMaxWidthScale(element.maxWidthScale || 100);
+      setObjWidthMm(element.width || 50);
+      setObjHeightMm(element.height || 25);
+      setHorizAlign(element.horizontalAlignment || (element.humanReadableAlignment as any) || 'center');
+      setVertAlign(element.verticalAlignment || 'middle');
+      setTabsList(element.tabsConfig || []);
+
+      // Effects
+      const eff = element.effectsConfig || {};
+      setCharSpacing(eff.letterSpacing || 0);
+      setLineSpacing(eff.lineSpacing || 1.15);
+      setTextOpacity(eff.opacity !== undefined ? eff.opacity : 100);
+      setOutlineEnabled(!!eff.outline);
+      setOutlineColor(eff.outlineColor || '#000000');
+      setOutlineWidth(eff.outlineWidth || 1);
+      setShadowEnabled(!!eff.shadow);
+      setShadowColor(eff.shadowColor || '#888888');
+      setShadowBlur(eff.shadowBlur || 2);
+      setShadowOffsetX(eff.shadowOffsetX || 1);
+      setShadowOffsetY(eff.shadowOffsetY || 1);
+
+      // Border
+      setBorderType(element.borderType || 'none');
+      setBorderThickness(element.borderThickness || 0.5);
+      setBorderColor(element.borderColor || '#000000');
+      setBorderDashStyle(element.borderDashStyle || 'solid');
+      setCornerRadius(element.cornerRadius || 0);
+      setBorderPadding(element.borderPadding || 0);
+
+      // Position
       setPosX(element.x || 10.9);
       setPosY(element.y || 22.1);
-      setRotationAngle((element.rotation as any) || 0);
+      setPosWidth(element.width || 50);
+      setPosHeight(element.height || 25);
+      setRotationAngle(((element.rotation as any) || 0) as any);
+
+      // Symbology specifics
+      setErrorCorrectionLevel(element.errorCorrectionLevel || 'M');
+      setBearerBars(!!element.bearerBars);
+      setBearerBarType(element.bearerBarType || 'top-bottom');
+      setBearerBarThickness(element.bearerBarThickness || 1);
     }
-  }, [element, isOpen]);
+  }, [element, isOpen, initialCategory, initialDataSourceIndex]);
 
   if (!isOpen || !element) return null;
 
   const applyChange = (updates: Partial<BarcodeElement>) => {
     onUpdateElement(element.id, updates);
+  };
+
+  const getFullCurrentDraft = (): Partial<BarcodeElement> => {
+    return {
+      name,
+      symbology,
+      value,
+      dataSources,
+      width: posWidth,
+      height: posHeight,
+      x: posX,
+      y: posY,
+      rotation: rotationAngle,
+      barWidth: Math.max(1, Math.round(xDimension / 0.35)),
+      barHeight: heightMm,
+      checkDigit,
+      foregroundColor: barcodeColor,
+      includeText: hrVisibility !== 'none' && hrPlacement !== 'None',
+      textPosition: hrPlacement === 'Top' ? 'above' : hrPlacement === 'None' ? 'none' : 'below',
+      humanReadableAlignment: hrAlignment.toLowerCase() as any,
+      humanReadableFont: selectedFont,
+      humanReadableFontSize: pointSize,
+      fontFamily: selectedFont,
+      fontSize: pointSize,
+      fontWeight: isBold ? 'bold' : 'normal',
+      fontStyle: isItalic ? 'italic' : 'normal',
+      underline: isUnderline,
+      humanReadableUnderline: isUnderline,
+      humanReadableStrikeout: isStrikeout,
+      humanReadableColor: fontColor,
+      color: fontColor,
+      textFormatType,
+      autoSize,
+      autoSizeText: autoSize,
+      minFontSize,
+      maxFontSize,
+      minWidthScale,
+      maxWidthScale,
+      horizontalAlignment: horizAlign,
+      verticalAlignment: vertAlign,
+      tabsConfig: tabsList,
+      effectsConfig: {
+        letterSpacing: charSpacing,
+        lineSpacing,
+        opacity: textOpacity,
+        outline: outlineEnabled,
+        outlineColor,
+        outlineWidth,
+        shadow: shadowEnabled,
+        shadowColor,
+        shadowBlur,
+        shadowOffsetX,
+        shadowOffsetY,
+        strikeout: isStrikeout,
+        underline: isUnderline,
+      },
+      borderType,
+      borderThickness,
+      borderColor,
+      borderDashStyle,
+      cornerRadius,
+      borderPadding,
+      errorCorrectionLevel,
+      bearerBars,
+      bearerBarType,
+      bearerBarThickness,
+    };
   };
 
   const currentDsIndex = Math.max(0, Math.min(activeDsIndex, dataSources.length - 1));
@@ -204,6 +433,57 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
     const updated = dataSources.map((ds, idx) => (idx === currentDsIndex ? { ...ds, ...updates } : ds));
     updateDataSourcesState(updated);
   };
+
+  const updateActiveDsTransform = (updates: Partial<TransformConfig>) => {
+    const currentTc = activeDataSource.transformConfig || {};
+    const newTc = { ...currentTc, ...updates };
+    updateActiveDataSource({
+      transformConfig: newTc,
+      ...(updates.serialization !== undefined ? { serialization: updates.serialization } : {}),
+      ...(updates.prefixSuffix !== undefined ? { prefixSuffix: updates.prefixSuffix } : {}),
+    });
+  };
+
+  const handleCancel = () => {
+    if (initialSnapshotRef.current && element) {
+      onUpdateElement(element.id, initialSnapshotRef.current);
+    }
+    onClose();
+  };
+
+  const handleApplyDraft = () => {
+    if (element) {
+      const draft = getFullCurrentDraft();
+      onUpdateElement(element.id, draft);
+      initialSnapshotRef.current = JSON.parse(JSON.stringify({ ...element, ...draft }));
+    }
+  };
+
+  const handleCommitAndClose = () => {
+    if (element) {
+      const draft = getFullCurrentDraft();
+      onUpdateElement(element.id, draft);
+    }
+    onClose();
+  };
+
+  // Summaries for BarTender Transform Tab Rows
+  const tc = activeDataSource.transformConfig || {};
+  const suppressionSummary = tc.suppression && tc.suppression.type !== 'never' ? tc.suppression.type : '<None>';
+  const filterSummary = tc.characterFilter && tc.characterFilter.type !== 'none' ? tc.characterFilter.type : '<None>';
+  const truncSummary = tc.truncation && tc.truncation.type !== 'none' ? `${tc.truncation.type} (${tc.truncation.count})` : '<None>';
+  const lengthSummary = tc.characterLength && (tc.characterLength.min || tc.characterLength.max) ? `Min: ${tc.characterLength.min || 0}, Max: ${tc.characterLength.max || '∞'}` : '<None>';
+  const templateSummary = tc.characterTemplate?.template ? tc.characterTemplate.template : '<None>';
+  const searchReplaceSummary = tc.searchReplace && tc.searchReplace.length > 0 ? `${tc.searchReplace.length} rule(s)` : '<None>';
+  const scriptSummary = tc.script?.code ? tc.script.language || 'script' : '<None>';
+  const activeSerial = activeDataSource.serialization || tc.serialization;
+  const serialSummary = activeSerial && activeSerial.action !== 'none'
+    ? `${activeSerial.action === 'decrement' ? 'Decrement' : 'Increment'} by ${activeSerial.incrementBy || 1}`
+    : '<None>';
+  const activePs = activeDataSource.prefixSuffix || tc.prefixSuffix;
+  const prefixSuffixSummary = activePs && (activePs.prefix || activePs.suffix)
+    ? `Prefix: "${activePs.prefix || ''}", Suffix: "${activePs.suffix || ''}"`
+    : '<None>';
 
   const handleWizardAddDataSource = (newDs: DataSourceItem) => {
     const nextList = [...dataSources, newDs];
@@ -507,8 +787,10 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                       <span className={isSelected ? 'text-blue-200 font-mono text-[9px]' : 'text-slate-400 font-mono text-[9px]'}>
                         ....
                       </span>
-                      <span className="text-xs">{meta.icon}</span>
-                      <span className="truncate max-w-[130px]">{meta.label}</span>
+                      <span className="w-3.5 h-3.5 bg-[#004b98] text-white font-bold text-[7.5px] flex items-center justify-center rounded-[1px] shadow-2xs font-mono shrink-0">
+                        BT
+                      </span>
+                      <span className="truncate max-w-[130px] font-mono text-[11.5px]">{ds.value || meta.label || '12345678'}</span>
                     </div>
                   );
                 })}
@@ -676,7 +958,7 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
             {selectedCategory === 'symbology' && (
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <label className="w-24 text-slate-700 text-[12px]">Symbology:</label>
+                  <label className="w-24 text-slate-700 text-[12px] font-medium">Symbology:</label>
                   <select
                     value={symbology}
                     onChange={(e) => {
@@ -695,14 +977,15 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                 </div>
 
                 <fieldset className="border border-[#cbd5e1] rounded-xs p-3 pt-2 text-[11.5px] space-y-2.5">
-                  <legend className="px-1 text-slate-700 font-medium">Dimensions</legend>
+                  <legend className="px-1 text-slate-700 font-medium">Dimensions & Sizing</legend>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-center gap-2">
-                      <label className="w-20 text-slate-700">X Dimension:</label>
+                      <label className="w-24 text-slate-700">X Dimension:</label>
                       <div className="flex-1 flex items-center gap-1">
                         <input
                           type="number"
                           step={0.01}
+                          min={0.1}
                           value={xDimension}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 0.78;
@@ -716,16 +999,18 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <label className="w-16 text-slate-700">Height:</label>
+                      <label className="w-20 text-slate-700">Bar Height:</label>
                       <div className="flex-1 flex items-center gap-1">
                         <input
                           type="number"
                           step={0.1}
+                          min={2}
                           value={heightMm}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 12.7;
                             setHeightMm(val);
-                            applyChange({ height: val });
+                            setPosHeight(val);
+                            applyChange({ height: val, barHeight: val });
                           }}
                           className="w-24 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8 text-right font-mono text-[11.5px]"
                         />
@@ -735,8 +1020,85 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                   </div>
                 </fieldset>
 
+                {/* Symbology Specific Settings */}
                 <fieldset className="border border-[#cbd5e1] rounded-xs p-3 pt-2 text-[11.5px] space-y-2.5">
-                  <legend className="px-1 text-slate-700 font-medium">Options</legend>
+                  <legend className="px-1 text-slate-700 font-medium">Symbology-Specific Options</legend>
+
+                  {/* QR Specific: Error Correction Level */}
+                  {(symbology === 'qr' || symbology === 'gs1-qr' || symbology === 'micro-qr') && (
+                    <div className="flex items-center gap-3">
+                      <label className="w-32 text-slate-700">Error Correction:</label>
+                      <select
+                        value={errorCorrectionLevel}
+                        onChange={(e) => {
+                          const lvl = e.target.value as 'L' | 'M' | 'Q' | 'H';
+                          setErrorCorrectionLevel(lvl);
+                          applyChange({ errorCorrectionLevel: lvl });
+                        }}
+                        className="flex-1 bg-white border border-[#94a3b8] rounded-xs px-2 py-1 text-[11.5px]"
+                      >
+                        <option value="L">L (Low - 7% Recovery)</option>
+                        <option value="M">M (Medium - 15% Recovery)</option>
+                        <option value="Q">Q (Quartile - 25% Recovery)</option>
+                        <option value="H">H (High - 30% Recovery)</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* ITF & Code 128: Bearer Bars */}
+                  {(symbology === 'itf14' || symbology === 'interleaved2of5' || symbology === 'code128') && (
+                    <div className="space-y-2 border-t border-slate-200 pt-2">
+                      <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={bearerBars}
+                          onChange={(e) => {
+                            setBearerBars(e.target.checked);
+                            applyChange({ bearerBars: e.target.checked });
+                          }}
+                          className="rounded-xs text-blue-600"
+                        />
+                        <span className="font-medium">Enable Bearer Bars</span>
+                      </label>
+                      {bearerBars && (
+                        <div className="grid grid-cols-2 gap-3 pl-5">
+                          <div className="flex items-center gap-2">
+                            <label className="text-slate-600">Type:</label>
+                            <select
+                              value={bearerBarType}
+                              onChange={(e) => {
+                                const t = e.target.value as 'top-bottom' | 'complete';
+                                setBearerBarType(t);
+                                applyChange({ bearerBarType: t });
+                              }}
+                              className="bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-[11px]"
+                            >
+                              <option value="top-bottom">Top and Bottom</option>
+                              <option value="complete">Complete Frame</option>
+                            </select>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-slate-600">Thickness:</label>
+                            <input
+                              type="number"
+                              min={0.5}
+                              step={0.5}
+                              value={bearerBarThickness}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value) || 1;
+                                setBearerBarThickness(v);
+                                applyChange({ bearerBarThickness: v });
+                              }}
+                              className="w-16 bg-white border border-[#94a3b8] rounded-xs px-1.5 py-0.5 text-right font-mono text-[11px]"
+                            />
+                            <span className="text-[10.5px] text-slate-500">mm</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Standard Check Digit */}
                   <label className="flex items-center gap-2 cursor-pointer text-slate-700">
                     <input
                       type="checkbox"
@@ -750,9 +1112,23 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                     <span>Include Automated Check Digit (Modulo 10 / 43 / 103)</span>
                   </label>
 
+                  <div className="flex items-center gap-3 pt-1">
+                    <label className="w-28 text-slate-700">Barcode Color:</label>
+                    <input
+                      type="color"
+                      value={barcodeColor}
+                      onChange={(e) => {
+                        setBarcodeColor(e.target.value);
+                        applyChange({ foregroundColor: e.target.value, color: e.target.value });
+                      }}
+                      className="w-8 h-6 p-0 border border-slate-300 rounded cursor-pointer"
+                    />
+                    <span className="font-mono text-[11px] text-slate-600">{barcodeColor}</span>
+                  </div>
+
                   <button
                     onClick={() => handleAddNewDataSource('gs1_ai')}
-                    className="w-full flex items-center justify-center gap-1.5 py-1 px-3 bg-[#f8fafc] hover:bg-[#e2e8f0] border border-[#94a3b8] rounded-xs text-slate-700 font-medium text-[11.5px] cursor-pointer"
+                    className="w-full flex items-center justify-center gap-1.5 py-1 px-3 bg-[#f8fafc] hover:bg-[#e2e8f0] border border-[#94a3b8] rounded-xs text-slate-700 font-medium text-[11.5px] cursor-pointer mt-2"
                   >
                     <Globe className="w-3.5 h-3.5 text-emerald-600" />
                     <span>Create GS1 Application Identifier Data Source...</span>
@@ -768,7 +1144,7 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
               <div className="space-y-4">
                 <fieldset className="border border-[#cbd5e1] rounded-xs p-3 pt-2 text-[11.5px] space-y-2">
                   <legend className="px-1 text-slate-700 font-medium">Visibility</legend>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-6">
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="radio"
@@ -779,7 +1155,7 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                           applyChange({ includeText: true });
                         }}
                       />
-                      <span>Full</span>
+                      <span>Full (Show Text)</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
@@ -791,12 +1167,12 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                           applyChange({ includeText: false });
                         }}
                       />
-                      <span>None</span>
+                      <span>None (Hide Text)</span>
                     </label>
                   </div>
                 </fieldset>
 
-                <fieldset className="border border-[#cbd5e1] rounded-xs p-3 pt-2 text-[11.5px] space-y-2.5">
+                <fieldset className="border border-[#cbd5e1] rounded-xs p-3 pt-2 text-[11.5px] space-y-3">
                   <legend className="px-1 text-slate-700 font-medium">Position & Alignment</legend>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-center gap-2">
@@ -813,8 +1189,8 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                         }}
                         className="flex-1 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8"
                       >
-                        <option value="Bottom">Bottom</option>
-                        <option value="Top">Top</option>
+                        <option value="Bottom">Below Barcode</option>
+                        <option value="Top">Above Barcode</option>
                         <option value="None">None</option>
                       </select>
                     </div>
@@ -826,7 +1202,7 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                         onChange={(e) => {
                           const a = e.target.value as any;
                           setHrAlignment(a);
-                          applyChange({ humanReadableAlignment: a.toLowerCase() });
+                          applyChange({ humanReadableAlignment: a.toLowerCase(), horizontalAlignment: a.toLowerCase() });
                         }}
                         className="flex-1 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8"
                       >
@@ -841,116 +1217,813 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
             )}
 
             {/* ========================================================================= */}
-            {/* 3. FONT, 4. TEXT FORMAT, 5. BORDER, 6. POSITION                          */}
+            {/* 3. FONT                                                                   */}
             {/* ========================================================================= */}
             {selectedCategory === 'font' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-slate-700 text-xs">Font Family:</label>
-                    <select
-                      value={selectedFont}
-                      onChange={(e) => {
-                        setSelectedFont(e.target.value);
-                        applyChange({ humanReadableFont: e.target.value });
-                      }}
-                      className="w-full bg-white border border-[#94a3b8] rounded-xs px-2 py-1 text-xs"
-                    >
-                      <option value="Arial">Arial</option>
-                      <option value="Courier New">Courier New</option>
-                      <option value="Helvetica">Helvetica</option>
-                      <option value="OCR-A Extended">OCR-A Extended</option>
-                      <option value="OCR-B 10 Pitch BT">OCR-B 10 Pitch BT</option>
-                    </select>
+                <fieldset className="border border-[#cbd5e1] rounded-xs p-3 pt-2 text-[11.5px] space-y-3">
+                  <legend className="px-1 text-slate-700 font-medium">Typography & Font Selection</legend>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-slate-700 text-xs font-medium">Font Family:</label>
+                      <select
+                        value={selectedFont}
+                        onChange={(e) => {
+                          setSelectedFont(e.target.value);
+                          applyChange({ humanReadableFont: e.target.value, fontFamily: e.target.value });
+                        }}
+                        className="w-full bg-white border border-[#94a3b8] rounded-xs px-2 py-1 text-xs"
+                      >
+                        <option value="Arial">Arial</option>
+                        <option value="Courier New">Courier New</option>
+                        <option value="Helvetica">Helvetica</option>
+                        <option value="OCR-A Extended">OCR-A Extended</option>
+                        <option value="OCR-B 10 Pitch BT">OCR-B 10 Pitch BT</option>
+                        <option value="Consolas">Consolas</option>
+                        <option value="Roboto">Roboto</option>
+                        <option value="Inter">Inter</option>
+                        <option value="Segoe UI">Segoe UI</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-slate-700 text-xs font-medium">Font Size (pt):</label>
+                      <input
+                        type="number"
+                        min={4}
+                        max={72}
+                        value={pointSize}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 12;
+                          setPointSize(val);
+                          applyChange({ humanReadableFontSize: val, fontSize: val });
+                        }}
+                        className="w-full bg-white border border-[#94a3b8] rounded-xs px-2 py-1 text-xs font-mono"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-slate-700 text-xs">Font Size:</label>
-                    <input
-                      type="number"
-                      value={pointSize}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 12;
-                        setPointSize(val);
-                        applyChange({ humanReadableFontSize: val });
-                      }}
-                      className="w-full bg-white border border-[#94a3b8] rounded-xs px-2 py-1 text-xs"
-                    />
+
+                  {/* Styles & Color */}
+                  <div className="flex items-center justify-between border-t border-slate-200 pt-3">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !isBold;
+                          setIsBold(next);
+                          applyChange({ fontWeight: next ? 'bold' : 'normal' });
+                        }}
+                        className={`w-7 h-7 font-bold rounded-xs border text-xs cursor-pointer ${
+                          isBold ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        B
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !isItalic;
+                          setIsItalic(next);
+                          applyChange({ fontStyle: next ? 'italic' : 'normal' });
+                        }}
+                        className={`w-7 h-7 italic font-serif rounded-xs border text-xs cursor-pointer ${
+                          isItalic ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        I
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !isUnderline;
+                          setIsUnderline(next);
+                          applyChange({ underline: next, humanReadableUnderline: next });
+                        }}
+                        className={`w-7 h-7 underline rounded-xs border text-xs cursor-pointer ${
+                          isUnderline ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        U
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !isStrikeout;
+                          setIsStrikeout(next);
+                          applyChange({ humanReadableStrikeout: next });
+                        }}
+                        className={`w-7 h-7 line-through rounded-xs border text-xs cursor-pointer ${
+                          isStrikeout ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        S
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <label className="text-slate-700 text-xs">Text Color:</label>
+                      <input
+                        type="color"
+                        value={fontColor}
+                        onChange={(e) => {
+                          setFontColor(e.target.value);
+                          applyChange({ humanReadableColor: e.target.value });
+                        }}
+                        className="w-7 h-6 p-0 border border-slate-300 rounded cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </fieldset>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* 4. TEXT FORMAT                                                            */}
+            {/* ========================================================================= */}
+            {selectedCategory === 'text-format' && (
+              <div className="space-y-3">
+                {/* Type Selection */}
+                <fieldset className="border border-[#cbd5e1] rounded-xs p-2.5 text-[11.5px]">
+                  <legend className="px-1 text-slate-700 font-medium">Type</legend>
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="text-format-type"
+                        checked={textFormatType === 'single-line'}
+                        onChange={() => {
+                          setTextFormatType('single-line');
+                          applyChange({ textFormatType: 'single-line' });
+                        }}
+                      />
+                      <span>Single Line</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="text-format-type"
+                        checked={textFormatType === 'paragraph'}
+                        onChange={() => {
+                          setTextFormatType('paragraph');
+                          applyChange({ textFormatType: 'paragraph' });
+                        }}
+                      />
+                      <span>Paragraph</span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                {/* Sub-Tabs: Auto Size | Tabs | Effects */}
+                <div className="border border-[#cbd5e1] rounded-xs bg-white overflow-hidden">
+                  <div className="flex border-b border-[#cbd5e1] bg-[#f1f5f9] text-[11.5px]">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTextFormatTab('auto-size')}
+                      className={`px-4 py-1.5 font-medium border-r border-[#cbd5e1] cursor-pointer transition-colors ${
+                        activeTextFormatTab === 'auto-size'
+                          ? 'bg-white text-blue-700 font-bold border-b-2 border-b-blue-600'
+                          : 'text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Auto Size
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTextFormatTab('tabs')}
+                      className={`px-4 py-1.5 font-medium border-r border-[#cbd5e1] cursor-pointer transition-colors ${
+                        activeTextFormatTab === 'tabs'
+                          ? 'bg-white text-blue-700 font-bold border-b-2 border-b-blue-600'
+                          : 'text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Tabs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTextFormatTab('effects')}
+                      className={`px-4 py-1.5 font-medium cursor-pointer transition-colors ${
+                        activeTextFormatTab === 'effects'
+                          ? 'bg-white text-blue-700 font-bold border-b-2 border-b-blue-600'
+                          : 'text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Effects
+                    </button>
+                  </div>
+
+                  <div className="p-3 text-[11.5px]">
+                    {/* 1. AUTO SIZE TAB */}
+                    {activeTextFormatTab === 'auto-size' && (
+                      <div className="space-y-3">
+                        <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+                          <input
+                            type="checkbox"
+                            checked={autoSize}
+                            onChange={(e) => {
+                              setAutoSize(e.target.checked);
+                              applyChange({ autoSize: e.target.checked, autoSizeText: e.target.checked });
+                            }}
+                            className="rounded-xs text-blue-600"
+                          />
+                          <span>Auto Size (Fit readable text dynamically within bounds)</span>
+                        </label>
+
+                        {/* Font Point Size Constraints */}
+                        <fieldset className="border border-[#e2e8f0] rounded-xs p-2.5 space-y-2">
+                          <legend className="px-1 text-slate-600 font-medium">Font Point Size</legend>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex items-center gap-2">
+                              <label className="w-16 text-slate-600">Minimum:</label>
+                              <input
+                                type="number"
+                                min={4}
+                                max={maxFontSize}
+                                value={minFontSize}
+                                disabled={!autoSize}
+                                onChange={(e) => {
+                                  const val = Math.max(1, parseInt(e.target.value) || 6);
+                                  setMinFontSize(val);
+                                  applyChange({ minFontSize: val });
+                                }}
+                                className="w-20 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-right font-mono text-[11px] disabled:bg-slate-100 disabled:text-slate-400"
+                              />
+                              <span className="text-slate-500 text-[10.5px]">pt</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="w-16 text-slate-600">Maximum:</label>
+                              <input
+                                type="number"
+                                min={minFontSize}
+                                max={72}
+                                value={maxFontSize}
+                                disabled={!autoSize}
+                                onChange={(e) => {
+                                  const val = Math.max(minFontSize, parseInt(e.target.value) || 20);
+                                  setMaxFontSize(val);
+                                  applyChange({ maxFontSize: val });
+                                }}
+                                className="w-20 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-right font-mono text-[11px] disabled:bg-slate-100 disabled:text-slate-400"
+                              />
+                              <span className="text-slate-500 text-[10.5px]">pt</span>
+                            </div>
+                          </div>
+                        </fieldset>
+
+                        {/* Font Width Scale Constraints */}
+                        <fieldset className="border border-[#e2e8f0] rounded-xs p-2.5 space-y-2">
+                          <legend className="px-1 text-slate-600 font-medium">Font Width Scale</legend>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex items-center gap-2">
+                              <label className="w-16 text-slate-600">Minimum:</label>
+                              <input
+                                type="number"
+                                min={50}
+                                max={maxWidthScale}
+                                value={minWidthScale}
+                                disabled={!autoSize}
+                                onChange={(e) => {
+                                  const val = Math.max(10, parseInt(e.target.value) || 80);
+                                  setMinWidthScale(val);
+                                  applyChange({ minWidthScale: val });
+                                }}
+                                className="w-20 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-right font-mono text-[11px] disabled:bg-slate-100 disabled:text-slate-400"
+                              />
+                              <span className="text-slate-500 text-[10.5px]">%</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="w-16 text-slate-600">Maximum:</label>
+                              <input
+                                type="number"
+                                min={minWidthScale}
+                                max={200}
+                                value={maxWidthScale}
+                                disabled={!autoSize}
+                                onChange={(e) => {
+                                  const val = Math.max(minWidthScale, parseInt(e.target.value) || 100);
+                                  setMaxWidthScale(val);
+                                  applyChange({ maxWidthScale: val });
+                                }}
+                                className="w-20 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-right font-mono text-[11px] disabled:bg-slate-100 disabled:text-slate-400"
+                              />
+                              <span className="text-slate-500 text-[10.5px]">%</span>
+                            </div>
+                          </div>
+                        </fieldset>
+
+                        {/* Object Size */}
+                        <fieldset className="border border-[#e2e8f0] rounded-xs p-2.5 space-y-2">
+                          <legend className="px-1 text-slate-600 font-medium">Object Size</legend>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex items-center gap-2">
+                              <label className="w-16 text-slate-600">Width:</label>
+                              <input
+                                type="number"
+                                min={5}
+                                step={0.5}
+                                value={objWidthMm}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 50;
+                                  setObjWidthMm(val);
+                                  setPosWidth(val);
+                                  applyChange({ width: val });
+                                }}
+                                className="w-20 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-right font-mono text-[11px]"
+                              />
+                              <span className="text-slate-500 text-[10.5px]">mm</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="w-16 text-slate-600">Height:</label>
+                              <input
+                                type="number"
+                                min={5}
+                                step={0.5}
+                                value={objHeightMm}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 25;
+                                  setObjHeightMm(val);
+                                  setPosHeight(val);
+                                  applyChange({ height: val });
+                                }}
+                                className="w-20 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-right font-mono text-[11px]"
+                              />
+                              <span className="text-slate-500 text-[10.5px]">mm</span>
+                            </div>
+                          </div>
+                        </fieldset>
+
+                        {/* Alignment */}
+                        <fieldset className="border border-[#e2e8f0] rounded-xs p-2.5 space-y-2">
+                          <legend className="px-1 text-slate-600 font-medium">Alignment</legend>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex items-center gap-2">
+                              <label className="w-18 text-slate-600">Horizontal:</label>
+                              <select
+                                value={horizAlign}
+                                onChange={(e) => {
+                                  const val = e.target.value as 'left' | 'center' | 'right';
+                                  setHorizAlign(val);
+                                  applyChange({ horizontalAlignment: val, humanReadableAlignment: val });
+                                }}
+                                className="flex-1 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-[11px]"
+                              >
+                                <option value="left">Left</option>
+                                <option value="center">Center</option>
+                                <option value="right">Right</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="w-18 text-slate-600">Vertical:</label>
+                              <select
+                                value={vertAlign}
+                                onChange={(e) => {
+                                  const val = e.target.value as 'top' | 'middle' | 'bottom';
+                                  setVertAlign(val);
+                                  applyChange({ verticalAlignment: val });
+                                }}
+                                className="flex-1 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-[11px]"
+                              >
+                                <option value="top">Top</option>
+                                <option value="middle">Middle</option>
+                                <option value="bottom">Bottom</option>
+                              </select>
+                            </div>
+                          </div>
+                        </fieldset>
+                      </div>
+                    )}
+
+                    {/* 2. TABS TAB */}
+                    {activeTextFormatTab === 'tabs' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-slate-700">Tab Stops ({tabsList.length})</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              step={1}
+                              min={1}
+                              value={newTabPos}
+                              onChange={(e) => setNewTabPos(parseFloat(e.target.value) || 10)}
+                              className="w-16 bg-white border border-[#94a3b8] rounded-xs px-1.5 py-0.5 text-right font-mono text-[11px]"
+                            />
+                            <span className="text-[10px] text-slate-500">mm</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newTab = {
+                                  id: `tab-${Date.now()}`,
+                                  positionMm: newTabPos,
+                                  alignment: newTabAlign,
+                                  leader: newTabLeader,
+                                };
+                                const updated = [...tabsList, newTab];
+                                setTabsList(updated);
+                                applyChange({ tabsConfig: updated });
+                              }}
+                              className="px-2 py-0.5 bg-blue-600 text-white rounded-xs text-[11px] font-medium cursor-pointer"
+                            >
+                              Add Tab
+                            </button>
+                          </div>
+                        </div>
+
+                        {tabsList.length === 0 ? (
+                          <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xs text-center text-slate-500 text-[11px]">
+                            No custom tab stops configured. Standard optical barcode text spacing applies.
+                          </div>
+                        ) : (
+                          <div className="border border-slate-200 rounded-xs divide-y divide-slate-200 max-h-36 overflow-y-auto">
+                            {tabsList.map((t, idx) => (
+                              <div key={t.id || idx} className="p-2 flex items-center justify-between bg-slate-50 text-[11px]">
+                                <span className="font-mono font-medium">{t.positionMm} mm</span>
+                                <span className="capitalize text-slate-600">{t.alignment} Align</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = tabsList.filter((_, i) => i !== idx);
+                                    setTabsList(updated);
+                                    applyChange({ tabsConfig: updated });
+                                  }}
+                                  className="text-red-600 hover:text-red-800 cursor-pointer font-bold"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 3. EFFECTS TAB */}
+                    {activeTextFormatTab === 'effects' && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex items-center gap-2">
+                            <label className="w-28 text-slate-600">Character Spacing:</label>
+                            <input
+                              type="number"
+                              step={0.5}
+                              value={charSpacing}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setCharSpacing(val);
+                                applyChange({
+                                  effectsConfig: { ...(element.effectsConfig || {}), letterSpacing: val },
+                                });
+                              }}
+                              className="w-18 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-right font-mono text-[11px]"
+                            />
+                            <span className="text-[10px] text-slate-500">pt</span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <label className="w-24 text-slate-600">Line Spacing:</label>
+                            <input
+                              type="number"
+                              step={0.05}
+                              min={0.8}
+                              max={3}
+                              value={lineSpacing}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 1.15;
+                                setLineSpacing(val);
+                                applyChange({
+                                  effectsConfig: { ...(element.effectsConfig || {}), lineSpacing: val },
+                                });
+                              }}
+                              className="w-18 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.5 text-right font-mono text-[11px]"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Outline */}
+                        <fieldset className="border border-[#e2e8f0] rounded-xs p-2 space-y-2">
+                          <legend className="px-1 text-slate-600 font-medium">Text Outline</legend>
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={outlineEnabled}
+                                onChange={(e) => {
+                                  setOutlineEnabled(e.target.checked);
+                                  applyChange({
+                                    effectsConfig: { ...(element.effectsConfig || {}), outline: e.target.checked },
+                                  });
+                                }}
+                              />
+                              <span>Enable Outline</span>
+                            </label>
+                            {outlineEnabled && (
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="color"
+                                  value={outlineColor}
+                                  onChange={(e) => {
+                                    setOutlineColor(e.target.value);
+                                    applyChange({
+                                      effectsConfig: { ...(element.effectsConfig || {}), outlineColor: e.target.value },
+                                    });
+                                  }}
+                                  className="w-6 h-5 p-0 border border-slate-300 rounded cursor-pointer"
+                                />
+                                <input
+                                  type="number"
+                                  min={0.5}
+                                  step={0.5}
+                                  value={outlineWidth}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 1;
+                                    setOutlineWidth(val);
+                                    applyChange({
+                                      effectsConfig: { ...(element.effectsConfig || {}), outlineWidth: val },
+                                    });
+                                  }}
+                                  className="w-14 bg-white border border-[#94a3b8] rounded-xs px-1.5 py-0.5 text-right font-mono text-[11px]"
+                                />
+                                <span className="text-[10px] text-slate-500">pt</span>
+                              </div>
+                            )}
+                          </div>
+                        </fieldset>
+
+                        {/* Shadow */}
+                        <fieldset className="border border-[#e2e8f0] rounded-xs p-2 space-y-2">
+                          <legend className="px-1 text-slate-600 font-medium">Text Shadow</legend>
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={shadowEnabled}
+                                onChange={(e) => {
+                                  setShadowEnabled(e.target.checked);
+                                  applyChange({
+                                    effectsConfig: { ...(element.effectsConfig || {}), shadow: e.target.checked },
+                                  });
+                                }}
+                              />
+                              <span>Enable Shadow</span>
+                            </label>
+                            {shadowEnabled && (
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="color"
+                                  value={shadowColor}
+                                  onChange={(e) => {
+                                    setShadowColor(e.target.value);
+                                    applyChange({
+                                      effectsConfig: { ...(element.effectsConfig || {}), shadowColor: e.target.value },
+                                    });
+                                  }}
+                                  className="w-6 h-5 p-0 border border-slate-300 rounded cursor-pointer"
+                                />
+                                <label className="text-[10.5px] text-slate-500">Blur:</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={10}
+                                  value={shadowBlur}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 2;
+                                    setShadowBlur(val);
+                                    applyChange({
+                                      effectsConfig: { ...(element.effectsConfig || {}), shadowBlur: val },
+                                    });
+                                  }}
+                                  className="w-12 bg-white border border-[#94a3b8] rounded-xs px-1 py-0.5 text-right font-mono text-[11px]"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </fieldset>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
-            {selectedCategory === 'text-format' && (
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xs text-xs text-slate-600">
-                Controls optical text format and auto-sizing below barcodes.
-              </div>
-            )}
-
+            {/* ========================================================================= */}
+            {/* 5. BORDER                                                                 */}
+            {/* ========================================================================= */}
             {selectedCategory === 'border' && (
               <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="b-type"
-                      checked={borderType === 'none'}
-                      onChange={() => {
-                        setBorderType('none');
-                        applyChange({ borderType: 'none' });
-                      }}
-                    />
-                    <span>None</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="b-type"
-                      checked={borderType === 'rectangle'}
-                      onChange={() => {
-                        setBorderType('rectangle');
-                        applyChange({ borderType: 'rectangle' });
-                      }}
-                    />
-                    <span>Rectangle</span>
-                  </label>
-                </div>
+                <fieldset className="border border-[#cbd5e1] rounded-xs p-3 pt-2 text-[11.5px] space-y-3">
+                  <legend className="px-1 text-slate-700 font-medium">Border Type & Shape</legend>
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="b-type"
+                        checked={borderType === 'none'}
+                        onChange={() => {
+                          setBorderType('none');
+                          applyChange({ borderType: 'none' });
+                        }}
+                      />
+                      <span>None</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="b-type"
+                        checked={borderType === 'rectangle'}
+                        onChange={() => {
+                          setBorderType('rectangle');
+                          applyChange({ borderType: 'rectangle' });
+                        }}
+                      />
+                      <span>Rectangle</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="b-type"
+                        checked={borderType === 'ellipse'}
+                        onChange={() => {
+                          setBorderType('ellipse');
+                          applyChange({ borderType: 'ellipse' });
+                        }}
+                      />
+                      <span>Ellipse</span>
+                    </label>
+                  </div>
+
+                  {borderType !== 'none' && (
+                    <div className="border-t border-slate-200 pt-3 space-y-3">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center gap-2">
+                          <label className="w-20 text-slate-700">Thickness:</label>
+                          <input
+                            type="number"
+                            min={0.1}
+                            step={0.1}
+                            value={borderThickness}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0.5;
+                              setBorderThickness(val);
+                              applyChange({ borderThickness: val });
+                            }}
+                            className="w-20 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8 text-right font-mono text-xs"
+                          />
+                          <span className="text-slate-600 text-xs">mm</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <label className="w-16 text-slate-700">Color:</label>
+                          <input
+                            type="color"
+                            value={borderColor}
+                            onChange={(e) => {
+                              setBorderColor(e.target.value);
+                              applyChange({ borderColor: e.target.value });
+                            }}
+                            className="w-7 h-6 p-0 border border-slate-300 rounded cursor-pointer"
+                          />
+                          <span className="font-mono text-xs text-slate-600">{borderColor}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center gap-2">
+                          <label className="w-20 text-slate-700">Style:</label>
+                          <select
+                            value={borderDashStyle}
+                            onChange={(e) => {
+                              const val = e.target.value as 'solid' | 'dashed' | 'dotted';
+                              setBorderDashStyle(val);
+                              applyChange({ borderDashStyle: val });
+                            }}
+                            className="flex-1 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8 text-xs"
+                          >
+                            <option value="solid">Solid</option>
+                            <option value="dashed">Dashed</option>
+                            <option value="dotted">Dotted</option>
+                          </select>
+                        </div>
+
+                        {borderType === 'rectangle' && (
+                          <div className="flex items-center gap-2">
+                            <label className="w-24 text-slate-700">Corner Radius:</label>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.5}
+                              value={cornerRadius}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setCornerRadius(val);
+                                applyChange({ cornerRadius: val });
+                              }}
+                              className="w-16 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8 text-right font-mono text-xs"
+                            />
+                            <span className="text-slate-600 text-xs">mm</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </fieldset>
               </div>
             )}
 
+            {/* ========================================================================= */}
+            {/* 6. POSITION & GEOMETRY                                                    */}
+            {/* ========================================================================= */}
             {selectedCategory === 'position' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-2">
-                    <label className="w-10 text-slate-700 text-xs">X:</label>
-                    <input
-                      type="number"
-                      step={0.1}
-                      value={posX}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setPosX(val);
-                        applyChange({ x: val });
-                      }}
-                      className="w-24 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8 font-mono text-xs"
-                    />
-                    <span className="text-slate-600 text-xs">mm</span>
+                <fieldset className="border border-[#cbd5e1] rounded-xs p-3 pt-2 text-[11.5px] space-y-3">
+                  <legend className="px-1 text-slate-700 font-medium">Object Coordinates & Rotation</legend>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <label className="w-14 text-slate-700 text-xs font-medium">X (Left):</label>
+                      <input
+                        type="number"
+                        step={0.1}
+                        value={posX}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setPosX(val);
+                          applyChange({ x: val });
+                        }}
+                        className="w-24 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8 font-mono text-xs text-right"
+                      />
+                      <span className="text-slate-600 text-xs">mm</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <label className="w-14 text-slate-700 text-xs font-medium">Y (Top):</label>
+                      <input
+                        type="number"
+                        step={0.1}
+                        value={posY}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setPosY(val);
+                          applyChange({ y: val });
+                        }}
+                        className="w-24 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8 font-mono text-xs text-right"
+                      />
+                      <span className="text-slate-600 text-xs">mm</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <label className="w-10 text-slate-700 text-xs">Y:</label>
-                    <input
-                      type="number"
-                      step={0.1}
-                      value={posY}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setPosY(val);
-                        applyChange({ y: val });
-                      }}
-                      className="w-24 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8 font-mono text-xs"
-                    />
-                    <span className="text-slate-600 text-xs">mm</span>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <label className="w-14 text-slate-700 text-xs font-medium">Width:</label>
+                      <input
+                        type="number"
+                        step={0.1}
+                        min={5}
+                        value={posWidth}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 50;
+                          setPosWidth(val);
+                          setObjWidthMm(val);
+                          applyChange({ width: val });
+                        }}
+                        className="w-24 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8 font-mono text-xs text-right"
+                      />
+                      <span className="text-slate-600 text-xs">mm</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <label className="w-14 text-slate-700 text-xs font-medium">Height:</label>
+                      <input
+                        type="number"
+                        step={0.1}
+                        min={5}
+                        value={posHeight}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 25;
+                          setPosHeight(val);
+                          setObjHeightMm(val);
+                          applyChange({ height: val });
+                        }}
+                        className="w-24 bg-white border border-[#94a3b8] rounded-xs px-2 py-0.8 font-mono text-xs text-right"
+                      />
+                      <span className="text-slate-600 text-xs">mm</span>
+                    </div>
                   </div>
-                </div>
+
+                  <div className="flex items-center gap-3 border-t border-slate-200 pt-2">
+                    <label className="w-16 text-slate-700 text-xs font-medium">Rotation:</label>
+                    <select
+                      value={rotationAngle}
+                      onChange={(e) => {
+                        const r = parseInt(e.target.value) as any;
+                        setRotationAngle(r);
+                        applyChange({ rotation: r });
+                      }}
+                      className="w-36 bg-white border border-[#94a3b8] rounded-xs px-2 py-1 text-xs font-medium"
+                    >
+                      <option value={0}>0° (Normal)</option>
+                      <option value={90}>90° (Right)</option>
+                      <option value={180}>180° (Inverted)</option>
+                      <option value={270}>270° (Left)</option>
+                    </select>
+                  </div>
+                </fieldset>
               </div>
             )}
 
@@ -1074,7 +2147,7 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                         : 'bg-[#f1f5f9] border-transparent text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    Transforms ({activeDataSource.transforms?.length || 0})
+                    Transforms
                   </button>
                 </div>
 
@@ -1378,16 +2451,39 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                       </div>
                     )}
 
-                    {/* Standard Embedded Data */}
+                    {/* Standard Embedded Data matching Screenshot 1 */}
                     {activeDataSource.type === 'embedded' && (
                       <div className="space-y-1.5 pt-2">
-                        <label className="text-slate-700 font-medium">Embedded Constant Text:</label>
-                        <textarea
-                          rows={6}
-                          value={activeDataSource.value || ''}
-                          onChange={(e) => updateActiveDataSource({ value: e.target.value })}
-                          className="w-full bg-white border border-[#94a3b8] rounded-xs p-2 font-mono text-sm text-slate-900 outline-none focus:ring-1 focus:ring-blue-600 resize-none"
-                        />
+                        <div className="flex items-center justify-between">
+                          <label className="text-slate-700 font-medium">Embedded Data:</label>
+                          <button
+                            type="button"
+                            title="Insert Symbols or Special Characters"
+                            onClick={() => setIsSpecialCharModalOpen(true)}
+                            className="px-2 py-0.5 bg-[#f8fafc] hover:bg-[#e2e8f0] active:bg-[#cbd5e1] border border-[#94a3b8] rounded-xs text-[#003366] font-serif font-bold text-sm cursor-pointer shadow-2xs flex items-center gap-1"
+                          >
+                            <span>Ω</span>
+                            <span className="text-[10.5px] font-sans font-normal text-slate-700">Special Characters / Controls...</span>
+                          </button>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <textarea
+                            ref={barcodeEmbeddedTextareaRef}
+                            rows={6}
+                            value={activeDataSource.value || ''}
+                            onChange={(e) => updateActiveDataSource({ value: e.target.value })}
+                            className="flex-1 bg-white border border-[#94a3b8] rounded-xs p-2 font-mono text-sm text-slate-900 outline-none focus:ring-1 focus:ring-blue-600 resize-none"
+                            placeholder="Enter embedded barcode value..."
+                          />
+                          <button
+                            type="button"
+                            title="Insert Symbols or Special Characters"
+                            onClick={() => setIsSpecialCharModalOpen(true)}
+                            className="w-8 h-8 self-stretch bg-[#f8fafc] hover:bg-[#e2e8f0] border border-[#94a3b8] rounded-xs text-[#003366] font-serif font-bold text-base cursor-pointer shadow-2xs flex items-center justify-center shrink-0"
+                          >
+                            Ω
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -1532,102 +2628,145 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
                   <div className="space-y-3 pt-1 text-[12px]">
                     <div className="flex items-center gap-3">
                       <label className="w-28 text-slate-700 font-medium">Data Type:</label>
-                      <select className="flex-1 bg-white border border-[#94a3b8] rounded-xs px-2.5 py-1 text-slate-900">
-                        <option>Text / Alphanumeric (String)</option>
-                        <option>Number / Integer</option>
-                        <option>Date / Timestamp</option>
-                        <option>Currency</option>
+                      <select
+                        value={activeDataSource.dataType || 'text'}
+                        onChange={(e) => updateActiveDataSource({ dataType: e.target.value as any })}
+                        className="flex-1 bg-white border border-[#94a3b8] rounded-xs px-2.5 py-1 text-slate-900 font-medium"
+                      >
+                        <option value="text">Text / Alphanumeric (String)</option>
+                        <option value="number">Number</option>
+                        <option value="integer">Integer</option>
+                        <option value="decimal">Decimal</option>
+                        <option value="currency">Currency</option>
+                        <option value="date">Date / Timestamp</option>
+                        <option value="time">Time</option>
+                        <option value="boolean">Boolean</option>
                       </select>
                     </div>
+
+                    {(activeDataSource.dataType === 'number' ||
+                      activeDataSource.dataType === 'integer' ||
+                      activeDataSource.dataType === 'decimal' ||
+                      activeDataSource.dataType === 'currency') && (
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xs space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-700">Decimal Places:</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={6}
+                            value={activeDataSource.numberFormat?.decimalPlaces ?? (activeDataSource.dataType === 'integer' ? 0 : 2)}
+                            onChange={(e) =>
+                              updateActiveDataSource({
+                                numberFormat: {
+                                  ...activeDataSource.numberFormat,
+                                  decimalPlaces: parseInt(e.target.value, 10) || 0,
+                                },
+                              })
+                            }
+                            className="w-16 bg-white border border-[#94a3b8] rounded-xs px-1.5 py-0.5 text-right font-mono"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-700">Preserve Leading Zeros (Min Digits):</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={20}
+                            value={activeDataSource.numberFormat?.leadingZeros ?? 0}
+                            onChange={(e) =>
+                              updateActiveDataSource({
+                                numberFormat: {
+                                  ...activeDataSource.numberFormat,
+                                  leadingZeros: parseInt(e.target.value, 10) || 0,
+                                },
+                              })
+                            }
+                            className="w-16 bg-white border border-[#94a3b8] rounded-xs px-1.5 py-0.5 text-right font-mono"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer text-slate-800">
+                          <input
+                            type="checkbox"
+                            checked={!!activeDataSource.numberFormat?.thousandSeparator}
+                            onChange={(e) =>
+                              updateActiveDataSource({
+                                numberFormat: {
+                                  ...activeDataSource.numberFormat,
+                                  thousandSeparator: e.target.checked,
+                                },
+                              })
+                            }
+                            className="accent-[#0078d7]"
+                          />
+                          <span>Use 1000 Separator (,)</span>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* TAB 3: TRANSFORMS */}
+                {/* TAB 3: TRANSFORMS (BarTender Screenshot 2 Parity) */}
                 {activeDsTab === 'transforms' && (
-                  <div className="space-y-3 pt-1 text-[12px]">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-800">
-                        Transformation Pipeline ({activeDataSource.transforms?.length || 0})
-                      </span>
-                      <button
-                        onClick={() => {
-                          const newRule: TransformRule = {
-                            id: `tr-${Date.now()}`,
-                            type: 'case',
-                            params: {
-                              caseType: 'uppercase',
-                            },
-                          };
-                          updateActiveDataSource({
-                            transforms: [...(activeDataSource.transforms || []), newRule],
-                          });
-                        }}
-                        className="px-2 py-0.8 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>Add Transform Step</span>
-                      </button>
+                  <div className="space-y-2 pt-1 text-[12px]">
+                    <div className="border border-slate-300 rounded-xs bg-white divide-y divide-slate-200 overflow-hidden shadow-2xs">
+                      {[
+                        { id: 'suppression', label: 'Suppression:', summary: suppressionSummary, modal: 'suppression' },
+                        { id: 'filter', label: 'Character Filter:', summary: filterSummary, modal: 'filter' },
+                        { id: 'truncation', label: 'Truncation:', summary: truncSummary, modal: 'truncation' },
+                        { id: 'length', label: 'Number of Characters:', summary: lengthSummary, modal: 'length' },
+                        { id: 'template', label: 'Character Template:', summary: templateSummary, modal: 'template' },
+                        { id: 'searchReplace', label: 'Search and Replace:', summary: searchReplaceSummary, modal: 'searchReplace' },
+                        { id: 'script', label: 'VB Script:', summary: scriptSummary, modal: 'script' },
+                        { id: 'serialization', label: 'Serialization:', summary: serialSummary, modal: 'serialization' },
+                        { id: 'prefixSuffix', label: 'Prefix and Suffix:', summary: prefixSuffixSummary, modal: 'prefixSuffix' },
+                      ].map((row) => (
+                        <div
+                          key={row.id}
+                          className="flex items-center justify-between px-3 py-1.5 hover:bg-slate-50 transition-colors"
+                        >
+                          <span className="w-40 text-slate-800 font-medium text-[11.5px]">{row.label}</span>
+                          <span className="flex-1 font-mono text-[11px] text-slate-600 truncate mr-2">
+                            {row.summary}
+                          </span>
+                          <button
+                            type="button"
+                            title={`Configure ${row.label}`}
+                            onClick={() => setActiveTransformModal(row.modal as any)}
+                            className="p-1 bg-[#f8fafc] hover:bg-[#e2e8f0] active:bg-[#cbd5e1] border border-[#94a3b8] rounded-xs text-slate-700 shadow-2xs cursor-pointer flex items-center justify-center"
+                          >
+                            <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
 
-                    {(!activeDataSource.transforms || activeDataSource.transforms.length === 0) ? (
-                      <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded text-center text-slate-500 text-xs">
-                        No transforms configured. Raw data source value is preserved.
+                    {/* Live Non-Destructive Preview Banner for Serialization & Transforms */}
+                    <div className="mt-3 p-2.5 bg-blue-50/70 border border-blue-200 rounded-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-blue-950 text-[11px]">
+                          Live Sequence Preview (Non-Destructive):
+                        </span>
+                        <span className="text-[10px] text-blue-700 font-mono">
+                          {activeSerial && activeSerial.action !== 'none'
+                            ? `${activeSerial.action.toUpperCase()} By ${activeSerial.incrementBy || 1}`
+                            : 'Static (No Serialization)'}
+                        </span>
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {activeDataSource.transforms.map((rule, trIdx) => (
-                          <div key={rule.id || trIdx} className="p-2.5 bg-slate-50 border border-slate-200 rounded flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-xs text-slate-400">#{trIdx + 1}</span>
-                              <select
-                                value={rule.type}
-                                onChange={(e) => {
-                                  const updatedRules = activeDataSource.transforms!.map((r, i) =>
-                                    i === trIdx ? { ...r, type: e.target.value as any } : r
-                                  );
-                                  updateActiveDataSource({ transforms: updatedRules });
-                                }}
-                                className="bg-white border border-[#94a3b8] rounded px-2 py-0.5 text-xs font-medium"
-                              >
-                                <option value="case">Case Conversion</option>
-                                <option value="trim">Trim Whitespace</option>
-                                <option value="search_replace">Search & Replace</option>
-                                <option value="truncate">Truncate / Substring</option>
-                                <option value="pad">Character Padding</option>
-                                <option value="prefix_suffix">Prefix & Suffix</option>
-                              </select>
-
-                              {rule.type === 'case' && (
-                                <select
-                                  value={rule.params?.caseType || 'uppercase'}
-                                  onChange={(e) => {
-                                    const updatedRules = activeDataSource.transforms!.map((r, i) =>
-                                      i === trIdx ? { ...r, params: { ...r.params, caseType: e.target.value as any } } : r
-                                    );
-                                    updateActiveDataSource({ transforms: updatedRules });
-                                  }}
-                                  className="bg-white border border-[#94a3b8] rounded px-2 py-0.5 text-xs"
-                                >
-                                  <option value="uppercase">UPPERCASE (ABC)</option>
-                                  <option value="lowercase">lowercase (abc)</option>
-                                  <option value="titlecase">Title Case</option>
-                                </select>
-                              )}
-                            </div>
-
-                            <button
-                              onClick={() => {
-                                const updatedRules = activeDataSource.transforms!.filter((_, i) => i !== trIdx);
-                                updateActiveDataSource({ transforms: updatedRules });
-                              }}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
+                      <div className="flex items-center gap-2 font-mono text-[11.5px] text-slate-800 pt-0.5 overflow-x-auto">
+                        <span className="bg-white px-2 py-0.5 rounded border border-blue-200">
+                          Current: <strong className="text-blue-900">{evaluateSerializedValue(activeDataSource.value || '000001', activeSerial, { printIndex: 0 })}</strong>
+                        </span>
+                        <span className="text-slate-400">→</span>
+                        <span className="bg-white px-2 py-0.5 rounded border border-blue-200">
+                          Next: <strong>{evaluateSerializedValue(activeDataSource.value || '000001', activeSerial, { printIndex: 1 })}</strong>
+                        </span>
+                        <span className="text-slate-400">→</span>
+                        <span className="bg-white px-2 py-0.5 rounded border border-blue-200">
+                          Next: <strong>{evaluateSerializedValue(activeDataSource.value || '000001', activeSerial, { printIndex: 2 })}</strong>
+                        </span>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1636,15 +2775,175 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
         </div>
 
         {/* Bottom Actions Bar */}
-        <div className="bg-[#e4ebf5] border-t border-[#cbd5e1] px-4 py-2 flex items-center justify-end gap-2">
+        <div className="bg-[#e4ebf5] border-t border-[#cbd5e1] px-4 py-2 flex items-center justify-between">
           <button
-            onClick={onClose}
-            className="px-6 py-1 bg-[#f8fafc] hover:bg-[#e2e8f0] active:bg-[#cbd5e1] border border-[#94a3b8] rounded-xs text-slate-800 text-[12px] font-medium shadow-2xs cursor-pointer min-w-[80px]"
+            onClick={() => alert('BarTender-compatible Enterprise Barcode Properties.\nUse the left tree to configure Symbology, Human Readable text, Dimensions, Data Sources, and Transforms.')}
+            className="px-3 py-1 border border-[#94a3b8] hover:bg-slate-200 rounded text-slate-700 text-[11.5px] flex items-center gap-1 cursor-pointer"
           >
-            Close
+            <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
+            <span>Help</span>
           </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCommitAndClose}
+              className="px-5 py-1 bg-[#0078d7] hover:bg-[#0063b1] text-white font-medium rounded text-[11.5px] shadow-2xs cursor-pointer min-w-[70px]"
+            >
+              OK
+            </button>
+            <button
+              onClick={handleCancel}
+              className="px-4 py-1 border border-[#94a3b8] hover:bg-slate-200 text-slate-700 font-medium rounded text-[11.5px] cursor-pointer min-w-[70px]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleApplyDraft}
+              className="px-4 py-1 border border-[#94a3b8] hover:bg-slate-200 text-slate-700 font-medium rounded text-[11.5px] cursor-pointer min-w-[70px]"
+            >
+              Apply
+            </button>
+            <button
+              onClick={handleCommitAndClose}
+              className="px-4 py-1 border border-[#94a3b8] hover:bg-slate-200 text-slate-700 font-medium rounded text-[11.5px] cursor-pointer min-w-[70px]"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Transform Sub-Modals */}
+      {activeTransformModal === 'serialization' && (
+        <SerializationModal
+          isOpen={true}
+          onClose={() => setActiveTransformModal(null)}
+          initialConfig={activeDataSource.serialization || activeDataSource.transformConfig?.serialization}
+          initialValue={activeDataSource.value || '000001'}
+          prefix={activeDataSource.prefixSuffix?.prefix || activeDataSource.transformConfig?.prefixSuffix?.prefix || ''}
+          suffix={activeDataSource.prefixSuffix?.suffix || activeDataSource.transformConfig?.prefixSuffix?.suffix || ''}
+          onApply={(config) => {
+            updateActiveDataSource({
+              serialization: config,
+              transformConfig: {
+                ...activeDataSource.transformConfig,
+                serialization: config,
+              },
+            });
+            setActiveTransformModal(null);
+          }}
+        />
+      )}
+
+      {activeTransformModal === 'suppression' && (
+        <SuppressionModal
+          isOpen={true}
+          title="Data Source Suppression"
+          onClose={() => setActiveTransformModal(null)}
+          initial={activeDataSource.transformConfig?.suppression}
+          onApply={(up) => {
+            updateActiveDsTransform(up);
+            setActiveTransformModal(null);
+          }}
+        />
+      )}
+
+      {activeTransformModal === 'filter' && (
+        <CharacterFilterModal
+          isOpen={true}
+          title="Character Filter"
+          onClose={() => setActiveTransformModal(null)}
+          initial={activeDataSource.transformConfig?.characterFilter}
+          onApply={(up) => {
+            updateActiveDsTransform(up);
+            setActiveTransformModal(null);
+          }}
+        />
+      )}
+
+      {activeTransformModal === 'truncation' && (
+        <TruncationModal
+          isOpen={true}
+          title="Truncation Transforms"
+          onClose={() => setActiveTransformModal(null)}
+          initial={activeDataSource.transformConfig?.truncation}
+          onApply={(up) => {
+            updateActiveDsTransform(up);
+            setActiveTransformModal(null);
+          }}
+        />
+      )}
+
+      {activeTransformModal === 'length' && (
+        <CharacterLengthModal
+          isOpen={true}
+          title="Number of Characters / Padding"
+          onClose={() => setActiveTransformModal(null)}
+          initial={activeDataSource.transformConfig?.characterLength}
+          onApply={(up) => {
+            updateActiveDsTransform(up);
+            setActiveTransformModal(null);
+          }}
+        />
+      )}
+
+      {activeTransformModal === 'template' && (
+        <CharacterTemplateModal
+          isOpen={true}
+          title="Character Template Mask"
+          onClose={() => setActiveTransformModal(null)}
+          initial={activeDataSource.transformConfig?.characterTemplate}
+          onApply={(up) => {
+            updateActiveDsTransform(up);
+            setActiveTransformModal(null);
+          }}
+        />
+      )}
+
+      {activeTransformModal === 'searchReplace' && (
+        <SearchReplaceModal
+          isOpen={true}
+          title="Search and Replace Rules"
+          onClose={() => setActiveTransformModal(null)}
+          initial={activeDataSource.transformConfig?.searchReplace}
+          onApply={(up) => {
+            updateActiveDsTransform(up);
+            setActiveTransformModal(null);
+          }}
+        />
+      )}
+
+      {activeTransformModal === 'script' && (
+        <ScriptTransformModal
+          isOpen={true}
+          title="VB Script / JavaScript Transform"
+          onClose={() => setActiveTransformModal(null)}
+          initial={activeDataSource.transformConfig?.script}
+          onApply={(up) => {
+            updateActiveDsTransform(up);
+            setActiveTransformModal(null);
+          }}
+        />
+      )}
+
+      {activeTransformModal === 'prefixSuffix' && (
+        <PrefixSuffixModal
+          isOpen={true}
+          title="Prefix and Suffix Transforms"
+          onClose={() => setActiveTransformModal(null)}
+          initial={activeDataSource.prefixSuffix || activeDataSource.transformConfig?.prefixSuffix}
+          onApply={(up) => {
+            const ps = up.prefixSuffix;
+            updateActiveDataSource({
+              prefixSuffix: ps,
+              transformConfig: {
+                ...activeDataSource.transformConfig,
+                prefixSuffix: ps,
+              },
+            });
+            setActiveTransformModal(null);
+          }}
+        />
+      )}
 
       {/* GS1 Application Identifier Data Source Wizard Modal */}
       {isGs1AiWizardOpen && (
@@ -1666,6 +2965,14 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
         availableVariables={availableVariables}
         currentConnection={currentConnection}
         existingCount={dataSources.length}
+      />
+
+      {/* Insert Symbols or Special Characters Modal */}
+      <SpecialCharacterModal
+        isOpen={isSpecialCharModalOpen}
+        onClose={() => setIsSpecialCharModalOpen(false)}
+        onInsert={handleInsertSpecialChar}
+        currentFont={(element as any)?.fontFamily || 'Arial'}
       />
     </div>
   );

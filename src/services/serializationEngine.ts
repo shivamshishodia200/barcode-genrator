@@ -36,8 +36,15 @@ export function stepAlphabetic(str: string, step: number, isLower = false): stri
 export function stepNumeric(str: string, step: number, preserveLength = false): string {
   const match = str.match(/^([+-]?\d+)$/);
   if (!match) {
+    // If string has trailing digits (e.g. "ITEM-001"), increment only the numeric suffix
+    const trailingMatch = str.match(/^(.*?)(\d+)$/);
+    if (trailingMatch) {
+      const pfx = trailingMatch[1];
+      const digits = trailingMatch[2];
+      return `${pfx}${stepNumeric(digits, step, preserveLength)}`;
+    }
     const num = parseInt(str, 10) || 0;
-    const resNum = num + step;
+    const resNum = Math.max(0, num + step);
     return String(resNum);
   }
 
@@ -47,7 +54,7 @@ export function stepNumeric(str: string, step: number, preserveLength = false): 
   const num = parseInt(rawDigits, 10);
   const nextNum = Math.max(0, num + step);
 
-  if (isPadded || (preserveLength && isPadded)) {
+  if (preserveLength || isPadded) {
     const nextStr = String(nextNum);
     if (nextStr.length < originalLen) {
       return nextStr.padStart(originalLen, '0');
@@ -123,10 +130,12 @@ export function evaluateSerializedValue(
 
   const action = config.action;
   const method = config.method || 'alphanumeric';
-  const incrementBy = config.incrementBy !== undefined && config.incrementBy !== 0 ? config.incrementBy : 1;
-  const preserveLength = config.preserveCharacters !== false;
-  const event = config.event || 'standard';
-  const interval = Math.max(1, config.eventInterval || 1);
+  const rawInc = config.incrementBy !== undefined ? config.incrementBy : (config as any).step;
+  const incrementBy = rawInc !== undefined && rawInc !== 0 ? rawInc : 1;
+  const preserveLength = config.preserveCharacters !== false && (config as any).preserveLength !== false;
+  const rawEvent = (config.event as string) || 'standard';
+  const interval = Math.max(1, config.eventInterval || (config as any).interval || 1);
+  const copiesPerSerial = Math.max(1, config.copies || (config as any).copiesPerValue || 1);
 
   const printIndex = context?.printIndex ?? 0;
   const recordIndex = context?.recordIndex ?? 0;
@@ -134,12 +143,12 @@ export function evaluateSerializedValue(
 
   // Calculate effective step multiplier
   let stepMultiplier = 0;
-  if (event === 'item' || event === 'standard') {
-    stepMultiplier = Math.floor(printIndex / interval);
-  } else if (event === 'record') {
+  if (rawEvent === 'item' || rawEvent === 'standard' || rawEvent === 'every_label') {
+    stepMultiplier = Math.floor(printIndex / (interval * copiesPerSerial));
+  } else if (rawEvent === 'record') {
     stepMultiplier = Math.floor(recordIndex / interval);
-  } else if (event === 'interval') {
-    stepMultiplier = Math.floor(printIndex / interval);
+  } else if (rawEvent === 'interval') {
+    stepMultiplier = Math.floor(printIndex / (interval * copiesPerSerial));
   }
 
   const effectiveStep = (action === 'decrement' ? -1 : 1) * incrementBy * stepMultiplier;
@@ -183,38 +192,38 @@ export function generatePreviewSequence(
     maxItems?: number;
   } = {}
 ): PreviewSequenceItem[] {
-  const recordCount = Math.max(1, options.recordCount ?? 1);
+  const maxItems = Math.min(100, Math.max(1, options.maxItems ?? 10));
   const copies = Math.max(1, options.copies ?? config.copies ?? 1);
   const prefix = options.prefix ?? '';
   const suffix = options.suffix ?? '';
-  const maxItems = options.maxItems ?? 100;
+
+  // If recordCount is specified and > 1, use recordCount * copies up to maxItems
+  // Otherwise preview sequence up to maxItems so the operator can inspect the progression
+  const targetCount = options.recordCount && options.recordCount > 1
+    ? Math.min(maxItems, options.recordCount * copies)
+    : maxItems;
 
   const sequence: PreviewSequenceItem[] = [];
-  let printIdx = 0;
 
-  for (let r = 0; r < recordCount; r++) {
-    for (let c = 0; c < copies; c++) {
-      if (printIdx >= maxItems) break;
+  for (let printIdx = 0; printIdx < targetCount; printIdx++) {
+    const r = Math.floor(printIdx / copies);
+    const c = printIdx % copies;
 
-      const serializedVal = evaluateSerializedValue(initialValue, config, {
-        printIndex: printIdx,
-        recordIndex: r,
-        copyIndex: c,
-        copiesPerRecord: copies,
-      });
+    const serializedVal = evaluateSerializedValue(initialValue, config, {
+      printIndex: printIdx,
+      recordIndex: r,
+      copyIndex: c,
+      copiesPerRecord: copies,
+    });
 
-      const finalVal = `${prefix}${serializedVal}${suffix}`;
-      sequence.push({
-        printIndex: printIdx + 1,
-        recordIndex: r + 1,
-        copyIndex: c + 1,
-        serializedValue: serializedVal,
-        finalValue: finalVal,
-      });
-
-      printIdx++;
-    }
-    if (printIdx >= maxItems) break;
+    const finalVal = `${prefix}${serializedVal}${suffix}`;
+    sequence.push({
+      printIndex: printIdx + 1,
+      recordIndex: r + 1,
+      copyIndex: c + 1,
+      serializedValue: serializedVal,
+      finalValue: finalVal,
+    });
   }
 
   return sequence;
@@ -292,3 +301,77 @@ export class AtomicSerialReservationService {
     }
   }
 }
+
+/**
+ * Computes what the next value will be after printing `count` items
+ */
+export function computeNextSerialValue(
+  startValue: string,
+  config?: SerializationConfig,
+  count: number = 1
+): string {
+  if (!config || config.action === 'none' || count <= 0) return startValue;
+  return evaluateSerializedValue(startValue, config, { printIndex: count });
+}
+
+/**
+ * Commits a completed print job by advancing serial counter states on template elements.
+ * This is only called after a successful confirmed print job dispatch.
+ */
+export function advanceTemplateSerialState(template: any, printedCount: number): any {
+  if (printedCount <= 0 || !template?.elements) return template;
+
+  const updatedElements = template.elements.map((el: any) => {
+    let hasChanged = false;
+    let updatedDsList: any[] | undefined = undefined;
+
+    if (el.dataSources && el.dataSources.length > 0) {
+      updatedDsList = el.dataSources.map((ds: any) => {
+        const serialConfig = ds.serialization || ds.transformConfig?.serialization;
+        if (serialConfig && serialConfig.action !== 'none') {
+          const currentBase = serialConfig.currentValue || ds.value || '000001';
+          const nextVal = computeNextSerialValue(currentBase, serialConfig, printedCount);
+          hasChanged = true;
+          return {
+            ...ds,
+            value: nextVal,
+            serialization: {
+              ...serialConfig,
+              currentValue: nextVal,
+            },
+            ...(ds.transformConfig
+              ? {
+                  transformConfig: {
+                    ...ds.transformConfig,
+                    serialization: {
+                      ...serialConfig,
+                      currentValue: nextVal,
+                    },
+                  },
+                }
+              : {}),
+          };
+        }
+        return ds;
+      });
+    }
+
+    if (hasChanged && updatedDsList) {
+      return {
+        ...el,
+        dataSources: updatedDsList,
+        ...(el.type === 'barcode' ? { value: updatedDsList[0]?.value || el.value } : {}),
+        ...(el.type === 'text' ? { text: updatedDsList[0]?.value || el.text } : {}),
+      };
+    }
+
+    return el;
+  });
+
+  return {
+    ...template,
+    elements: updatedElements,
+    updatedAt: new Date().toISOString(),
+  };
+}
+

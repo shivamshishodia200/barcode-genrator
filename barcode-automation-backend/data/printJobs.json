@@ -1,5 +1,24 @@
 [
   {
+    "id": "PJ-8688",
+    "templateId": "tmpl-1789123756508",
+    "templateName": "Document993.btw",
+    "printerId": "prn-os-2",
+    "printerName": "Microsoft Print to PDF",
+    "copies": 1,
+    "recordCount": 1,
+    "status": "failed",
+    "format": "pdf",
+    "submittedBy": "Operator (BarcodeFlow Suite)",
+    "submittedAt": "2026-09-11T10:49:26.990Z",
+    "progressPercent": 0,
+    "rawOutput": "{\n  \"format\": \"pdf\",\n  \"templateId\": \"tmpl-1789123756508\",\n  \"templateName\": \"Document993.btw\",\n  \"dimensions\": {\n    \"width\": 50,\n    \"height\": 25,\n    \"unit\": \"mm\",\n    \"dpi\": 203,\n    \"orientation\": \"portrait\",\n    \"shape\": \"rectangle\",\n    \"cornerRadius\": 0\n  },\n  \"recordsCount\": 1,\n  \"copies\": 1,\n  \"generatedAt\": \"2026-09-11T10:49:26.990Z\"\n}",
+    "dataSnapshot": [
+      {}
+    ],
+    "errorMessage": "ENOTFOUND"
+  },
+  {
     "id": "PJ-2610",
     "templateId": "tmpl-document1-btw",
     "templateName": "Document1.btw",

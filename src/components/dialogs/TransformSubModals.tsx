@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TransformConfig } from '../../types';
 import { X, Plus, Trash2, Code, ShieldCheck } from 'lucide-react';
+import { SpecialCharacterModal } from './SpecialCharacterModal';
 
 interface SubModalBaseProps {
   isOpen: boolean;
@@ -419,21 +420,25 @@ export const SearchReplaceModal: React.FC<SubModalBaseProps & { initial?: Transf
           {rules.map((rule, idx) => (
             <div key={idx} className="p-2 bg-white border border-slate-300 rounded space-y-1.5 text-[11px]">
               <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Find text..."
-                  value={rule.find}
-                  onChange={(e) => handleUpdateRule(idx, { find: e.target.value })}
-                  className="flex-1 border border-slate-300 rounded px-2 py-0.8 text-[11.5px]"
-                />
+                <div className="flex-1 flex items-center gap-1">
+                  <input
+                    type="text"
+                    placeholder="Find text..."
+                    value={rule.find}
+                    onChange={(e) => handleUpdateRule(idx, { find: e.target.value })}
+                    className="flex-1 border border-slate-300 rounded px-2 py-0.8 text-[11.5px]"
+                  />
+                </div>
                 <span className="text-slate-400">→</span>
-                <input
-                  type="text"
-                  placeholder="Replace with..."
-                  value={rule.replace}
-                  onChange={(e) => handleUpdateRule(idx, { replace: e.target.value })}
-                  className="flex-1 border border-slate-300 rounded px-2 py-0.8 text-[11.5px]"
-                />
+                <div className="flex-1 flex items-center gap-1">
+                  <input
+                    type="text"
+                    placeholder="Replace with..."
+                    value={rule.replace}
+                    onChange={(e) => handleUpdateRule(idx, { replace: e.target.value })}
+                    className="flex-1 border border-slate-300 rounded px-2 py-0.8 text-[11.5px]"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => handleRemoveRule(idx)}
@@ -548,6 +553,7 @@ export const PrefixSuffixModal: React.FC<SubModalBaseProps & { initial?: Transfo
 }) => {
   const [prefix, setPrefix] = useState<string>('');
   const [suffix, setSuffix] = useState<string>('');
+  const [specialCharTarget, setSpecialCharTarget] = useState<'prefix' | 'suffix' | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -563,11 +569,29 @@ export const PrefixSuffixModal: React.FC<SubModalBaseProps & { initial?: Transfo
     onClose();
   };
 
+  const handleInsertChar = (char: string) => {
+    if (specialCharTarget === 'prefix') {
+      setPrefix((prev) => prev + char);
+    } else if (specialCharTarget === 'suffix') {
+      setSuffix((prev) => prev + char);
+    }
+  };
+
   return (
     <ModalWrapper title={title} onClose={onClose} onOk={handleOk}>
       <div className="space-y-3">
         <div>
-          <label className="text-[11.5px] text-slate-600 font-medium">Prefix (Prepended before data):</label>
+          <div className="flex items-center justify-between">
+            <label className="text-[11.5px] text-slate-600 font-medium">Prefix (Prepended before data):</label>
+            <button
+              type="button"
+              title="Insert Symbols or Special Characters"
+              onClick={() => setSpecialCharTarget('prefix')}
+              className="px-2 py-0.5 bg-[#f8fafc] hover:bg-[#e2e8f0] border border-[#94a3b8] rounded-xs text-[#003366] font-serif font-bold text-xs cursor-pointer shadow-2xs"
+            >
+              Ω
+            </button>
+          </div>
           <input
             type="text"
             value={prefix}
@@ -577,7 +601,17 @@ export const PrefixSuffixModal: React.FC<SubModalBaseProps & { initial?: Transfo
           />
         </div>
         <div>
-          <label className="text-[11.5px] text-slate-600 font-medium">Suffix (Appended after data):</label>
+          <div className="flex items-center justify-between">
+            <label className="text-[11.5px] text-slate-600 font-medium">Suffix (Appended after data):</label>
+            <button
+              type="button"
+              title="Insert Symbols or Special Characters"
+              onClick={() => setSpecialCharTarget('suffix')}
+              className="px-2 py-0.5 bg-[#f8fafc] hover:bg-[#e2e8f0] border border-[#94a3b8] rounded-xs text-[#003366] font-serif font-bold text-xs cursor-pointer shadow-2xs"
+            >
+              Ω
+            </button>
+          </div>
           <input
             type="text"
             value={suffix}
@@ -587,6 +621,12 @@ export const PrefixSuffixModal: React.FC<SubModalBaseProps & { initial?: Transfo
           />
         </div>
       </div>
+
+      <SpecialCharacterModal
+        isOpen={specialCharTarget !== null}
+        onClose={() => setSpecialCharTarget(null)}
+        onInsert={handleInsertChar}
+      />
     </ModalWrapper>
   );
 };

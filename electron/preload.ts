@@ -76,6 +76,8 @@ contextBridge.exposeInMainWorld('barcodeFlow', {
       ipcRenderer.invoke('printers:test-print', req),
     openProperties: (printerName: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('printers:open-properties', printerName),
+    cancelQueuedJobs: (printerName: string): Promise<{ success: boolean; message: string; error?: string }> =>
+      ipcRenderer.invoke('printers:cancel-queued-jobs', printerName),
   },
   fonts: {
     list: (): Promise<string[]> => ipcRenderer.invoke('fonts:list'),

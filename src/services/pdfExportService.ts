@@ -1,6 +1,9 @@
 import { jsPDF } from 'jspdf';
 import { LabelTemplate, LabelElement } from '../types';
 import { generateBarcodeSVG, renderBarcodeToCanvas } from './barcodeEngine';
+import { evaluateElementData } from './dataSourceEngine';
+import { isObjectCompletelyOutOfBounds } from './labelGeometry';
+import { resolveObjectPrintMethod, getEffectiveObjectPrintMethodSettings } from './objectPrintMethodService';
 
 /**
  * Exports single or batch labels to a high-resolution Vector PDF
@@ -33,7 +36,7 @@ export async function exportLabelsToPDF(
         pdf.addPage([widthMm, heightMm], orientation);
       }
 
-      await renderTemplateToPDFPage(pdf, template, record);
+      await renderTemplateToPDFPage(pdf, template, record, labelIndex, r, c);
       labelIndex++;
     }
   }
@@ -47,12 +50,22 @@ export async function exportLabelsToPDF(
 async function renderTemplateToPDFPage(
   pdf: jsPDF,
   template: LabelTemplate,
-  record: Record<string, string>
+  record: Record<string, string>,
+  labelIndex: number = 0,
+  recordIndex: number = 0,
+  copyIndex: number = 0
 ): Promise<void> {
   const sorted = [...template.elements].sort((a, b) => a.zIndex - b.zIndex);
+  const settings = getEffectiveObjectPrintMethodSettings(template);
 
   for (const el of sorted) {
-    if (!el.visible) continue;
+    if (!el.visible || isObjectCompletelyOutOfBounds(el, template)) continue;
+
+    const resolution = resolveObjectPrintMethod({
+      element: el,
+      outputProtocol: 'pdf',
+      settings,
+    });
 
     switch (el.type) {
       case 'shape': {
@@ -85,25 +98,43 @@ async function renderTemplateToPDFPage(
       }
 
       case 'text': {
-        let textVal = el.text;
-        if (el.dataBinding) {
-          const key = el.dataBinding.replace(/[{}]/g, '').trim();
-          if (record[key] !== undefined) {
-            textVal = record[key];
+        const textVal = evaluateElementData(el, {
+          record,
+          printIndex: labelIndex,
+          currentRecordIndex: recordIndex,
+          copyNumber: copyIndex,
+        });
+
+        if (resolution.resolvedMethod === 'raster') {
+          // Raster Text Pipeline: Render bitmap canvas and embed image
+          const canvas = document.createElement('canvas');
+          const scale = 4;
+          canvas.width = Math.max(10, Math.round(el.width * scale * 3.78));
+          canvas.height = Math.max(10, Math.round(el.height * scale * 3.78));
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.scale(scale * 3.78 / 1, scale * 3.78 / 1);
+            ctx.fillStyle = el.color || '#000000';
+            ctx.font = `${el.fontWeight || 'normal'} ${el.fontSize * 0.3527}mm ${el.fontFamily || 'Arial'}`;
+            ctx.textBaseline = 'top';
+            ctx.fillText(textVal, 0, 0, el.width);
+            const imgData = canvas.toDataURL('image/png');
+            pdf.addImage(imgData, 'PNG', el.x, el.y, el.width, el.height);
           }
+        } else {
+          // Vector / Native Text Pipeline
+          pdf.setFontSize(el.fontSize);
+          pdf.setTextColor(el.color || '#000000');
+          pdf.setFont('helvetica', el.fontWeight === 'bold' || el.fontWeight === '700' || el.fontWeight === '800' ? 'bold' : 'normal');
+
+          const textLines = pdf.splitTextToSize(textVal, el.width);
+          const align = el.textAlign === 'center' ? 'center' : el.textAlign === 'right' ? 'right' : 'left';
+          const posX = align === 'center' ? el.x + el.width / 2 : align === 'right' ? el.x + el.width : el.x;
+          
+          // Approximate baseline offset from top
+          const baselineOffset = el.fontSize * 0.35;
+          pdf.text(textLines, posX, el.y + baselineOffset, { align });
         }
-
-        pdf.setFontSize(el.fontSize);
-        pdf.setTextColor(el.color || '#000000');
-        pdf.setFont('helvetica', el.fontWeight === 'bold' || el.fontWeight === '700' || el.fontWeight === '800' ? 'bold' : 'normal');
-
-        const textLines = pdf.splitTextToSize(textVal, el.width);
-        const align = el.textAlign === 'center' ? 'center' : el.textAlign === 'right' ? 'right' : 'left';
-        const posX = align === 'center' ? el.x + el.width / 2 : align === 'right' ? el.x + el.width : el.x;
-        
-        // Approximate baseline offset from top
-        const baselineOffset = el.fontSize * 0.35;
-        pdf.text(textLines, posX, el.y + baselineOffset, { align });
         break;
       }
 
@@ -112,16 +143,13 @@ async function renderTemplateToPDFPage(
         canvas.width = Math.round(el.width * 8);
         canvas.height = Math.round(el.height * 8);
 
-        let barcodeElement = { ...el };
-        if (el.dataBinding) {
-          const key = el.dataBinding.replace(/[{}]/g, '').trim();
-          if (record[key] !== undefined) {
-            barcodeElement.value = record[key];
-          }
-        }
-
         try {
-          await renderBarcodeToCanvas(canvas, barcodeElement, 4);
+          await renderBarcodeToCanvas(canvas, el as any, 4, {
+            record,
+            printIndex: labelIndex,
+            currentRecordIndex: recordIndex,
+            copyNumber: copyIndex,
+          });
           const dataUrl = canvas.toDataURL('image/png');
           pdf.addImage(dataUrl, 'PNG', el.x, el.y, el.width, el.height);
         } catch (e) {

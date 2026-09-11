@@ -59,7 +59,7 @@ function generateSingleLabelRollHtml(
   const pageHeightMm = isLandscape ? Math.min(widthMm, heightMm) : Math.max(widthMm, heightMm);
 
   const renderedLabelsHtml: string[] = records.map((record, rIdx) => {
-    const innerHtml = renderLabelContentHtml(template, record);
+    const innerHtml = renderLabelContentHtml(template, record, rIdx);
     const bgStyle = getBackgroundCss(template);
     return `
     <div class="label-page" data-page="${rIdx + 1}" style="${bgStyle}">
@@ -231,7 +231,8 @@ function generateMultiUpSheetHtml(
     const labelsOnSheetHtml = sheetRecords.map((record, itemIdx) => {
       const slotIdx = currentSlotOffset + itemIdx;
       const pos = slotPositions[slotIdx] || { x: 0, y: 0 };
-      const content = renderLabelContentHtml(template, record);
+      const globalIdx = (recordCursor - sheetRecords.length) + itemIdx;
+      const content = renderLabelContentHtml(template, record, globalIdx);
       const bgStyle = getBackgroundCss(template);
       return `
         <div class="sheet-label-item" style="left: ${pos.x}mm; top: ${pos.y}mm; width: ${labelWidth}mm; height: ${labelHeight}mm; ${bgStyle}">
@@ -342,7 +343,8 @@ function getBackgroundCss(template: LabelTemplate): string {
 
 function renderLabelContentHtml(
   template: LabelTemplate,
-  record: Record<string, any>
+  record: Record<string, any>,
+  printIndex: number = 0
 ): string {
   const sortedElements = [...template.elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
@@ -370,7 +372,7 @@ function renderLabelContentHtml(
         .join('; ');
 
       if (el.type === 'text') {
-        const textVal = evaluateElementData(el, { record });
+        const textVal = evaluateElementData(el, { record, printIndex, currentRecordIndex: printIndex });
         const textStyle = [
           `font-size: ${el.fontSize}pt`,
           `font-family: ${el.fontFamily || 'Arial'}, sans-serif`,
@@ -389,7 +391,7 @@ function renderLabelContentHtml(
 
       if (el.type === 'barcode') {
         try {
-          const svg = generateBarcodeSVG(el, { record: record as any });
+          const svg = generateBarcodeSVG(el, { record: record as any, printIndex, currentRecordIndex: printIndex });
           return `<div class="label-element" style="${style}">${svg}</div>`;
         } catch {
           return `<div class="label-element" style="${style}; font-size: 8pt; color: red;">Barcode Error</div>`;

@@ -16,6 +16,7 @@ interface CanvasElementProps {
   onStartRotate: (e: React.MouseEvent, el: LabelElement) => void;
   onContextMenu: (e: React.MouseEvent, el: LabelElement) => void;
   onBindField?: (elementId: string, payload: any) => void;
+  labelDimensions?: { width: number; height: number };
 }
 
 export const CanvasElement: React.FC<CanvasElementProps> = ({
@@ -30,6 +31,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
   onStartRotate,
   onContextMenu,
   onBindField,
+  labelDimensions,
 }) => {
   const barcodeCanvasRef = useRef<HTMLCanvasElement>(null);
   const [barcodeRenderError, setBarcodeRenderError] = useState(false);
@@ -40,6 +42,14 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
   const topPx = element.y * scale;
   const widthPx = element.width * scale;
   const heightPx = element.height * scale;
+
+  // Out of bounds detection
+  const isOutOfBounds = labelDimensions
+    ? element.x < 0 ||
+      element.y < 0 ||
+      element.x + element.width > labelDimensions.width ||
+      element.y + element.height > labelDimensions.height
+    : false;
 
   // Re-render barcode when value or element specs change
   useEffect(() => {
@@ -89,7 +99,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
         height: `${heightPx}px`,
         transform: `rotate(${element.rotation || 0}deg)`,
         transformOrigin: 'center center',
-        opacity: element.opacity,
+        opacity: element.opacity !== undefined ? element.opacity : 1,
         zIndex: isDragOverTarget ? 999 : element.zIndex,
       }}
       onMouseDown={(e) => {
@@ -151,10 +161,10 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
         </div>
       )}
 
-      {/* Missing Field Alert Badge */}
-      {isMissingField && (
-        <div className="absolute -top-5 left-0 bg-red-600 text-white font-bold text-[9px] px-1.5 py-0.2 rounded shadow z-40 whitespace-nowrap flex items-center gap-1">
-          <span>{evaluatedContent}</span>
+      {/* Out of Bounds Warning Badge */}
+      {isOutOfBounds && isSelected && (
+        <div className="absolute -top-6 left-0 bg-amber-600 text-white font-semibold text-[9.5px] px-1.5 py-0.5 rounded shadow z-50 whitespace-nowrap flex items-center gap-1 pointer-events-none ring-1 ring-white/50">
+          <span>⚠ {element.type === 'barcode' ? 'Barcode extends outside printable area' : 'Object extends outside printable area'}</span>
         </div>
       )}
 
@@ -354,6 +364,8 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
         const barcodeEl = element as BarcodeElement;
         const hasBorder = barcodeEl.borderType && barcodeEl.borderType !== 'none';
         const isEllipse = barcodeEl.borderType === 'ellipse';
+        const cornerPx = barcodeEl.cornerRadius ? barcodeEl.cornerRadius * scale : 0;
+        const padPx = barcodeEl.borderPadding !== undefined ? barcodeEl.borderPadding * scale : 2;
 
         return (
           <div
@@ -368,6 +380,8 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
               borderWidth: hasBorder ? `${Math.max(1, (barcodeEl.borderThickness || 1) * scale * 0.75)}px` : '0px',
               borderColor: barcodeEl.borderColor || '#000000',
               borderStyle: barcodeEl.borderDashStyle || 'solid',
+              borderRadius: isEllipse ? '50%' : cornerPx > 0 ? `${cornerPx}px` : undefined,
+              padding: `${padPx}px`,
             }}
           >
             <canvas

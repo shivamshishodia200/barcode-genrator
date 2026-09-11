@@ -55,7 +55,7 @@ import {
 import { BarcodeSymbology, LabelElement, TextElement, TextObjectType, BarcodeElement, ShapeElement } from '../../types';
 
 interface ObjectToolbarProps {
-  activeTool: 'select' | 'text' | 'barcode' | 'qr' | 'datamatrix' | 'rect' | 'circle' | 'line' | 'table' | 'image';
+  activeTool: 'select' | 'data-edit' | 'text' | 'barcode' | 'qr' | 'datamatrix' | 'rect' | 'circle' | 'line' | 'table' | 'image';
   setActiveTool: (tool: any) => void;
   onNew: () => void;
   onOpen: () => void;
@@ -395,6 +395,22 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
           <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
             <path d="M4 2l12 12-5.5 1.5 3.5 6.5-2.5 1-3.5-6.5L4 20V2z" />
           </svg>
+        </button>
+
+        {/* DATA EDIT TOOL (BarTender Data Edit Tool from Screenshot 4) */}
+        <button
+          title={"Data Edit\nActivates the Data Edit tool used to edit data for barcode and text objects."}
+          onClick={() => props.setActiveTool('data-edit')}
+          className={`h-6 px-1.5 rounded-xs flex items-center justify-center border transition-all cursor-pointer ${
+            props.activeTool === 'data-edit'
+              ? 'bg-[#fef08a] border-[#eab308] shadow-xs text-amber-950 font-bold'
+              : 'hover:bg-[#e2e8f0] border-transparent text-slate-800'
+          }`}
+        >
+          <div className="flex items-center gap-0.5">
+            <span className="font-serif font-black text-xs leading-none">I</span>
+            <span className="text-[9px] font-mono text-blue-700 leading-none">✎</span>
+          </div>
         </button>
 
         {/* Format Painter */}

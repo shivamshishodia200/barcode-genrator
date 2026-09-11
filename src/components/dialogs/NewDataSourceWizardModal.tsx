@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DataSourceItem, DataSourceType } from '../../types';
 import { formatCustomDate, evaluateSafeScript } from '../../services/dataSourceEngine';
 import { X, Calendar, Database, Globe, Hash, Save, Code, FileText, ChevronDown, Check, AlertCircle } from 'lucide-react';
+import { SpecialCharacterModal } from './SpecialCharacterModal';
 
 export type WizardDataSourceType =
   | 'embedded'
@@ -45,9 +46,10 @@ export const NewDataSourceWizardModal: React.FC<NewDataSourceWizardModalProps> =
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedType, setSelectedType] = useState<WizardDataSourceType>('embedded');
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [sourceName, setSourceName] = useState<string>('');
+  const [isSpecialCharModalOpen, setIsSpecialCharModalOpen] = useState<boolean>(false);
 
   // Common configuration fields
-  const [sourceName, setSourceName] = useState('');
 
   // 1. Embedded Data
   const [embeddedValue, setEmbeddedValue] = useState('Sample Text');
@@ -548,16 +550,37 @@ export const NewDataSourceWizardModal: React.FC<NewDataSourceWizardModalProps> =
               {selectedType === 'embedded' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="block font-semibold text-slate-800 mb-1">
-                      Embedded Value / Text:
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={embeddedValue}
-                      onChange={(e) => setEmbeddedValue(e.target.value)}
-                      className="w-full p-2 border border-[#94a3b8] rounded-xs text-[11.5px] font-mono outline-none focus:border-blue-600 bg-white"
-                      placeholder="Enter embedded string data..."
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-semibold text-slate-800">
+                        Embedded Value / Text:
+                      </label>
+                      <button
+                        type="button"
+                        title="Insert Symbols or Special Characters"
+                        onClick={() => setIsSpecialCharModalOpen(true)}
+                        className="px-2 py-0.5 bg-[#f8fafc] hover:bg-[#e2e8f0] border border-[#94a3b8] rounded-xs text-[#003366] font-serif font-bold text-xs cursor-pointer shadow-2xs flex items-center gap-1"
+                      >
+                        <span>Ω</span>
+                        <span className="text-[10.5px] font-sans font-normal text-slate-700">Symbols...</span>
+                      </button>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <textarea
+                        rows={3}
+                        value={embeddedValue}
+                        onChange={(e) => setEmbeddedValue(e.target.value)}
+                        className="flex-1 p-2 border border-[#94a3b8] rounded-xs text-[11.5px] font-mono outline-none focus:border-blue-600 bg-white"
+                        placeholder="Enter embedded string data..."
+                      />
+                      <button
+                        type="button"
+                        title="Insert Symbols or Special Characters"
+                        onClick={() => setIsSpecialCharModalOpen(true)}
+                        className="w-8 h-8 self-stretch bg-[#f8fafc] hover:bg-[#e2e8f0] border border-[#94a3b8] rounded-xs text-[#003366] font-serif font-bold text-base cursor-pointer shadow-2xs flex items-center justify-center shrink-0"
+                      >
+                        Ω
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -903,6 +926,12 @@ export const NewDataSourceWizardModal: React.FC<NewDataSourceWizardModalProps> =
         </div>
 
       </div>
+
+      <SpecialCharacterModal
+        isOpen={isSpecialCharModalOpen}
+        onClose={() => setIsSpecialCharModalOpen(false)}
+        onInsert={(char) => setEmbeddedValue((prev) => prev + char)}
+      />
     </div>
   );
 };

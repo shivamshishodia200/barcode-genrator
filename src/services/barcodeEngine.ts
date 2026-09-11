@@ -443,13 +443,23 @@ export async function renderBarcodeToCanvas(
     if (!is2D) {
       options.height = Math.max(8, Math.round((element.barHeight || 12) * 1.5));
       options.includetext = Boolean(element.includeText !== false);
-      options.textxalign = element.humanReadableAlignment || element.textAlign || 'center';
+      options.textxalign = element.humanReadableAlignment || element.horizontalAlignment || element.textAlign || 'center';
       options.textyalign = element.textPosition === 'above' ? 'above' : 'below';
 
-      const fSize = element.humanReadableFontSize || element.fontSize;
-      if (fSize) {
-        options.textsize = Math.max(6, Math.min(24, Math.round(fSize)));
+      let fSize = element.humanReadableFontSize || element.fontSize || 12;
+      if (element.autoSize || element.autoSizeText) {
+        const minPt = Math.max(4, element.minFontSize || 6);
+        const maxPt = Math.max(minPt, element.maxFontSize || 20);
+        const textLen = (evaluatedValue || '').length || 8;
+        const availableWidthPx = Math.max(20, element.width * scale * 0.85);
+        // Estimate max point size that fits available width
+        const charWidthRatio = 0.55;
+        const calculatedPt = Math.floor(availableWidthPx / (textLen * charWidthRatio * (scale / 2)));
+        fSize = Math.max(minPt, Math.min(maxPt, calculatedPt));
       }
+
+      options.textsize = Math.max(4, Math.min(36, Math.round(fSize)));
+
       const fontName = element.humanReadableFont || element.fontFamily;
       if (fontName) {
         options.textfont = fontName;

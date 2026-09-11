@@ -1,6 +1,8 @@
 import { LabelTemplate } from '../../types';
 import { mmToDots } from '../../printer/dpiService';
 import { evaluateElementData } from '../../services/dataSourceEngine';
+import { isObjectCompletelyOutOfBounds } from '../../services/labelGeometry';
+import { resolveObjectPrintMethod, getEffectiveObjectPrintMethodSettings } from '../../services/objectPrintMethodService';
 
 export interface TsplRenderOptions {
   dpi?: number;
@@ -23,13 +25,14 @@ export function renderTSPL(
   const copies = Math.max(1, options.copies || 1);
   const widthMm = template.dimensions.width;
   const heightMm = template.dimensions.height;
+  const settings = getEffectiveObjectPrintMethodSettings(template);
   const effectiveGapMm = options.gapMm !== undefined
     ? options.gapMm
     : (template.sheetGrid?.gapVertical ?? template.sheetGrid?.gapHorizontal ?? 2);
 
   const tsplJobs: string[] = [];
 
-  for (const record of records) {
+  for (const [rIdx, record] of records.entries()) {
     const lines: string[] = [
       `SIZE ${widthMm} mm, ${heightMm} mm`,
     ];
@@ -56,7 +59,7 @@ export function renderTSPL(
     const sortedElements = [...template.elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
     for (const el of sortedElements) {
-      if (!el.visible || el.printable === false) continue;
+      if (!el.visible || el.printable === false || isObjectCompletelyOutOfBounds(el, template)) continue;
 
       const xD = mmToDots(el.x, dpi);
       const yD = mmToDots(el.y, dpi);
@@ -65,7 +68,7 @@ export function renderTSPL(
       const rot = el.rotation === 90 ? 90 : el.rotation === 180 ? 180 : el.rotation === 270 ? 270 : 0;
 
       if (el.type === 'text') {
-        const txt = evaluateElementData(el, { record });
+        const txt = evaluateElementData(el, { record, printIndex: rIdx, currentRecordIndex: rIdx });
         const pt = el.fontSize || 12;
         let fontName = '3';
         let xMult = 1;
@@ -90,7 +93,7 @@ export function renderTSPL(
 
         lines.push(`TEXT ${xD},${yD},"${fontName}",${rot},${xMult},${yMult},"${escapeTSPL(txt)}"`);
       } else if (el.type === 'barcode') {
-        const val = evaluateElementData(el, { record });
+        const val = evaluateElementData(el, { record, printIndex: rIdx, currentRecordIndex: rIdx });
         const barH = mmToDots(el.barHeight || el.height, dpi);
         const printText = el.includeText !== false ? 1 : 0;
 

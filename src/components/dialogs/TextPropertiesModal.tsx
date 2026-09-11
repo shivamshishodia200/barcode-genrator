@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   TextElement,
   DataSourceItem,
@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { DatabaseFieldSourceConfig } from './DatabaseFieldSourceConfig';
 import { NewDataSourceWizardModal } from './NewDataSourceWizardModal';
+import { SpecialCharacterModal } from './SpecialCharacterModal';
 
 interface TextPropertiesModalProps {
   isOpen: boolean;
@@ -98,6 +99,30 @@ export const TextPropertiesModal: React.FC<TextPropertiesModalProps> = ({
 
   // New Data Source Wizard
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
+
+  // Insert Symbols or Special Characters Modal
+  const [isSpecialCharModalOpen, setIsSpecialCharModalOpen] = useState<boolean>(false);
+  const embeddedTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleInsertSpecialChar = (symbol: string) => {
+    const textarea = embeddedTextareaRef.current;
+    const currentVal = activeDataSource.value || '';
+    if (textarea) {
+      const start = textarea.selectionStart ?? currentVal.length;
+      const end = textarea.selectionEnd ?? currentVal.length;
+      const nextVal = currentVal.substring(0, start) + symbol + currentVal.substring(end);
+      updateActiveDs({ value: nextVal });
+      setTimeout(() => {
+        if (embeddedTextareaRef.current) {
+          embeddedTextareaRef.current.focus();
+          const newPos = start + symbol.length;
+          embeddedTextareaRef.current.setSelectionRange(newPos, newPos);
+        }
+      }, 0);
+    } else {
+      updateActiveDs({ value: currentVal + symbol });
+    }
+  };
 
   // Physical units for position
   const [posUnit, setPosUnit] = useState<'mm' | 'cm' | 'inch'>('mm');
@@ -1523,13 +1548,36 @@ export const TextPropertiesModal: React.FC<TextPropertiesModalProps> = ({
                     {/* Source Specific Editor */}
                     {activeDataSource.type === 'embedded' && (
                       <div className="space-y-1.5">
-                        <label className="text-slate-600 font-medium">Embedded Text Value:</label>
-                        <textarea
-                          rows={4}
-                          value={activeDataSource.value || ''}
-                          onChange={(e) => updateActiveDs({ value: e.target.value })}
-                          className="w-full border border-[#cbd5e1] rounded p-2 text-[12px] font-mono focus:outline-[#0078d7]"
-                        />
+                        <div className="flex items-center justify-between">
+                          <label className="text-slate-600 font-medium">Embedded Text Value:</label>
+                          <button
+                            type="button"
+                            title="Insert Symbols or Special Characters"
+                            onClick={() => setIsSpecialCharModalOpen(true)}
+                            className="px-2 py-0.5 bg-[#f8fafc] hover:bg-[#e2e8f0] active:bg-[#cbd5e1] border border-[#94a3b8] rounded-xs text-[#003366] font-serif font-bold text-sm cursor-pointer shadow-2xs flex items-center gap-1"
+                          >
+                            <span>Ω</span>
+                            <span className="text-[10.5px] font-sans font-normal text-slate-700">Special Characters...</span>
+                          </button>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <textarea
+                            ref={embeddedTextareaRef}
+                            rows={4}
+                            value={activeDataSource.value || ''}
+                            onChange={(e) => updateActiveDs({ value: e.target.value })}
+                            className="flex-1 border border-[#cbd5e1] rounded p-2 text-[12px] font-mono focus:outline-[#0078d7]"
+                            placeholder="Enter embedded text value..."
+                          />
+                          <button
+                            type="button"
+                            title="Insert Symbols or Special Characters"
+                            onClick={() => setIsSpecialCharModalOpen(true)}
+                            className="w-8 h-8 self-stretch bg-[#f8fafc] hover:bg-[#e2e8f0] active:bg-[#cbd5e1] border border-[#94a3b8] rounded-xs text-[#003366] font-serif font-bold text-lg cursor-pointer shadow-2xs flex items-center justify-center shrink-0"
+                          >
+                            Ω
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -1864,10 +1912,15 @@ export const TextPropertiesModal: React.FC<TextPropertiesModalProps> = ({
         onClose={() => setIsWizardOpen(false)}
         onAddDataSource={handleWizardAddDataSource}
         datasets={datasets}
-        currentRecord={currentRecord}
-        availableVariables={availableVariables}
-        currentConnection={currentConnection}
         existingCount={dataSources.length}
+      />
+
+      {/* Insert Symbols or Special Characters Modal */}
+      <SpecialCharacterModal
+        isOpen={isSpecialCharModalOpen}
+        onClose={() => setIsSpecialCharModalOpen(false)}
+        onInsert={handleInsertSpecialChar}
+        currentFont={draftElement?.fontFamily || 'Arial'}
       />
     </div>
   );

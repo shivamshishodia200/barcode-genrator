@@ -251,4 +251,32 @@ export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
     }
     return { success: false, error: 'Platform not supported' };
   });
+
+  // 8. Cancel Queued Jobs for Specific Printer
+  ipcMain.handle('printers:cancel-queued-jobs', async (_event, printerName: string) => {
+    if (process.platform === 'win32' && printerName) {
+      return new Promise<{ success: boolean; message: string; error?: string }>((resolve) => {
+        const safeName = printerName.replace(/'/g, "''");
+        exec(
+          `powershell.exe -NoProfile -Command "Get-PrintJob -PrinterName '${safeName}' -ErrorAction SilentlyContinue | Remove-PrintJob -ErrorAction SilentlyContinue"`,
+          (err, stdout, stderr) => {
+            if (err) {
+              console.warn('[PrinterIPC] Cancel queued jobs warning/error:', err);
+              resolve({
+                success: false,
+                message: `Could not cancel jobs for "${printerName}": ${stderr || err.message}`,
+                error: err.message,
+              });
+            } else {
+              resolve({
+                success: true,
+                message: `Successfully cancelled queued print jobs for "${printerName}".`,
+              });
+            }
+          }
+        );
+      });
+    }
+    return { success: false, message: 'Platform not supported or printer not specified.' };
+  });
 }

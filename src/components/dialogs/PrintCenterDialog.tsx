@@ -1,6 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Modal } from '../common/Modal';
-import { LabelTemplate, PrinterDefinition, PrintJob, DpiOption } from '../../types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { LabelTemplate, PrinterDefinition, PrintJob, ObjectPrintMethodSettings } from '../../types';
 import {
   Printer as PrinterIcon,
   CheckCircle2,
@@ -8,7 +7,6 @@ import {
   AlertTriangle,
   Play,
   FileText,
-  Cpu,
   Layers,
   ChevronLeft,
   ChevronRight,
@@ -16,18 +14,20 @@ import {
   Database,
   Sliders,
   FileCode,
-  HardDrive,
   Check,
-  XCircle,
-  ExternalLink,
-  Download,
-  Info,
+  X,
+  SlidersHorizontal,
+  HelpCircle,
+  Settings,
+  Trash2,
+  RefreshCw,
 } from 'lucide-react';
 import { generateZPL, generateTSPL, generateEPL } from '../../services/zplEngine';
 import { renderTSPL, renderZPL, renderCPCL, renderSBPL } from '../../printing/renderers';
 import { exportLabelsToPDF } from '../../services/pdfExportService';
 import { EnterprisePrintSpooler } from '../../services/printSpoolerService';
-import { apiService } from '../../services/apiService';
+import { advanceTemplateSerialState } from '../../services/serializationEngine';
+import { evaluateElementData } from '../../services/dataSourceEngine';
 import {
   RecordSelectionModal,
   formatIndicesToRangeString,
@@ -36,11 +36,19 @@ import {
 import { PrinterPropertiesModal } from './PrinterPropertiesModal';
 import { PrinterManagerModal } from './PrinterManagerModal';
 import { PageSetupModal } from './PageSetupModal';
+import { ShowPrinterCodeModal } from './ShowPrinterCodeModal';
+import { PrinterCodeModifierModal, PrinterCodeModifierConfig } from './PrinterCodeModifierModal';
 import { PrinterService, useCentralPrinterState } from '../../printer/printerService';
 import { PrinterModel } from '../../printer/types';
-import { validatePrintJob } from '../../printer/printValidation';
+import { createPrintPlan, PrintPlan } from '../../services/printPlanService';
+import {
+  getGlobalObjectPrintMethodSettings,
+  saveGlobalObjectPrintMethodSettings,
+  getEffectiveObjectPrintMethodSettings,
+  DEFAULT_OBJECT_PRINT_METHOD_SETTINGS,
+} from '../../services/objectPrintMethodService';
 
-interface PrintCenterDialogProps {
+export interface PrintCenterDialogProps {
   isOpen: boolean;
   onClose: () => void;
   template: LabelTemplate;
@@ -51,6 +59,16 @@ interface PrintCenterDialogProps {
   selectedRecordIndices?: number[];
   onOpenDatabaseSetup?: () => void;
   onUpdateTemplate?: (template: LabelTemplate) => void;
+  onOpenPrintPreview?: (planOptions: {
+    printer: PrinterModel;
+    effectiveDpi: number | null;
+    recordsToPrint: Record<string, any>[];
+    copies: number;
+    quantitySource: 'manual' | 'database_field';
+    selectedQtyColumn?: string;
+    serializedLabels: number;
+    startingSlot: number;
+  }) => void;
 }
 
 export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
@@ -64,6 +82,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
   selectedRecordIndices: propSelectedRecordIndices = [],
   onOpenDatabaseSetup,
   onUpdateTemplate,
+  onOpenPrintPreview,
 }) => {
   const {
     availablePrinters,
@@ -73,33 +92,76 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     setActivePrinter,
   } = useCentralPrinterState();
 
-  // Printer state
+  // Dialog top tabs: 'print' | 'objectPrintMethod'
+  const [activeTopTab, setActiveTopTab] = useState<'print' | 'objectPrintMethod'>('print');
+  // Sub-tabs inside Print tab: 'quantity' | 'options'
+  const [activeSubTab, setActiveSubTab] = useState<'quantity' | 'options'>('quantity');
+
+  // Printer selection & parameters
   const [selectedPrinterId, setSelectedPrinterId] = useState<string>('');
   const [copies, setCopies] = useState<number>(1);
   const [serializedLabels, setSerializedLabels] = useState<number>(1);
+  const [printOnBothSides, setPrintOnBothSides] = useState<boolean>(false);
   const [printToFile, setPrintToFile] = useState<boolean>(false);
+  const [startingSlot, setStartingSlot] = useState<number>(
+    (template.sheetGrid as any)?.startingSlot || 1
+  );
+
+  // Print properties
   const [darkness, setDarkness] = useState<number>(18);
   const [printSpeed, setPrintSpeed] = useState<number>(4); // ips
   const [mediaType, setMediaType] = useState<'continuous' | 'gap' | 'black_mark' | 'die_cut'>('gap');
-  const [outputFormat, setOutputFormat] = useState<'zpl' | 'tspl' | 'epl' | 'cpcl' | 'sbpl' | 'pdf'>('zpl');
+  const [outputFormat, setOutputFormat] = useState<'zpl' | 'tspl' | 'epl' | 'cpcl' | 'sbpl' | 'pdf'>('pdf');
 
-  // Unknown DPI Handling and user override state
+  // Options Tab Controls
+  const [repeatDataEntry, setRepeatDataEntry] = useState<boolean>(false);
+  const [cancelQueuedJobsBeforePrint, setCancelQueuedJobsBeforePrint] = useState<boolean>(false);
+  const [enableDataEntry, setEnableDataEntry] = useState<boolean>(
+    Boolean(template.dataEntryForm || (template.variables && template.variables.some((v: any) => v.promptAtPrint)))
+  );
+  const [enableCodeModifier, setEnableCodeModifier] = useState<boolean>(false);
+  const [showPrinterCodeAtEnd, setShowPrinterCodeAtEnd] = useState<boolean>(false);
+
+  // Printer Code Modifier Config
+  const [codeModifierConfig, setCodeModifierConfig] = useState<PrinterCodeModifierConfig>({
+    enabled: false,
+    prefix: '',
+    suffix: '',
+    rules: [],
+  });
+
+  // Object Print Method Settings (Draft State)
+  const [printMethodSettings, setPrintMethodSettings] = useState<ObjectPrintMethodSettings>(() =>
+    getEffectiveObjectPrintMethodSettings(template)
+  );
+
+  // DPI override
   const [userDpiOverride, setUserDpiOverride] = useState<number | null>(null);
-  const [customDpiInput, setCustomDpiInput] = useState<string>('');
-  const [rememberDpiForPrinter, setRememberDpiForPrinter] = useState<boolean>(true);
 
   // Execution states
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [jobSuccess, setJobSuccess] = useState<string | null>(null);
   const [testPrintSuccess, setTestPrintSuccess] = useState<string | null>(null);
   const [isTestingPrint, setIsTestingPrint] = useState(false);
+  const [isCancellingJobs, setIsCancellingJobs] = useState(false);
+
+  // Generated code modal state
+  const [generatedCodePayload, setGeneratedCodePayload] = useState<{
+    isOpen: boolean;
+    code: string;
+    format: string;
+  }>({
+    isOpen: false,
+    code: '',
+    format: 'ZPL',
+  });
 
   // Sub-modals
   const [isRecordSelectionModalOpen, setIsRecordSelectionModalOpen] = useState(false);
   const [isPrinterPropertiesModalOpen, setIsPrinterPropertiesModalOpen] = useState(false);
-  const [isPrinterManagerModalOpen, setIsPrinterManagerModalOpen] = useState(false);
   const [isPageSetupModalOpen, setIsPageSetupModalOpen] = useState(false);
-  const [isDocPropertiesOpen, setIsDocPropertiesOpen] = useState(false);
+  const [isCodeModifierModalOpen, setIsCodeModifierModalOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   // Database Connection Toggle
   const hasDatabaseConnection = Boolean(
@@ -107,7 +169,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
   );
   const [useDatabaseConnection, setUseDatabaseConnection] = useState<boolean>(hasDatabaseConnection);
 
-  // BarTender Record Selection Mode
+  // Record Selection Mode
   const [recordSelectionMode, setRecordSelectionMode] = useState<'all' | 'current' | 'selected' | 'range'>('all');
   const [selectedIndices, setSelectedIndices] = useState<number[]>(
     propSelectedRecordIndices.length > 0
@@ -134,21 +196,30 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     template.databaseConnection?.quantityColumn || ''
   );
 
-  // Stepper preview index
-  const [previewStepperIndex, setPreviewStepperIndex] = useState<number>(0);
-
   const displayPrinters: PrinterModel[] = useMemo(() => {
     if (availablePrinters && availablePrinters.length > 0) {
-      return availablePrinters;
+      return availablePrinters.filter(
+        (p) =>
+          !p.isVirtual &&
+          !p.id?.includes('citizen') &&
+          !p.id?.includes('sato') &&
+          !p.id?.includes('zebra') &&
+          !p.id?.includes('tsc') &&
+          !p.id?.includes('virtual')
+      );
     }
     return [];
   }, [availablePrinters]);
 
   // Sync initial selection when opened or when template changes
   useEffect(() => {
-    if (!isOpen || displayPrinters.length === 0) return;
+    if (!isOpen) return;
 
-    // 1. Check template preferred printer
+    // Load effective object print method settings
+    setPrintMethodSettings(getEffectiveObjectPrintMethodSettings(template));
+
+    if (displayPrinters.length === 0) return;
+
     if (template.printer?.name) {
       const match = displayPrinters.find(
         (p) =>
@@ -162,7 +233,6 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
       }
     }
 
-    // 2. Central active printer
     if (activePrinter) {
       const match = displayPrinters.find((p) => p.id === activePrinter.id);
       if (match) {
@@ -171,7 +241,6 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
       }
     }
 
-    // 3. Central default printer
     if (defaultPrinter) {
       const match = displayPrinters.find((p) => p.id === defaultPrinter.id);
       if (match) {
@@ -181,7 +250,6 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
       }
     }
 
-    // 4. First non-virtual printer or first printer
     const firstChoice = displayPrinters.find((p) => !p.isVirtual) || displayPrinters[0];
     if (firstChoice) {
       setSelectedPrinterId(firstChoice.id);
@@ -200,6 +268,9 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         isDefault: true,
         status: 'READY' as const,
         dpi: 300,
+        driverName: 'Microsoft Print To PDF',
+        port: 'PORTPROMPT:',
+        portName: 'PORTPROMPT:',
         connectionType: 'windows-driver' as const,
         preferredRenderer: 'WINDOWS_DRIVER' as const,
         renderer: 'WINDOWS_DRIVER' as const,
@@ -207,16 +278,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     );
   }, [displayPrinters, selectedPrinterId]);
 
-  const isPreferredPrinterMissing = useMemo(() => {
-    if (!template.printer?.name) return false;
-    return !displayPrinters.some(
-      (p) =>
-        p.name.toLowerCase() === template.printer!.name.toLowerCase() ||
-        p.systemName.toLowerCase() === (template.printer!.systemName || '').toLowerCase()
-    );
-  }, [template.printer, displayPrinters]);
-
-  // Sync DPI override from printer profile or saved user override
+  // Sync DPI
   useEffect(() => {
     if (!selectedPrinter) return;
     if (selectedPrinter.dpi) {
@@ -233,25 +295,16 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
           return;
         }
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
     setUserDpiOverride(null);
   }, [selectedPrinterId, selectedPrinter]);
 
   const effectiveDpi = selectedPrinter?.dpi ?? userDpiOverride ?? null;
 
-  const handleSelectDpi = (dpiVal: number | null) => {
-    setUserDpiOverride(dpiVal);
-    if (selectedPrinter && dpiVal && rememberDpiForPrinter) {
-      const storageKey = `barcodeflow_printer_dpi_${(selectedPrinter.systemName || selectedPrinter.name).trim().toLowerCase()}`;
-      try {
-        localStorage.setItem(storageKey, String(dpiVal));
-      } catch {
-        // ignore
-      }
-    }
-  };
+  // Determine if printer supports thermal speed / darkness
+  const isThermalProtocol = outputFormat === 'zpl' || outputFormat === 'tspl' || outputFormat === 'epl' || outputFormat === 'cpcl' || outputFormat === 'sbpl';
+  const isSpeedSupported = isThermalProtocol || Boolean(selectedPrinter?.capabilities?.speedControl);
+  const isDarknessSupported = isThermalProtocol || Boolean(selectedPrinter?.capabilities?.darknessControl);
 
   // Raw dataset records
   const allRecords = useMemo(() => {
@@ -308,7 +361,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     template.databaseConnection,
   ]);
 
-  // Calculate total labels to print considering Excel Quantity Column and Identical Copies
+  // Total labels count
   const totalLabelsCount = useMemo(() => {
     if (quantitySource === 'database_field' && selectedQtyColumn) {
       return recordsToPrint.reduce((acc, row) => {
@@ -320,7 +373,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     return recordsToPrint.length * copies * Math.max(1, serializedLabels);
   }, [recordsToPrint, quantitySource, selectedQtyColumn, copies, serializedLabels]);
 
-  // Pre-Print Validation Engine (BarTender Rule Checks)
+  // Validation
   const validationResult = useMemo(() => {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -329,128 +382,100 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
       errors.push('No printer selected.');
     }
 
-    const isNativeFormat = ['zpl', 'tspl', 'epl', 'cpcl', 'sbpl'].includes(outputFormat);
-    if (isNativeFormat && !effectiveDpi) {
-      errors.push('Printer DPI could not be detected. Please select a printer resolution for native rendering.');
-    }
-
     if (recordsToPrint.length === 0) {
       errors.push('No records selected to print.');
     }
 
-    // Check barcode elements
-    const barcodeElements = template.elements.filter((el) =>
-      ['barcode', 'datamatrix', 'qrcode', 'gs1-128'].includes(el.type)
-    );
-
-    if (barcodeElements.length > 0) {
-      recordsToPrint.forEach((rec, idx) => {
-        barcodeElements.forEach((bEl) => {
-          let value = '';
-          const anyEl = bEl as any;
-          if (anyEl.dataSources?.primary?.type === 'database' && anyEl.dataSources?.primary?.databaseField) {
-            value = String(rec[anyEl.dataSources.primary.databaseField] ?? '');
-          } else if (anyEl.databaseField) {
-            value = String(rec[anyEl.databaseField] ?? '');
-          } else if (anyEl.dataBinding) {
-            const fieldKey = anyEl.dataBinding.replace(/[{}]/g, '').trim();
-            value = String(rec[fieldKey] ?? rec[anyEl.dataBinding] ?? '');
-          } else {
-            value = anyEl.value || anyEl.content || '';
-          }
-
-          if (!value.trim()) {
-            errors.push(
-              `Record #${idx + 1}: Barcode element "${bEl.name || bEl.id}" has empty value.`
-            );
-          }
-        });
-      });
-    }
-
-    // Check quantity column values
-    if (quantitySource === 'database_field' && selectedQtyColumn) {
-      recordsToPrint.forEach((rec, idx) => {
-        const val = rec[selectedQtyColumn];
-        if (val === undefined || val === null || String(val).trim() === '') {
-          warnings.push(`Record #${idx + 1}: Missing quantity in "${selectedQtyColumn}", defaulting to 1.`);
-        } else {
-          const num = Number(val);
-          if (isNaN(num) || num <= 0) {
-            errors.push(
-              `Record #${idx + 1}: Invalid quantity "${val}" in column "${selectedQtyColumn}". Must be >= 1.`
-            );
-          }
-        }
-      });
-    }
-
     return {
       isValid: errors.length === 0,
-      errors: errors.slice(0, 5), // Cap displayed errors for clean UI
-      totalErrors: errors.length,
-      warnings: warnings.slice(0, 3),
-      totalWarnings: warnings.length,
+      errors,
+      warnings,
     };
-  }, [template, recordsToPrint, selectedPrinter, quantitySource, selectedQtyColumn]);
+  }, [selectedPrinter, recordsToPrint]);
 
-  // Expanded label items for multi-label preview
-  const expandedPreviewItems = useMemo(() => {
-    const items: {
-      recordIndex: number;
-      copyIndex: number;
-      totalCopiesForRecord: number;
-      record: Record<string, any>;
-    }[] = [];
+  // Cancel Queued Jobs Handler
+  const handlePurgePrinterQueue = async () => {
+    if (!selectedPrinter) return;
+    const confirmPurge = window.confirm(
+      `Are you sure you want to cancel all queued print jobs for "${selectedPrinter.name}"?`
+    );
+    if (!confirmPurge) return;
 
-    recordsToPrint.forEach((rec, rIdx) => {
-      let copiesForThisRow = copies;
-      if (quantitySource === 'database_field' && selectedQtyColumn) {
-        const parsed = parseInt(String(rec[selectedQtyColumn] ?? '1'), 10);
-        copiesForThisRow = (isNaN(parsed) || parsed <= 0 ? 1 : parsed) * copies;
+    setIsCancellingJobs(true);
+    try {
+      if (window.barcodeFlow?.printers?.cancelQueuedJobs) {
+        const res = await window.barcodeFlow.printers.cancelQueuedJobs(
+          selectedPrinter.systemName || selectedPrinter.name
+        );
+        alert(res.message || (res.success ? 'Queued jobs cancelled successfully.' : 'No queued jobs found.'));
+      } else {
+        const res = await fetch(`http://localhost:3001/api/printers/${selectedPrinter.id}/cancel-jobs`, {
+          method: 'POST',
+        });
+        const json = await res.json();
+        alert(json.message || 'Queued print jobs cancelled.');
       }
-      for (let c = 1; c <= copiesForThisRow; c++) {
-        items.push({
-          recordIndex: rIdx,
-          copyIndex: c,
-          totalCopiesForRecord: copiesForThisRow,
-          record: rec,
+    } catch (err: any) {
+      alert(`Error cancelling queued jobs: ${err.message}`);
+    } finally {
+      setIsCancellingJobs(false);
+    }
+  };
+
+  // Commit Object Print Method settings
+  const commitPrintMethodSettings = (newSettings: ObjectPrintMethodSettings) => {
+    setPrintMethodSettings(newSettings);
+    if (newSettings.scope === 'global') {
+      saveGlobalObjectPrintMethodSettings(newSettings);
+      if (onUpdateTemplate && template.objectPrintMethodSettings) {
+        const updated = { ...template };
+        delete updated.objectPrintMethodSettings;
+        onUpdateTemplate(updated);
+      }
+    } else {
+      if (onUpdateTemplate) {
+        onUpdateTemplate({
+          ...template,
+          objectPrintMethodSettings: newSettings,
+          updatedAt: new Date().toISOString(),
         });
       }
-    });
-    return items;
-  }, [recordsToPrint, copies, quantitySource, selectedQtyColumn]);
+    }
+  };
 
-  const currentPreviewItem = expandedPreviewItems[previewStepperIndex] || expandedPreviewItems[0];
-
-  // Test Print: Exactly 1 Safe Label
+  // Test Print
   const handleTestPrint = async () => {
     setIsTestingPrint(true);
     setTestPrintSuccess(null);
     try {
       const sampleRecord = recordsToPrint[0] || recordData;
-
-      console.log(`[PRINT] Requested printer: ${selectedPrinter.name}`);
-      console.log(`[PRINT] Windows system printer: ${selectedPrinter.systemName || selectedPrinter.name}`);
-      console.log(`[PRINT] Renderer: ${outputFormat === 'tspl' ? 'TSPL' : outputFormat === 'zpl' ? 'ZPL' : outputFormat === 'cpcl' ? 'CPCL' : outputFormat === 'sbpl' ? 'SBPL' : 'WINDOWS_DRIVER'}`);
-      console.log(`[PRINT] Job submitted: [Test Print] 1 label (${template.dimensions.width}×${template.dimensions.height} mm)`);
-
       const testRes = await PrinterService.getInstance().executeTestPrint(
         template,
         selectedPrinter,
         sampleRecord,
         {
           dpi: effectiveDpi || undefined,
-          rendererOverride: outputFormat === 'tspl' ? 'TSPL' : outputFormat === 'zpl' ? 'ZPL' : outputFormat === 'epl' ? 'EPL' : outputFormat === 'cpcl' ? 'CPCL' : outputFormat === 'sbpl' ? 'SBPL' : outputFormat === 'pdf' ? 'PDF' : 'WINDOWS_DRIVER',
+          rendererOverride:
+            outputFormat === 'tspl'
+              ? 'TSPL'
+              : outputFormat === 'zpl'
+              ? 'ZPL'
+              : outputFormat === 'epl'
+              ? 'EPL'
+              : outputFormat === 'cpcl'
+              ? 'CPCL'
+              : outputFormat === 'sbpl'
+              ? 'SBPL'
+              : 'WINDOWS_DRIVER',
         }
       );
 
       if (!testRes.success) {
-        alert(`Test print failed: ${testRes.error || testRes.message || 'Printer not found in Windows spooler.'}`);
+        alert(`Test print failed: ${testRes.error || testRes.message || 'Printer not found.'}`);
         return;
       }
 
-      setTestPrintSuccess(`Test print dispatched: 1 label sent to "${selectedPrinter.name}"`);
+      setTestPrintSuccess(`Test print sent to "${selectedPrinter.name}"`);
       setTimeout(() => setTestPrintSuccess(null), 3500);
     } catch (err: any) {
       alert(`Test print failed: ${err.message}`);
@@ -459,65 +484,102 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     }
   };
 
+  // Preview Button Handler
+  const handleOpenPreview = () => {
+    // Commit print method settings before preview
+    commitPrintMethodSettings(printMethodSettings);
+
+    if (onOpenPrintPreview) {
+      onOpenPrintPreview({
+        printer: selectedPrinter,
+        effectiveDpi,
+        recordsToPrint,
+        copies,
+        quantitySource,
+        selectedQtyColumn: quantitySource === 'database_field' ? selectedQtyColumn : undefined,
+        serializedLabels,
+        startingSlot,
+      });
+      onClose();
+    }
+  };
+
   // Main Print Execution
   const handleExecutePrint = async () => {
     if (!validationResult.isValid) return;
 
+    // 1. Commit print method settings
+    commitPrintMethodSettings(printMethodSettings);
+
+    // 2. Pre-job Queue Cancellation if checked
+    if (cancelQueuedJobsBeforePrint && selectedPrinter) {
+      try {
+        if (window.barcodeFlow?.printers?.cancelQueuedJobs) {
+          await window.barcodeFlow.printers.cancelQueuedJobs(selectedPrinter.systemName || selectedPrinter.name);
+        } else {
+          await fetch(`http://localhost:3001/api/printers/${selectedPrinter.id}/cancel-jobs`, { method: 'POST' });
+        }
+      } catch (e) {
+        console.warn('[PrintCenter] Pre-job queue cancel failed:', e);
+      }
+    }
+
     setIsSubmitting(true);
     try {
-      const dispatchedRecords: Record<string, any>[] = [];
-      recordsToPrint.forEach((rec) => {
-        let copiesForThisRow = copies;
-        if (quantitySource === 'database_field' && selectedQtyColumn) {
-          const parsed = parseInt(String(rec[selectedQtyColumn] ?? '1'), 10);
-          copiesForThisRow = (isNaN(parsed) || parsed <= 0 ? 1 : parsed) * copies;
-        }
-        for (let c = 0; c < copiesForThisRow; c++) {
-          dispatchedRecords.push({ ...rec });
-        }
+      // Build deterministic print plan
+      const plan = createPrintPlan(template, {
+        printer: selectedPrinter,
+        copies,
+        recordsToPrint,
+        quantitySource,
+        selectedQtyColumn: quantitySource === 'database_field' ? selectedQtyColumn : undefined,
+        serializedLabels,
+        startingSlot,
+        effectiveDpi,
       });
 
-      // Handle Serialization (increment serial numbers if serializedLabels > 1)
-      if (serializedLabels > 1) {
-        const serializedExpanded: Record<string, any>[] = [];
-        let counterSeq = 1;
-        dispatchedRecords.forEach((baseRec) => {
-          for (let s = 0; s < serializedLabels; s++) {
-            const paddedSerial = String(counterSeq).padStart(6, '0');
-            serializedExpanded.push({
-              ...baseRec,
-              SERIAL_NO: paddedSerial,
-              SERIAL: paddedSerial,
-              COUNTER: paddedSerial,
-              SN: paddedSerial,
-            });
-            counterSeq++;
-          }
-        });
-        dispatchedRecords.length = 0;
-        dispatchedRecords.push(...serializedExpanded);
+      const dispatchedRecords = plan.items.map((it) => it.record);
+
+      // Render raw code if thermal or printToFile
+      let generatedRawCode = '';
+      if (outputFormat === 'tspl') {
+        generatedRawCode = renderTSPL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
+      } else if (outputFormat === 'epl') {
+        generatedRawCode = dispatchedRecords.map((r) => generateEPL(template, r as any)).join('\n');
+      } else if (outputFormat === 'cpcl') {
+        generatedRawCode = renderCPCL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
+      } else if (outputFormat === 'sbpl') {
+        generatedRawCode = renderSBPL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
+      } else if (outputFormat === 'zpl') {
+        generatedRawCode = renderZPL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
       }
 
-      // Handle "Print to file" (PRN / ZPL file download)
-      if (printToFile) {
-        let fileContent = '';
-        if (outputFormat === 'tspl') {
-          fileContent = renderTSPL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
-        } else if (outputFormat === 'epl') {
-          fileContent = dispatchedRecords.map((r) => generateEPL(template, r as any)).join('\n');
-        } else if (outputFormat === 'cpcl') {
-          fileContent = renderCPCL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
-        } else if (outputFormat === 'sbpl') {
-          fileContent = renderSBPL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
-        } else {
-          fileContent = renderZPL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
+      // Apply Printer Code Modifier if active
+      if (enableCodeModifier && codeModifierConfig.enabled && generatedRawCode) {
+        let modified = generatedRawCode;
+        if (codeModifierConfig.rules && codeModifierConfig.rules.length > 0) {
+          codeModifierConfig.rules.forEach((rule) => {
+            if (rule.find) {
+              modified = modified.split(rule.find).join(rule.replace || '');
+            }
+          });
         }
+        if (codeModifierConfig.prefix) {
+          modified = `${codeModifierConfig.prefix}\n${modified}`;
+        }
+        if (codeModifierConfig.suffix) {
+          modified = `${modified}\n${codeModifierConfig.suffix}`;
+        }
+        generatedRawCode = modified;
+      }
 
-        const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+      // Handle "Print to file" (PRN / ZPL / TSPL download)
+      if (printToFile && generatedRawCode) {
+        const blob = new Blob([generatedRawCode], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `${template.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}.prn`;
+        link.download = `${(template.name || 'Document1').replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}.${outputFormat === 'zpl' ? 'zpl' : outputFormat === 'tspl' ? 'txt' : 'prn'}`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -528,11 +590,6 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         await exportLabelsToPDF(template, dispatchedRecords);
       }
 
-      console.log(`[PRINT] Requested printer: ${selectedPrinter.name}`);
-      console.log(`[PRINT] Windows system printer: ${selectedPrinter.systemName || selectedPrinter.name}`);
-      console.log(`[PRINT] Renderer: ${outputFormat.toUpperCase()}`);
-      console.log(`[PRINT] Job submitted: ${dispatchedRecords.length} label(s) (${template.dimensions.width}×${template.dimensions.height} mm)`);
-
       const hardwareDispatchResult = await PrinterService.getInstance().dispatchPrintJob({
         template,
         printer: selectedPrinter,
@@ -541,13 +598,30 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         darkness,
         speed: printSpeed,
         dpi: effectiveDpi || undefined,
-        rendererOverride: outputFormat === 'tspl' ? 'TSPL' : outputFormat === 'zpl' ? 'ZPL' : outputFormat === 'epl' ? 'EPL' : outputFormat === 'cpcl' ? 'CPCL' : outputFormat === 'sbpl' ? 'SBPL' : outputFormat === 'pdf' ? 'PDF' : 'WINDOWS_DRIVER',
+        rendererOverride:
+          outputFormat === 'tspl'
+            ? 'TSPL'
+            : outputFormat === 'zpl'
+            ? 'ZPL'
+            : outputFormat === 'epl'
+            ? 'EPL'
+            : outputFormat === 'cpcl'
+            ? 'CPCL'
+            : outputFormat === 'sbpl'
+            ? 'SBPL'
+            : 'WINDOWS_DRIVER',
       });
 
       if (!hardwareDispatchResult.success) {
         setIsSubmitting(false);
         alert(`Print execution error: ${hardwareDispatchResult.error || hardwareDispatchResult.message || 'Spooler failed.'}`);
         return;
+      }
+
+      // Advance serial sequence counters on template elements upon confirmed print dispatch
+      if (onUpdateTemplate) {
+        const advancedTemplate = advanceTemplateSerialState(template, dispatchedRecords.length);
+        onUpdateTemplate(advancedTemplate);
       }
 
       const spooler = EnterprisePrintSpooler.getInstance();
@@ -575,7 +649,6 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         speed: printSpeed,
       });
 
-      // Attach immutable BarcodeFlow print snapshot & metadata
       dispatchedJob.dataSnapshot = recordsToPrint.map((r) => ({ ...r }));
       dispatchedJob.printMode = recordSelectionMode;
       dispatchedJob.quantityColumn = quantitySource === 'database_field' ? selectedQtyColumn : undefined;
@@ -586,122 +659,187 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
       dispatchedJob.status = 'completed';
 
       onJobSubmitted(dispatchedJob);
-      setJobSuccess(
-        `Dispatched ${dispatchedRecords.length} label(s) to "${selectedPrinter.name}" successfully.`
-      );
-      setTimeout(() => {
+
+      // Check if Show Printer Code modal should be displayed
+      if (showPrinterCodeAtEnd && generatedRawCode) {
+        setGeneratedCodePayload({
+          isOpen: true,
+          code: generatedRawCode,
+          format: outputFormat.toUpperCase(),
+        });
+      }
+
+      setJobSuccess(`Dispatched ${dispatchedRecords.length} label(s) to "${selectedPrinter.name}" successfully.`);
+
+      if (!showPrinterCodeAtEnd && !repeatDataEntry) {
+        setTimeout(() => {
+          setIsSubmitting(false);
+          onClose();
+          setJobSuccess(null);
+        }, 1200);
+      } else {
         setIsSubmitting(false);
-        onClose();
-        setJobSuccess(null);
-      }, 1400);
+        setTimeout(() => setJobSuccess(null), 3500);
+      }
     } catch (err: any) {
       setIsSubmitting(false);
       alert(`Print execution error: ${err.message}`);
     }
   };
 
+  if (!isOpen) return null;
+
+  const docTitleName = template.name ? (template.name.endsWith('.btw') || template.name.endsWith('.bfl') ? template.name : `${template.name}.btw`) : 'Document1.btw';
+
   return (
-    <>
-      <Modal
-        isOpen={isOpen}
-        onClose={onClose}
-        title="Industrial Print Center & Spooler"
-        maxWidth="max-w-3xl"
-      >
-        <div className="space-y-4 text-xs text-slate-700">
-          {jobSuccess ? (
-            <div className="p-8 text-center space-y-3">
-              <CheckCircle2 className="w-14 h-14 text-emerald-500 mx-auto" />
-              <h3 className="text-base font-bold text-slate-900">Job Sent to Enterprise Spooler</h3>
-              <p className="text-slate-600">{jobSuccess}</p>
-            </div>
-          ) : (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 select-none font-sans text-xs">
+      {/* CLASSIC WINDOWS DESKTOP PRINT DIALOG (Matching Reference Layout) */}
+      <div className="w-[600px] max-w-[95vw] bg-[#f4f7fb] border border-[#7d9ebc] rounded-md shadow-2xl overflow-hidden flex flex-col text-slate-800">
+        {/* Title Bar */}
+        <div className="h-7 bg-gradient-to-r from-[#e8edf5] to-[#d8e3f0] border-b border-[#b8c9db] flex items-center justify-between px-3 shrink-0">
+          <span className="font-semibold text-slate-800 text-[12px] truncate">
+            Print [{docTitleName}]
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-5 h-5 flex items-center justify-center text-slate-500 hover:bg-red-600 hover:text-white rounded-xs transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Top Tabs */}
+        <div className="flex items-center px-3 pt-2 bg-[#f4f7fb] border-b border-[#cbdbe9] gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveTopTab('print')}
+            className={`px-4 py-1 rounded-t border-t border-l border-r font-medium text-[11.5px] cursor-pointer transition-colors -mb-px ${
+              activeTopTab === 'print'
+                ? 'bg-white border-[#b8c9db] text-slate-900 font-semibold shadow-2xs'
+                : 'bg-[#e4ebf5] border-transparent text-slate-600 hover:bg-[#ebf1f8]'
+            }`}
+          >
+            Print
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTopTab('objectPrintMethod')}
+            className={`px-3 py-1 rounded-t border-t border-l border-r font-medium text-[11.5px] cursor-pointer transition-colors -mb-px ${
+              activeTopTab === 'objectPrintMethod'
+                ? 'bg-white border-[#b8c9db] text-slate-900 font-semibold shadow-2xs'
+                : 'bg-[#e4ebf5] border-transparent text-slate-600 hover:bg-[#ebf1f8]'
+            }`}
+          >
+            Object Print Method
+          </button>
+        </div>
+
+        {/* Tab Body */}
+        <div className="p-3 bg-white space-y-3 flex-1 overflow-y-auto overflow-x-hidden min-h-[380px]">
+          {activeTopTab === 'print' ? (
             <>
-              {/* SECTION 1: PRINTER SELECTION & HARDWARE DETAILS (B1) */}
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-                {isPreferredPrinterMissing && (
-                  <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 text-xs flex items-center justify-between gap-2">
+              {/* 1. PRINTER FIELDSET GROUP */}
+              <fieldset className="border border-[#c5d4e4] rounded p-3 pt-1.5 bg-[#fafcff]">
+                <legend className="px-1 text-[11px] font-semibold text-slate-700">
+                  Printer
+                </legend>
+
+                <div className="flex items-start justify-between gap-3">
+                  {/* Left: Printer details */}
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    {/* Name Dropdown */}
                     <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Preferred printer unavailable: <strong>{template.printer?.name}</strong></span>
-                    </div>
-                    {defaultPrinter && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedPrinterId(defaultPrinter.id);
-                          setActivePrinter(defaultPrinter);
+                      <label className="w-16 text-right text-slate-700 font-medium shrink-0">
+                        Name:
+                      </label>
+                      <select
+                        value={selectedPrinterId}
+                        onChange={(e) => {
+                          setSelectedPrinterId(e.target.value);
+                          const p = displayPrinters.find((x) => x.id === e.target.value);
+                          if (p) {
+                            setActivePrinter(p);
+                            if (p.nativeLanguages?.includes('TSPL')) setOutputFormat('tspl');
+                            else if (p.nativeLanguages?.includes('ZPL')) setOutputFormat('zpl');
+                            else if (p.nativeLanguages?.includes('EPL')) setOutputFormat('epl');
+                            else if (p.nativeLanguages?.includes('CPCL')) setOutputFormat('cpcl');
+                            else if (p.nativeLanguages?.includes('SBPL')) setOutputFormat('sbpl');
+                            else setOutputFormat('pdf');
+                          }
                         }}
-                        className="px-2 py-0.5 bg-white border border-amber-300 rounded text-[10px] font-semibold hover:bg-amber-100 text-amber-800"
+                        className="flex-1 min-w-0 px-2 py-1 bg-white border border-[#a4bed8] rounded text-[11.5px] text-slate-900 focus:outline-blue-500 font-medium truncate"
                       >
-                        Use Windows Default ({defaultPrinter.name})
-                      </button>
-                    )}
-                  </div>
-                )}
+                        {displayPrinters.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.isDefault ? `Default (currently ${p.name})` : p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <PrinterIcon className="w-4 h-4 text-indigo-600" />
-                    <span className="font-bold text-xs text-slate-900">Printer:</span>
-                    <select
-                      value={selectedPrinterId}
-                      onChange={(e) => {
-                        setSelectedPrinterId(e.target.value);
-                        const p = displayPrinters.find((x) => x.id === e.target.value);
-                        if (p) {
-                          setActivePrinter(p);
-                          if (p.nativeLanguages?.includes('TSPL')) setOutputFormat('tspl');
-                          else if (p.nativeLanguages?.includes('ZPL')) setOutputFormat('zpl');
-                          else if (p.nativeLanguages?.includes('EPL')) setOutputFormat('epl');
-                          else if (p.nativeLanguages?.includes('CPCL')) setOutputFormat('cpcl');
-                          else if (p.nativeLanguages?.includes('SBPL')) setOutputFormat('sbpl');
-                          else setOutputFormat('pdf');
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-1 focus:ring-indigo-500 min-w-[200px]"
-                    >
-                      {displayPrinters.some((p) => !p.isVirtual) && (
-                        <optgroup label="Installed Windows Printers">
-                          {displayPrinters
-                            .filter((p) => !p.isVirtual)
-                            .map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} {p.isDefault ? '(Default)' : ''}
-                              </option>
-                            ))}
-                        </optgroup>
-                      )}
-                      {displayPrinters.some((p) => p.isVirtual) && (
-                        <optgroup label="Virtual BarcodeFlow Printers">
-                          {displayPrinters
-                            .filter((p) => p.isVirtual)
-                            .map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                        </optgroup>
-                      )}
-                    </select>
+                    {/* Status */}
+                    <div className="flex items-center gap-2">
+                      <span className="w-16 text-right text-slate-500 font-medium shrink-0">
+                        Status:
+                      </span>
+                      <span className="text-slate-800 font-medium">
+                        {String(selectedPrinter.status).toUpperCase() === 'READY' || String(selectedPrinter.status).toLowerCase() === 'online'
+                          ? 'Ready'
+                          : String(selectedPrinter.status || 'Ready')}
+                      </span>
+                    </div>
 
-                    <span
-                      className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${
-                        selectedPrinter?.status?.toLowerCase() === 'ready' || selectedPrinter?.status?.toLowerCase() === 'online'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : selectedPrinter?.status?.toLowerCase() === 'busy'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {selectedPrinter?.status?.toLowerCase() === 'ready' || selectedPrinter?.status?.toLowerCase() === 'online'
-                        ? 'Ready'
-                        : selectedPrinter?.status || 'Offline'}
-                    </span>
+                    {/* Model */}
+                    <div className="flex items-center gap-2">
+                      <span className="w-16 text-right text-slate-500 font-medium shrink-0">
+                        Model:
+                      </span>
+                      <span className="text-slate-800 font-medium truncate">
+                        {selectedPrinter.driverName || selectedPrinter.model || selectedPrinter.name}
+                      </span>
+                    </div>
+
+                    {/* Port */}
+                    <div className="flex items-center gap-2">
+                      <span className="w-16 text-right text-slate-500 font-medium shrink-0">
+                        Port:
+                      </span>
+                      <span className="text-slate-800 font-mono text-[11px] truncate">
+                        {selectedPrinter.portName || selectedPrinter.port || 'PORTPROMPT:'}
+                      </span>
+                    </div>
+
+                    {/* Location */}
+                    <div className="flex items-center gap-2">
+                      <span className="w-16 text-right text-slate-500 font-medium shrink-0">
+                        Location:
+                      </span>
+                      <span className="text-slate-800 truncate">
+                        {(selectedPrinter as any).location || ''}
+                      </span>
+                    </div>
+
+                    {/* Comment */}
+                    <div className="flex items-center gap-2">
+                      <span className="w-16 text-right text-slate-500 font-medium shrink-0">
+                        Comment:
+                      </span>
+                      <span className="text-slate-800 truncate">
+                        {(selectedPrinter as any).comment || ''}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Printer action buttons */}
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Right: Buttons and Checkboxes */}
+                  <div className="w-[170px] flex flex-col gap-1.5 shrink-0 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsPageSetupModalOpen(true)}
+                      className="w-full px-2.5 py-1 bg-gradient-to-b from-[#f8faff] to-[#e4edf7] hover:from-white hover:to-[#ebf3fc] border border-[#a4bed8] rounded text-slate-800 text-[11.5px] font-medium shadow-2xs transition-colors cursor-pointer text-center"
+                    >
+                      Document Properties...
+                    </button>
                     <button
                       type="button"
                       onClick={async () => {
@@ -716,525 +854,596 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
                           setIsPrinterPropertiesModalOpen(true);
                         }
                       }}
-                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 transition-colors flex items-center gap-1 shadow-2xs"
-                      title="Open Windows Native Printing Preferences"
+                      className="w-full px-2.5 py-1 bg-gradient-to-b from-[#f8faff] to-[#e4edf7] hover:from-white hover:to-[#ebf3fc] border border-[#a4bed8] rounded text-slate-800 text-[11.5px] font-medium shadow-2xs transition-colors cursor-pointer text-center"
                     >
-                      <Sliders className="w-3.5 h-3.5 text-slate-500" />
-                      Preferences...
+                      Printer Properties...
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsPageSetupModalOpen(true)}
-                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 transition-colors flex items-center gap-1 shadow-2xs"
-                      title="Edit page dimensions, margins, and multi-up grid layout"
-                    >
-                      <Info className="w-3.5 h-3.5 text-indigo-600" />
-                      Document Properties...
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleTestPrint}
-                      disabled={isTestingPrint}
-                      className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
-                      title="Prints 1 test label only using sample data"
-                    >
-                      <FileCode className="w-3.5 h-3.5 text-indigo-600" />
-                      {isTestingPrint ? 'Testing...' : 'Test Print (1 Label)'}
-                    </button>
-                  </div>
-                </div>
 
-                {/* Printer hardware info line */}
-                <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-3 font-mono bg-white p-2 rounded-lg border border-slate-200">
-                  <span><strong>Device:</strong> {selectedPrinter?.name}</span>
-                  <span>•</span>
-                  <span><strong>Driver:</strong> {selectedPrinter?.driverName || 'Windows Driver'}</span>
-                  <span>•</span>
-                  <span><strong>Port:</strong> {selectedPrinter?.portName || selectedPrinter?.port || 'Spooler'}</span>
-                  <span>•</span>
-                  <span><strong>DPI:</strong> {effectiveDpi ? `${effectiveDpi} DPI` : 'Unknown'}</span>
-                </div>
-
-                {/* Resolution selector when hardware DPI is unknown */}
-                {!selectedPrinter?.dpi && (
-                  <div className={`p-3 rounded-lg border text-xs space-y-2 ${
-                    !effectiveDpi ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-slate-50 border-slate-200 text-slate-800'
-                  }`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 font-bold">
-                        {!effectiveDpi ? (
-                          <>
-                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                            <span>Printer DPI could not be detected.</span>
-                          </>
-                        ) : (
-                          <>
-                            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <span>Resolution Override: {effectiveDpi} DPI</span>
-                          </>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        {outputFormat === 'pdf' ? 'Optional for Windows Driver' : 'Required for Native Output'}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 pt-1">
-                      <span className="font-semibold text-slate-700">Printer Resolution:</span>
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="printerDpiRadio"
-                          checked={effectiveDpi === 203}
-                          onChange={() => handleSelectDpi(203)}
-                          className="text-indigo-600"
-                        />
-                        <span>203 DPI</span>
-                      </label>
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="printerDpiRadio"
-                          checked={effectiveDpi === 300}
-                          onChange={() => handleSelectDpi(300)}
-                          className="text-indigo-600"
-                        />
-                        <span>300 DPI</span>
-                      </label>
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="printerDpiRadio"
-                          checked={effectiveDpi === 600}
-                          onChange={() => handleSelectDpi(600)}
-                          className="text-indigo-600"
-                        />
-                        <span>600 DPI</span>
-                      </label>
-                      <div className="flex items-center gap-1">
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="printerDpiRadio"
-                            checked={effectiveDpi !== null && ![203, 300, 600].includes(effectiveDpi)}
-                            onChange={() => {
-                              const customVal = parseInt(customDpiInput, 10);
-                              if (!isNaN(customVal) && customVal > 0) {
-                                handleSelectDpi(customVal);
-                              }
-                            }}
-                            className="text-indigo-600"
-                          />
-                          <span>Custom:</span>
-                        </label>
-                        <input
-                          type="number"
-                          min={100}
-                          max={1200}
-                          placeholder="DPI"
-                          value={customDpiInput}
-                          onChange={(e) => {
-                            setCustomDpiInput(e.target.value);
-                            const val = parseInt(e.target.value, 10);
-                            if (!isNaN(val) && val >= 50 && val <= 2400) {
-                              handleSelectDpi(val);
-                            }
-                          }}
-                          className="w-16 px-2 py-0.5 bg-white border border-slate-300 rounded text-[11px] font-mono"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-0.5">
-                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-600">
+                    <div className="pt-1.5 space-y-1 text-[11px] text-slate-700">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={rememberDpiForPrinter}
-                          onChange={(e) => {
-                            setRememberDpiForPrinter(e.target.checked);
-                            if (e.target.checked && effectiveDpi && selectedPrinter) {
-                              const storageKey = `barcodeflow_printer_dpi_${(selectedPrinter.systemName || selectedPrinter.name).trim().toLowerCase()}`;
-                              localStorage.setItem(storageKey, String(effectiveDpi));
-                            }
-                          }}
-                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                          checked={printOnBothSides}
+                          onChange={(e) => setPrintOnBothSides(e.target.checked)}
+                          disabled={!selectedPrinter.capabilities?.duplex}
+                          className="rounded border-[#a4bed8] text-blue-600 disabled:opacity-40"
                         />
-                        <span>Remember for this printer</span>
+                        <span className={!selectedPrinter.capabilities?.duplex ? 'text-slate-400' : ''}>
+                          Print on Both Sides
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={printToFile}
+                          onChange={(e) => setPrintToFile(e.target.checked)}
+                          className="rounded border-[#a4bed8] text-blue-600"
+                        />
+                        <span>Print to File</span>
                       </label>
                     </div>
                   </div>
-                )}
+                </div>
+              </fieldset>
 
-                {testPrintSuccess && (
-                  <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-medium flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{testPrintSuccess}</span>
-                  </div>
-                )}
-
-                {/* Document Properties Collapsible Card */}
-                {isDocPropertiesOpen && (
-                  <div className="p-3 bg-indigo-50/50 rounded-lg border border-indigo-200 text-xs space-y-1.5 animate-in fade-in">
-                    <div className="font-bold text-indigo-950 flex items-center justify-between">
-                      <span>Label Document Specification: {template.name}</span>
-                      <span className="text-[10px] text-indigo-600">BarcodeFlow Document Engine</span>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px] pt-1">
-                      <div>Width: <strong>{template.dimensions.width} mm</strong></div>
-                      <div>Height: <strong>{template.dimensions.height} mm</strong></div>
-                      <div>DPI: <strong>{template.dimensions.dpi || 203}</strong></div>
-                      <div>Elements: <strong>{template.elements.length} Objects</strong></div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* SECTION 2: COPIES & SERIALIZATION (B2) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-white border border-slate-200 rounded-xl">
-                <div>
-                  <label className="text-xs font-bold text-slate-800 block mb-1">
-                    Identical Copies of Each Label:
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={10000}
-                    value={copies}
-                    onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
-                  />
-                  <span className="text-[10px] text-slate-400 block mt-0.5">
-                    Duplicate prints per database row
-                  </span>
+              {/* 2. SUB-TABS: QUANTITY & OPTIONS */}
+              <div className="border border-[#c5d4e4] rounded bg-[#fafcff] overflow-hidden">
+                {/* Sub Tab Headers */}
+                <div className="flex items-center px-2 pt-1 bg-[#edf3f9] border-b border-[#cbdbe9] gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubTab('quantity')}
+                    className={`px-3 py-0.5 rounded-t border-t border-l border-r text-[11px] cursor-pointer transition-colors -mb-px ${
+                      activeSubTab === 'quantity'
+                        ? 'bg-white border-[#c5d4e4] text-slate-900 font-bold shadow-2xs'
+                        : 'bg-[#e0eaf5] border-transparent text-slate-600 hover:bg-[#eaf0f8]'
+                    }`}
+                  >
+                    Quantity
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubTab('options')}
+                    className={`px-3 py-0.5 rounded-t border-t border-l border-r text-[11px] cursor-pointer transition-colors -mb-px ${
+                      activeSubTab === 'options'
+                        ? 'bg-white border-[#c5d4e4] text-slate-900 font-bold shadow-2xs'
+                        : 'bg-[#e0eaf5] border-transparent text-slate-600 hover:bg-[#eaf0f8]'
+                    }`}
+                  >
+                    Options
+                  </button>
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-800 block mb-1">
-                    Serialized Labels Count:
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={10000}
-                    value={serializedLabels}
-                    onChange={(e) => setSerializedLabels(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
-                  />
-                  <span className="text-[10px] text-slate-400 block mt-0.5">
-                    Sequential numbering multiplier
-                  </span>
-                </div>
+                {/* Sub Tab Content */}
+                <div className="p-3 bg-white space-y-3">
+                  {activeSubTab === 'quantity' ? (
+                    <>
+                      {/* Copies Stepper */}
+                      <div className="flex items-center gap-3">
+                        <label className="text-slate-700 font-medium">
+                          Copies:
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={1}
+                            max={9999}
+                            value={copies}
+                            onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            className="w-20 px-2 py-0.5 bg-white border border-[#a4bed8] rounded text-slate-900 font-bold text-center focus:outline-blue-500"
+                          />
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setCopies((c) => c + 1)}
+                              className="px-1 py-0.2 bg-[#e8edf5] hover:bg-[#d8e3f0] border border-[#a4bed8] rounded text-[8px] font-bold"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCopies((c) => Math.max(1, c - 1))}
+                              className="px-1 py-0.2 bg-[#e8edf5] hover:bg-[#d8e3f0] border border-[#a4bed8] rounded text-[8px] font-bold"
+                            >
+                              ▼
+                            </button>
+                          </div>
+                        </div>
 
-                <div className="flex flex-col justify-between">
-                  <span className="text-xs font-bold text-slate-800 block mb-1">Output Handling:</span>
-                  <label className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100">
-                    <input
-                      type="checkbox"
-                      checked={printToFile}
-                      onChange={(e) => setPrintToFile(e.target.checked)}
-                      className="rounded text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <div className="text-[11px] font-medium text-slate-700 flex items-center gap-1.5">
-                      <Download className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Print to File (.prn / .zpl)</span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* SECTION 3: DATABASE CONNECTION CARD (B3) */}
-              <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-900">
-                    <input
-                      type="checkbox"
-                      checked={useDatabaseConnection}
-                      onChange={(e) => setUseDatabaseConnection(e.target.checked)}
-                      className="rounded text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <Database className="w-4 h-4 text-indigo-600" />
-                    <span>Use Database / Data Source Connection</span>
-                  </label>
-
-                  {onOpenDatabaseSetup && (
-                    <button
-                      type="button"
-                      onClick={onOpenDatabaseSetup}
-                      className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      Database Connection Setup...
-                    </button>
-                  )}
-                </div>
-
-                {useDatabaseConnection ? (
-                  <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-xs text-emerald-950">
-                          {template.databaseConnection?.name || 'Linked Excel Spreadsheet'}
-                        </span>
-                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded">
-                          {template.databaseConnection?.mode === 'linked' ? 'Excel Linked' : 'Connected'}
-                        </span>
-                        {template.databaseConnection?.sheetName && (
-                          <span className="text-[11px] font-mono text-emerald-800">
-                            [{template.databaseConnection.sheetName}]
-                          </span>
+                        {/* Quantity Source Toggle */}
+                        {template.databaseConnection?.quantityColumn && (
+                          <div className="flex items-center gap-1.5 ml-4">
+                            <input
+                              type="checkbox"
+                              id="useQtyCol"
+                              checked={quantitySource === 'database_field'}
+                              onChange={(e) => setQuantitySource(e.target.checked ? 'database_field' : 'manual')}
+                              className="rounded border-[#a4bed8] text-blue-600"
+                            />
+                            <label htmlFor="useQtyCol" className="text-[11px] text-slate-700 cursor-pointer">
+                              From Column ({selectedQtyColumn})
+                            </label>
+                          </div>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-600 mt-0.5 truncate max-w-md font-mono">
-                        {template.databaseConnection?.filePath || 'Active database dataset'}
-                      </p>
-                    </div>
 
-                    <div className="text-right text-xs">
-                      <span className="font-bold text-emerald-800">
-                        {allRecords.length} records available
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-slate-500 text-[11px]">
-                    Database connection disabled. Printing single standalone label using current designer record.
-                  </div>
-                )}
-              </div>
+                      {/* Record Selection Group */}
+                      <div className="pt-1">
+                        <div className="relative flex py-1.5 items-center">
+                          <div className="flex-grow border-t border-[#cbdbe9]"></div>
+                          <span className="flex-shrink mx-2 text-[11px] font-semibold text-slate-600">
+                            Record Selection
+                          </span>
+                          <div className="flex-grow border-t border-[#cbdbe9]"></div>
+                        </div>
 
-              {/* SECTION 4: QUERIED RECORDS / RECORD SELECTION (B4) */}
-              {useDatabaseConnection && (
-                <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <Layers className="w-4 h-4 text-indigo-600" />
-                      <span>Queried Records:</span>
-                    </label>
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={useDatabaseConnection}
+                              onChange={(e) => setUseDatabaseConnection(e.target.checked)}
+                              disabled={!hasDatabaseConnection}
+                              className="rounded border-[#a4bed8] text-blue-600 disabled:opacity-40"
+                            />
+                            <span className={!hasDatabaseConnection ? 'text-slate-400 font-medium' : 'font-medium text-slate-800'}>
+                              Use Database
+                            </span>
+                          </label>
 
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={recordSelectionMode}
-                        onChange={(e) => setRecordSelectionMode(e.target.value as any)}
-                        className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800"
-                      >
-                        <option value="all">All Records ({allRecords.length})</option>
-                        <option value="current">Current Record (Row #{activeRecordIndex + 1})</option>
-                        <option value="selected">Selected Records ({selectedIndices.length})</option>
-                        <option value="range">Record Range (e.g. 1-10)</option>
-                      </select>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onOpenDatabaseSetup) {
+                                onOpenDatabaseSetup();
+                              }
+                            }}
+                            className="px-3 py-1 bg-gradient-to-b from-[#f8faff] to-[#e4edf7] hover:from-white hover:to-[#ebf3fc] border border-[#a4bed8] rounded text-slate-800 text-[11px] font-medium shadow-2xs transition-colors cursor-pointer"
+                          >
+                            Database Connection Setup...
+                          </button>
+                        </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setIsRecordSelectionModalOpen(true)}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1"
-                      >
-                        Select Records...
-                      </button>
-                    </div>
-                  </div>
+                        {/* Database records summary and filtering */}
+                        {useDatabaseConnection && hasDatabaseConnection && (
+                          <div className="mt-2.5 p-2 bg-[#f4f8fc] border border-[#d2e0ee] rounded flex items-center justify-between text-[11px]">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-700">Records:</span>
+                              <select
+                                value={recordSelectionMode}
+                                onChange={(e) => setRecordSelectionMode(e.target.value as any)}
+                                className="px-2 py-0.5 bg-white border border-[#a4bed8] rounded text-[11px] font-medium"
+                              >
+                                <option value="all">All Records ({allRecords.length})</option>
+                                <option value="current">Current Record (#{activeRecordIndex + 1})</option>
+                                <option value="selected">Selected Records ({selectedIndices.length})</option>
+                                <option value="range">Range: {rangeString || 'All'}</option>
+                              </select>
+                            </div>
 
-                  {/* Range Text Input Bar */}
-                  {recordSelectionMode === 'range' && (
-                    <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                      <span className="text-xs font-semibold text-slate-700">Record Range:</span>
-                      <input
-                        type="text"
-                        value={rangeString}
-                        onChange={(e) => setRangeString(e.target.value)}
-                        placeholder="e.g. 1, 3, 7-10"
-                        className="flex-1 px-2.5 py-1 bg-white border border-slate-300 rounded text-xs font-mono text-slate-800 font-bold"
-                      />
-                      <span className="text-[11px] text-indigo-600 font-bold">
-                        {recordsToPrint.length} records in range
-                      </span>
+                            <button
+                              type="button"
+                              onClick={() => setIsRecordSelectionModalOpen(true)}
+                              className="px-2.5 py-0.5 bg-white hover:bg-slate-50 border border-[#a4bed8] rounded text-blue-700 font-semibold"
+                            >
+                              Select Records...
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    /* Options Tab (Rebuilt with Reference Workflow) */
+                    <div className="space-y-3 text-[11.5px] text-slate-800">
+                      {/* Job & Data Entry Checkboxes */}
+                      <div className="space-y-1.5 pb-2 border-b border-[#e2edf8]">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={repeatDataEntry}
+                            onChange={(e) => setRepeatDataEntry(e.target.checked)}
+                            className="rounded border-[#a4bed8] text-blue-600"
+                          />
+                          <span>Repeat data entry until cancelled</span>
+                        </label>
+
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={cancelQueuedJobsBeforePrint}
+                              onChange={(e) => setCancelQueuedJobsBeforePrint(e.target.checked)}
+                              className="rounded border-[#a4bed8] text-blue-600"
+                            />
+                            <span>Cancel any jobs previously queued to this printer</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handlePurgePrinterQueue}
+                            disabled={isCancellingJobs}
+                            className="px-2 py-0.5 bg-[#fef2f2] hover:bg-[#fee2e2] text-red-700 border border-red-200 rounded text-[10.5px] font-medium cursor-pointer"
+                          >
+                            {isCancellingJobs ? 'Purging...' : 'Purge Queue Now'}
+                          </button>
+                        </div>
+
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={enableDataEntry}
+                            onChange={(e) => setEnableDataEntry(e.target.checked)}
+                            className="rounded border-[#a4bed8] text-blue-600"
+                          />
+                          <span>Enable data entry</span>
+                        </label>
+
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={enableCodeModifier}
+                              onChange={(e) => {
+                                setEnableCodeModifier(e.target.checked);
+                                setCodeModifierConfig((prev) => ({ ...prev, enabled: e.target.checked }));
+                              }}
+                              className="rounded border-[#a4bed8] text-blue-600"
+                            />
+                            <span>Enable Printer Code Modifier</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setIsCodeModifierModalOpen(true)}
+                            className="px-2 py-0.5 bg-[#f0f5fc] hover:bg-[#e2eefb] text-blue-700 border border-[#a4bed8] rounded text-[10.5px] font-medium cursor-pointer"
+                          >
+                            Configure Modifier...
+                          </button>
+                        </div>
+
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showPrinterCodeAtEnd}
+                            onChange={(e) => setShowPrinterCodeAtEnd(e.target.checked)}
+                            disabled={outputFormat === 'pdf'}
+                            className="rounded border-[#a4bed8] text-blue-600 disabled:opacity-40"
+                          />
+                          <span className={outputFormat === 'pdf' ? 'text-slate-400' : ''}>
+                            Show printer code at end of print job {outputFormat === 'pdf' ? '(ZPL/TSPL Only)' : ''}
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Advanced Printer Settings Section */}
+                      <fieldset className="border border-[#d2e0ee] rounded p-2.5 pt-1 bg-[#f9fbfe] space-y-2">
+                        <legend className="px-1 text-[11px] font-semibold text-slate-700">
+                          Advanced Printer Settings
+                        </legend>
+
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-medium text-slate-600">Starting Slot:</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={template.sheetGrid ? (template.sheetGrid.rows || 1) * (template.sheetGrid.columns || 1) : 1}
+                              value={startingSlot}
+                              onChange={(e) => setStartingSlot(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                              className="w-16 px-1.5 py-0.5 bg-white border border-[#a4bed8] rounded text-center text-slate-900 font-bold"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-medium text-slate-600">Output Protocol:</span>
+                            <select
+                              value={outputFormat}
+                              onChange={(e) => setOutputFormat(e.target.value as any)}
+                              className="px-1.5 py-0.5 bg-white border border-[#a4bed8] rounded font-medium text-[10.5px]"
+                            >
+                              <option value="pdf">Windows Driver / High-Res PDF</option>
+                              <option value="zpl">Zebra ZPL (Direct Thermal/TT)</option>
+                              <option value="tspl">TSC TSPL (Direct Thermal/TT)</option>
+                              <option value="epl">Eltron EPL</option>
+                              <option value="cpcl">CPCL Mobile</option>
+                              <option value="sbpl">SATO SBPL</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={`font-medium ${!isSpeedSupported ? 'text-slate-400' : 'text-slate-600'}`}>
+                              Print Speed:
+                            </span>
+                            <select
+                              value={printSpeed}
+                              onChange={(e) => setPrintSpeed(parseInt(e.target.value, 10))}
+                              disabled={!isSpeedSupported}
+                              className="px-1.5 py-0.5 bg-white border border-[#a4bed8] rounded disabled:opacity-40 text-[10.5px]"
+                            >
+                              <option value={2}>2 ips (High Quality)</option>
+                              <option value={4}>4 ips (Standard)</option>
+                              <option value={6}>6 ips (High Speed)</option>
+                              <option value={8}>8 ips (Draft)</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={`font-medium ${!isDarknessSupported ? 'text-slate-400' : 'text-slate-600'}`}>
+                              Darkness (Heat):
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={30}
+                              value={darkness}
+                              onChange={(e) => setDarkness(parseInt(e.target.value, 10) || 18)}
+                              disabled={!isDarknessSupported}
+                              className="w-16 px-1.5 py-0.5 bg-white border border-[#a4bed8] rounded text-center disabled:opacity-40"
+                            />
+                          </div>
+                        </div>
+                      </fieldset>
                     </div>
                   )}
-
-                  <div className="text-[11px] text-slate-500 flex items-center justify-between">
-                    <span>
-                      Active Scope: <strong>{recordsToPrint.length}</strong> of {allRecords.length} records chosen
-                    </span>
-                    <span className="font-mono text-indigo-600 font-bold">
-                      Range: {rangeString || 'All'}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* SECTION 5: COPIES PER RECORD / QUANTITY FIELD (B5) */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-800">
-                    Quantity Source (Copies per Record):
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-slate-700">
-                      <input
-                        type="radio"
-                        name="qtySource"
-                        value="manual"
-                        checked={quantitySource === 'manual'}
-                        onChange={() => setQuantitySource('manual')}
-                        className="text-indigo-600"
-                      />
-                      <span>Manual Quantity ({copies})</span>
-                    </label>
-
-                    {availableColumns.length > 0 && (
-                      <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-slate-700">
-                        <input
-                          type="radio"
-                          name="qtySource"
-                          value="database_field"
-                          checked={quantitySource === 'database_field'}
-                          onChange={() => setQuantitySource('database_field')}
-                          className="text-indigo-600"
-                        />
-                        <span>Database Field</span>
-                      </label>
-                    )}
-                  </div>
-                </div>
-
-                {quantitySource === 'database_field' && availableColumns.length > 0 && (
-                  <div className="p-2.5 bg-white rounded-lg border border-slate-200 flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-700 shrink-0">
-                      Excel Quantity Column:
-                    </span>
-                    <select
-                      value={selectedQtyColumn}
-                      onChange={(e) => setSelectedQtyColumn(e.target.value)}
-                      className="flex-1 px-2.5 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-bold text-indigo-900"
-                    >
-                      <option value="">-- Choose Column (e.g. Quantity / Copies) --</option>
-                      {availableColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col} (Sample value: {String(allRecords[0]?.[col] ?? '1')})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* SECTION 6: PRE-PRINT VALIDATION BANNER (B6) */}
-              <div
-                className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs ${
-                  validationResult.isValid
-                    ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
-                    : 'bg-red-50 border-red-300 text-red-900'
-                }`}
-              >
-                {validationResult.isValid ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                )}
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold">
-                      {validationResult.isValid
-                        ? `✓ Pre-Print Validation Passed — ${recordsToPrint.length} records ready to print`
-                        : `Pre-Print Validation Failed (${validationResult.totalErrors} issue${
-                            validationResult.totalErrors > 1 ? 's' : ''
-                          })`}
-                    </span>
-                    <span className="font-bold font-mono">
-                      Total Output: {totalLabelsCount} Labels
-                    </span>
-                  </div>
-
-                  {!validationResult.isValid && (
-                    <ul className="list-disc list-inside text-red-700 space-y-0.5 font-mono text-[11px] pt-1">
-                      {validationResult.errors.map((err, i) => (
-                        <li key={i}>{err}</li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {validationResult.warnings.length > 0 && (
-                    <div className="text-amber-700 text-[11px] pt-0.5">
-                      {validationResult.warnings.join(' • ')}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Multi-label Stepper Preview */}
-              {expandedPreviewItems.length > 0 && (
-                <div className="p-3 bg-indigo-50/40 border border-indigo-100 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
-                      <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Multi-Label Sequence Preview</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-indigo-900 font-mono">
-                      <button
-                        type="button"
-                        disabled={previewStepperIndex <= 0}
-                        onClick={() => setPreviewStepperIndex((p) => Math.max(0, p - 1))}
-                        className="p-1 rounded bg-white hover:bg-indigo-100 disabled:opacity-30 border border-indigo-200"
-                      >
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="font-bold px-1.5">
-                        Label {previewStepperIndex + 1} of {expandedPreviewItems.length}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={previewStepperIndex >= expandedPreviewItems.length - 1}
-                        onClick={() => setPreviewStepperIndex((p) => Math.min(expandedPreviewItems.length - 1, p + 1))}
-                        className="p-1 rounded bg-white hover:bg-indigo-100 disabled:opacity-30 border border-indigo-200"
-                      >
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {currentPreviewItem && (
-                    <div className="bg-white p-2.5 rounded-lg border border-indigo-100 text-[11px] flex items-center justify-between gap-2">
-                      <span className="font-bold text-indigo-700 font-mono shrink-0">
-                        Record #{currentPreviewItem.recordIndex + 1} (Label Copy {currentPreviewItem.copyIndex}/{currentPreviewItem.totalCopiesForRecord}):
-                      </span>
-                      <span className="text-slate-600 truncate font-mono">
-                        {Object.entries(currentPreviewItem.record).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(' | ')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* FOOTER ACTIONS */}
-              <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-                <div className="text-xs text-slate-500 font-mono">
-                  Format: <strong>{outputFormat.toUpperCase()}</strong> • Darkness: <strong>{darkness}</strong> • Speed: <strong>{printSpeed} ips</strong>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-4 py-1.5 border border-slate-300 hover:bg-slate-100 rounded-lg text-slate-700 font-semibold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExecutePrint}
-                    disabled={isSubmitting || !validationResult.isValid || totalLabelsCount === 0}
-                    className="flex items-center gap-1.5 px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-lg font-bold shadow-xs transition-colors"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-white" />
-                    <span>{isSubmitting ? 'Spooling...' : `Print ${totalLabelsCount} Labels`}</span>
-                  </button>
                 </div>
               </div>
             </>
+          ) : (
+            /* TAB 2: OBJECT PRINT METHOD (Fully functional desktop configuration layout) */
+            <div className="space-y-3.5">
+              {/* Settings Scope Radio Group */}
+              <fieldset className="border border-[#c5d4e4] rounded p-3 pt-1.5 bg-[#fafcff]">
+                <legend className="px-1 text-[11px] font-semibold text-slate-700">
+                  Settings
+                </legend>
+                <div className="flex items-center gap-6 text-[11.5px]">
+                  <label className="flex items-center gap-2 cursor-pointer font-medium">
+                    <input
+                      type="radio"
+                      name="settingsScope"
+                      value="global"
+                      checked={printMethodSettings.scope === 'global'}
+                      onChange={() =>
+                        setPrintMethodSettings((prev) => ({ ...prev, scope: 'global' }))
+                      }
+                      className="text-blue-600"
+                    />
+                    <span>Use Settings For All Documents</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium">
+                    <input
+                      type="radio"
+                      name="settingsScope"
+                      value="document"
+                      checked={printMethodSettings.scope === 'document'}
+                      onChange={() =>
+                        setPrintMethodSettings((prev) => ({ ...prev, scope: 'document' }))
+                      }
+                      className="text-blue-600"
+                    />
+                    <span>Use Settings For This Document Only</span>
+                  </label>
+                </div>
+              </fieldset>
+
+              {/* Objects Configuration Group */}
+              <fieldset className="border border-[#c5d4e4] rounded p-3 pt-2 bg-white">
+                <legend className="px-1 text-[11px] font-semibold text-slate-700">
+                  Objects
+                </legend>
+
+                <div className="space-y-2.5 text-[11.5px]">
+                  {/* TrueType Text */}
+                  <div className="flex items-center justify-between">
+                    <label className="w-52 text-slate-700 font-medium">
+                      TrueType Text:
+                    </label>
+                    <select
+                      value={printMethodSettings.trueTypeText}
+                      onChange={(e) =>
+                        setPrintMethodSettings((prev) => ({
+                          ...prev,
+                          trueTypeText: e.target.value as any,
+                        }))
+                      }
+                      className="flex-1 max-w-[260px] px-2 py-1 bg-white border border-[#a4bed8] rounded text-[11px] font-medium"
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="text-output">Text Output</option>
+                      <option value="vector">Vector</option>
+                      <option value="raster">Raster</option>
+                    </select>
+                  </div>
+
+                  {/* Unsupported 1D Barcodes */}
+                  <div className="flex items-center justify-between">
+                    <label className="w-52 text-slate-700 font-medium">
+                      Unsupported 1D Barcodes:
+                    </label>
+                    <select
+                      value={printMethodSettings.unsupported1D}
+                      onChange={(e) =>
+                        setPrintMethodSettings((prev) => ({
+                          ...prev,
+                          unsupported1D: e.target.value as any,
+                        }))
+                      }
+                      className="flex-1 max-w-[260px] px-2 py-1 bg-white border border-[#a4bed8] rounded text-[11px] font-medium"
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="native">Printer Native</option>
+                      <option value="vector">Vector</option>
+                      <option value="raster">Raster</option>
+                    </select>
+                  </div>
+
+                  {/* Unsupported 2D Barcodes */}
+                  <div className="flex items-center justify-between">
+                    <label className="w-52 text-slate-700 font-medium">
+                      Unsupported 2D Barcodes:
+                    </label>
+                    <select
+                      value={printMethodSettings.unsupported2D}
+                      onChange={(e) =>
+                        setPrintMethodSettings((prev) => ({
+                          ...prev,
+                          unsupported2D: e.target.value as any,
+                        }))
+                      }
+                      className="flex-1 max-w-[260px] px-2 py-1 bg-white border border-[#a4bed8] rounded text-[11px] font-medium"
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="native">Printer Native</option>
+                      <option value="vector">Vector</option>
+                      <option value="raster">Raster</option>
+                    </select>
+                  </div>
+
+                  {/* Lines */}
+                  <div className="flex items-center justify-between">
+                    <label className="w-52 text-slate-700 font-medium">
+                      Lines:
+                    </label>
+                    <select
+                      value={printMethodSettings.lines}
+                      onChange={(e) =>
+                        setPrintMethodSettings((prev) => ({
+                          ...prev,
+                          lines: e.target.value as any,
+                        }))
+                      }
+                      className="flex-1 max-w-[260px] px-2 py-1 bg-white border border-[#a4bed8] rounded text-[11px] font-medium"
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="native">Printer Native</option>
+                      <option value="vector">Vector</option>
+                      <option value="raster">Raster</option>
+                    </select>
+                  </div>
+
+                  {/* Boxes */}
+                  <div className="flex items-center justify-between">
+                    <label className="w-52 text-slate-700 font-medium">
+                      Boxes:
+                    </label>
+                    <select
+                      value={printMethodSettings.boxes}
+                      onChange={(e) =>
+                        setPrintMethodSettings((prev) => ({
+                          ...prev,
+                          boxes: e.target.value as any,
+                        }))
+                      }
+                      className="flex-1 max-w-[260px] px-2 py-1 bg-white border border-[#a4bed8] rounded text-[11px] font-medium"
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="native">Printer Native</option>
+                      <option value="vector">Vector</option>
+                      <option value="raster">Raster</option>
+                    </select>
+                  </div>
+
+                  {/* Ellipses */}
+                  <div className="flex items-center justify-between">
+                    <label className="w-52 text-slate-700 font-medium">
+                      Ellipses:
+                    </label>
+                    <select
+                      value={printMethodSettings.ellipses}
+                      onChange={(e) =>
+                        setPrintMethodSettings((prev) => ({
+                          ...prev,
+                          ellipses: e.target.value as any,
+                        }))
+                      }
+                      className="flex-1 max-w-[260px] px-2 py-1 bg-white border border-[#a4bed8] rounded text-[11px] font-medium"
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="native">Printer Native</option>
+                      <option value="vector">Vector</option>
+                      <option value="raster">Raster</option>
+                    </select>
+                  </div>
+                </div>
+              </fieldset>
+
+              {/* Capability status footer */}
+              <div className="p-2 bg-[#f4f8fc] border border-[#d2e0ee] rounded flex items-center justify-between text-[11px] text-slate-600">
+                <span>
+                  Active Printer: <strong className="text-slate-800">{selectedPrinter.name}</strong> ({selectedPrinter.dpi || 300} DPI)
+                </span>
+                <span className="text-blue-700 font-medium">
+                  Pipeline: {outputFormat.toUpperCase()} / {selectedPrinter.connectionType || 'Windows Driver'}
+                </span>
+              </div>
+            </div>
           )}
         </div>
-      </Modal>
 
-      {/* Record Selection Modal (B4) */}
+        {/* 3. BOTTOM BUTTONS BAR ([Test Print] [Print] [Preview] [Close] [Cancel] [Help]) */}
+        <div className="h-11 bg-[#f4f7fb] border-t border-[#cbdbe9] px-3 flex items-center justify-between shrink-0">
+          {/* Left button: Test Print */}
+          <div>
+            <button
+              type="button"
+              onClick={handleTestPrint}
+              disabled={isTestingPrint}
+              className="min-w-[75px] px-3 py-1 bg-gradient-to-b from-[#f8faff] to-[#e4edf7] hover:from-white hover:to-[#ebf3fc] border border-[#a4bed8] rounded text-slate-800 text-[11.5px] font-medium shadow-2xs transition-colors cursor-pointer text-center"
+            >
+              {isTestingPrint ? 'Testing...' : 'Test Print'}
+            </button>
+          </div>
+
+          {/* Right buttons: [Print] [Preview] [Close] [Cancel] [Help] */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleExecutePrint}
+              disabled={isSubmitting || !validationResult.isValid}
+              className="min-w-[65px] px-4 py-1 bg-[#1973e8] hover:bg-[#1557b0] text-white border border-[#1350a2] rounded text-[11.5px] font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-40 text-center"
+            >
+              {isSubmitting ? 'Printing...' : 'Print'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenPreview}
+              className="min-w-[65px] px-3 py-1 bg-gradient-to-b from-[#f8faff] to-[#e4edf7] hover:from-white hover:to-[#ebf3fc] border border-[#a4bed8] rounded text-slate-800 text-[11.5px] font-medium shadow-2xs transition-colors cursor-pointer text-center"
+            >
+              Preview
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                commitPrintMethodSettings(printMethodSettings);
+                onClose();
+              }}
+              className="min-w-[60px] px-3 py-1 bg-gradient-to-b from-[#f8faff] to-[#e4edf7] hover:from-white hover:to-[#ebf3fc] border border-[#a4bed8] rounded text-slate-800 text-[11.5px] font-medium shadow-2xs transition-colors cursor-pointer text-center"
+            >
+              Close
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-w-[60px] px-3 py-1 bg-gradient-to-b from-[#f8faff] to-[#e4edf7] hover:from-white hover:to-[#ebf3fc] border border-[#a4bed8] rounded text-slate-800 text-[11.5px] font-medium shadow-2xs transition-colors cursor-pointer text-center"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsHelpOpen(true)}
+              className="min-w-[50px] px-2.5 py-1 bg-gradient-to-b from-[#f8faff] to-[#e4edf7] hover:from-white hover:to-[#ebf3fc] border border-[#a4bed8] rounded text-slate-800 text-[11.5px] font-medium shadow-2xs transition-colors cursor-pointer text-center"
+            >
+              Help
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Sub Modals */}
       <RecordSelectionModal
         isOpen={isRecordSelectionModalOpen}
         onClose={() => setIsRecordSelectionModalOpen(false)}
@@ -1250,7 +1459,6 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         }}
       />
 
-      {/* Printer Hardware Properties Modal (B1) */}
       {selectedPrinter && (
         <PrinterPropertiesModal
           isOpen={isPrinterPropertiesModalOpen}
@@ -1267,16 +1475,6 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         />
       )}
 
-      {/* Enterprise Printers & Media Manager (Phase 95) */}
-      <PrinterManagerModal
-        isOpen={isPrinterManagerModalOpen}
-        onClose={() => setIsPrinterManagerModalOpen(false)}
-        onPrinterSelected={(p) => {
-          setSelectedPrinterId(p.id);
-        }}
-      />
-
-      {/* Editable Document Properties / Page Setup Modal */}
       {isPageSetupModalOpen && (
         <PageSetupModal
           isOpen={isPageSetupModalOpen}
@@ -1312,6 +1510,55 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
           }}
         />
       )}
-    </>
+
+      {/* Printer Code Modifier Configuration Modal */}
+      <PrinterCodeModifierModal
+        isOpen={isCodeModifierModalOpen}
+        onClose={() => setIsCodeModifierModalOpen(false)}
+        config={codeModifierConfig}
+        onSaveConfig={(newConfig) => {
+          setCodeModifierConfig(newConfig);
+          setEnableCodeModifier(newConfig.enabled);
+        }}
+      />
+
+      {/* Show Printer Code Modal */}
+      <ShowPrinterCodeModal
+        isOpen={generatedCodePayload.isOpen}
+        onClose={() => setGeneratedCodePayload((prev) => ({ ...prev, isOpen: false }))}
+        rawCode={generatedCodePayload.code}
+        format={generatedCodePayload.format}
+        printerName={selectedPrinter.name}
+      />
+
+      {/* Help Modal */}
+      {isHelpOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-[440px] bg-white border border-[#7d9ebc] rounded shadow-2xl p-4 space-y-3 text-slate-800">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="font-bold text-slate-800 text-sm">Printing Help & Instructions</h3>
+              <button onClick={() => setIsHelpOpen(false)} className="text-slate-500 hover:text-black">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="text-xs text-slate-600 space-y-2 leading-relaxed">
+              <p><strong>Printer:</strong> Select installed Windows printers or direct thermal network endpoints.</p>
+              <p><strong>Object Print Method:</strong> Configure vector, raster, or native thermal output streams for text, barcodes, and shapes.</p>
+              <p><strong>Job Options:</strong> Enable automatic data entry repetition, queue purge, and native code viewer.</p>
+              <p><strong>Preview:</strong> Preview output before spooling. Content outside label boundaries is strictly clipped.</p>
+            </div>
+            <div className="text-right pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setIsHelpOpen(false)}
+                className="px-4 py-1 bg-blue-600 text-white rounded font-medium text-xs hover:bg-blue-700"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };

@@ -1,6 +1,8 @@
 import { LabelTemplate } from '../../types';
 import { mmToDots } from '../../printer/dpiService';
 import { evaluateElementData } from '../../services/dataSourceEngine';
+import { isObjectCompletelyOutOfBounds } from '../../services/labelGeometry';
+import { resolveObjectPrintMethod, getEffectiveObjectPrintMethodSettings } from '../../services/objectPrintMethodService';
 
 export interface ZplRenderOptions {
   dpi?: number;
@@ -22,10 +24,11 @@ export function renderZPL(
   const copies = Math.max(1, options.copies || 1);
   const pw = mmToDots(template.dimensions.width, dpi);
   const ll = mmToDots(template.dimensions.height, dpi);
+  const settings = getEffectiveObjectPrintMethodSettings(template);
 
   const zplJobs: string[] = [];
 
-  for (const record of records) {
+  for (const [rIdx, record] of records.entries()) {
     const lines: string[] = [
       '^XA',
       `^PW${pw}`,
@@ -57,7 +60,7 @@ export function renderZPL(
     const sortedElements = [...template.elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
     for (const el of sortedElements) {
-      if (!el.visible || el.printable === false) continue;
+      if (!el.visible || el.printable === false || isObjectCompletelyOutOfBounds(el, template)) continue;
 
       const x = mmToDots(el.x, dpi);
       const y = mmToDots(el.y, dpi);
@@ -66,7 +69,7 @@ export function renderZPL(
       const zplOrientation = el.rotation === 90 ? 'R' : el.rotation === 180 ? 'I' : el.rotation === 270 ? 'B' : 'N';
 
       if (el.type === 'text') {
-        const textVal = evaluateElementData(el, { record });
+        const textVal = evaluateElementData(el, { record, printIndex: rIdx, currentRecordIndex: rIdx });
         const fontHeight = Math.max(12, Math.round(el.fontSize * (dpi / 72)));
         const fontWidth = Math.round(fontHeight * 0.85);
 
@@ -78,7 +81,7 @@ export function renderZPL(
         }
         lines.push(`^FD${escapeZPL(textVal)}^FS`);
       } else if (el.type === 'barcode') {
-        const barVal = evaluateElementData(el, { record });
+        const barVal = evaluateElementData(el, { record, printIndex: rIdx, currentRecordIndex: rIdx });
         const barHeight = mmToDots(el.barHeight || el.height, dpi);
         const printText = el.includeText ? 'Y' : 'N';
 

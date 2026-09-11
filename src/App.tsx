@@ -19,8 +19,10 @@ import {
 } from './types';
 import { INITIAL_TEMPLATES, getUserPersonalizedTemplates } from './services/initialTemplates';
 import { INITIAL_PRINT_JOBS, INITIAL_AUDIT_LOGS, INITIAL_USERS, INITIAL_BATCH_JOBS } from './services/mockDataService';
-import { useCentralPrinterState } from './printer/printerService';
+import { PrinterService, useCentralPrinterState } from './printer/printerService';
 import { PrinterModel } from './printer/types';
+import { advanceTemplateSerialState } from './services/serializationEngine';
+import { PrintPreviewWorkspace } from './components/views/PrintPreviewWorkspace';
 import { MenuBar } from './components/menu/MenuBar';
 import { ObjectToolbar } from './components/toolbar/ObjectToolbar';
 import { LeftDockPanel } from './components/sidebar/LeftDockPanel';
@@ -41,6 +43,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 import { BarcodePickerModal } from './components/dialogs/BarcodePickerModal';
 import { BarcodePropertiesModal } from './components/dialogs/BarcodePropertiesModal';
+import { DataEditModal } from './components/dialogs/DataEditModal';
 import { GS1ApplicationIdentifierWizardModal } from './components/dialogs/GS1ApplicationIdentifierWizardModal';
 import { PrintCenterDialog } from './components/dialogs/PrintCenterDialog';
 import { ZplExportDialog } from './components/dialogs/ZplExportDialog';
@@ -146,8 +149,11 @@ export default function App() {
 
   const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
   const [activeTool, setActiveTool] = useState<
-    'select' | 'text' | 'barcode' | 'qr' | 'datamatrix' | 'rect' | 'circle' | 'line' | 'table' | 'image'
+    'select' | 'data-edit' | 'text' | 'barcode' | 'qr' | 'datamatrix' | 'rect' | 'circle' | 'line' | 'table' | 'image'
   >('select');
+  const [isDataEditOpen, setIsDataEditOpen] = useState<boolean>(false);
+  const [dataEditTargetElement, setDataEditTargetElement] = useState<LabelElement | null>(null);
+  const [barcodePropsInitialCategory, setBarcodePropsInitialCategory] = useState<string>('symbology');
 
   const [activeView, setActiveView] = useState<
     'designer' | 'dashboard' | 'queue' | 'workflow' | 'viewer' | 'datasets' | 'license' | 'software-download' | 'super-admin'
@@ -271,6 +277,17 @@ export default function App() {
   const [isBarcodePropertiesOpen, setIsBarcodePropertiesOpen] = useState(false);
   const [isGs1WizardOpen, setIsGs1WizardOpen] = useState(false);
   const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
+  const [isPrintPreviewActive, setIsPrintPreviewActive] = useState(false);
+  const [printPreviewOptions, setPrintPreviewOptions] = useState<{
+    printer: PrinterModel;
+    effectiveDpi: number | null;
+    recordsToPrint: Record<string, any>[];
+    copies: number;
+    quantitySource: 'manual' | 'database_field';
+    selectedQtyColumn?: string;
+    serializedLabels: number;
+    startingSlot: number;
+  } | null>(null);
   const [isZplExportOpen, setIsZplExportOpen] = useState(false);
   const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
@@ -2463,6 +2480,15 @@ export default function App() {
           return;
         }
 
+        // Ctrl + R -> Open Print Preview
+        if (e.key === 'r' || e.key === 'R') {
+          e.preventDefault();
+          if (currentTemplate) {
+            setIsPrintPreviewActive(true);
+          }
+          return;
+        }
+
         // Ctrl + N -> New Document Wizard
         if (!isInputFocused && (e.key === 'n' || e.key === 'N')) {
           e.preventDefault();
@@ -3338,6 +3364,7 @@ export default function App() {
             onOpenBarcodePicker={() => setIsBarcodePickerOpen(true)}
             onOpenBarcodeProperties={() => setIsBarcodePropertiesOpen(true)}
             onOpenPrintDialog={() => setIsPrintDialogOpen(true)}
+            onPrintPreview={() => setIsPrintPreviewActive(true)}
             onOpenBatchPrint={() => setActiveView('viewer')}
             onOpenApproval={() => setIsApprovalModalOpen(true)}
             onOpenAuditLogs={() => setIsAuditLogsOpen(true)}
@@ -3422,7 +3449,7 @@ export default function App() {
               onPageSetup={() => setIsPageSetupOpen(true)}
               onDatabaseSetup={() => setIsDatabaseConnectionModalOpen(true)}
               onPrint={() => setIsPrintDialogOpen(true)}
-              onPrintPreview={() => setIsPrintDialogOpen(true)}
+              onPrintPreview={() => setIsPrintPreviewActive(true)}
               onCut={handleCut}
               onCopy={handleCopy}
               onPaste={handlePaste}
@@ -3453,7 +3480,10 @@ export default function App() {
               onToggleGuides={() => setViewport((prev) => ({ ...prev, showGuides: !prev.showGuides }))}
               snapToGrid={viewport.snapToGrid}
               onToggleSnap={() => setViewport((prev) => ({ ...prev, snapToGrid: !prev.snapToGrid }))}
-              onOpenBarcodeProperties={() => setIsBarcodePropertiesOpen(true)}
+              onOpenBarcodeProperties={() => {
+                setBarcodePropsInitialCategory('symbology');
+                setIsBarcodePropertiesOpen(true);
+              }}
               selectedElement={currentTemplate.elements.find((e) => selectedElementIds.includes(e.id))}
               onUpdateSelectedElement={(updates) => {
                 if (selectedElementIds.length > 0) {
@@ -3605,10 +3635,18 @@ export default function App() {
                       onGroup={handleGroup}
                       onUngroup={handleUngroup}
                       onLockToggle={handleLockToggle}
+                      activeTool={activeTool}
+                      onDataEditElement={(el) => {
+                        setDataEditTargetElement(el);
+                        setIsDataEditOpen(true);
+                      }}
                       onOpenProperties={() => {
                         const selEl = currentTemplate.elements.find((e) => selectedElementIds.includes(e.id));
                         if (selEl) {
-                          if (selEl.type === 'barcode') setIsBarcodePropertiesOpen(true);
+                          if (selEl.type === 'barcode') {
+                            setBarcodePropsInitialCategory('symbology');
+                            setIsBarcodePropertiesOpen(true);
+                          }
                           else if (selEl.type === 'text') setIsTextPropertiesOpen(true);
                           else if (selEl.type === 'shape') setIsShapePropertiesOpen(true);
                           else setShowRightDock(true);
@@ -3617,7 +3655,10 @@ export default function App() {
                         }
                       }}
                       onOpenBarcodePicker={() => setIsBarcodePickerOpen(true)}
-                      onOpenBarcodeProperties={() => setIsBarcodePropertiesOpen(true)}
+                      onOpenBarcodeProperties={() => {
+                        setBarcodePropsInitialCategory('symbology');
+                        setIsBarcodePropertiesOpen(true);
+                      }}
                       onOpenPageSetup={() => setIsPageSetupOpen(true)}
                       onInsertElementAt={(elPartial, xMm, yMm) => {
                         const newEl: LabelElement = {
@@ -4125,6 +4166,10 @@ export default function App() {
         selectedRecordIndices={selectedRecordIndices}
         onOpenDatabaseSetup={() => setIsDatabaseConnectionModalOpen(true)}
         onUpdateTemplate={(updatedTmpl) => updateTemplate(updatedTmpl)}
+        onOpenPrintPreview={(opts) => {
+          setPrintPreviewOptions(opts);
+          setIsPrintPreviewActive(true);
+        }}
         onJobSubmitted={async (job) => {
           setPrintJobs((prev) => [job, ...prev]);
 
@@ -4157,6 +4202,70 @@ export default function App() {
           }
         }}
       />
+
+      {/* Dedicated Desktop Print Preview Workspace */}
+      {isPrintPreviewActive && currentTemplate && (
+        <PrintPreviewWorkspace
+          template={currentTemplate}
+          printer={
+            printPreviewOptions?.printer ||
+            ({
+              id: 'fallback-pdf',
+              name: 'Microsoft Print to PDF',
+              systemName: 'Microsoft Print to PDF',
+              isDefault: true,
+              status: 'READY',
+              dpi: 300,
+              driverName: 'Microsoft Print To PDF',
+              port: 'PORTPROMPT:',
+              portName: 'PORTPROMPT:',
+              connectionType: 'windows-driver',
+              preferredRenderer: 'WINDOWS_DRIVER',
+              renderer: 'WINDOWS_DRIVER',
+            } as any)
+          }
+          effectiveDpi={printPreviewOptions?.effectiveDpi ?? 300}
+          recordsToPrint={
+            printPreviewOptions?.recordsToPrint ||
+            (currentTemplate.databaseConnection?.records?.length
+              ? currentTemplate.databaseConnection.records
+              : [currentRecordData])
+          }
+          copies={printPreviewOptions?.copies || 1}
+          quantitySource={printPreviewOptions?.quantitySource || 'manual'}
+          selectedQtyColumn={printPreviewOptions?.selectedQtyColumn}
+          serializedLabels={printPreviewOptions?.serializedLabels || 1}
+          startingSlot={printPreviewOptions?.startingSlot || 1}
+          onClose={() => setIsPrintPreviewActive(false)}
+          onPrint={async (plan) => {
+            try {
+              const dispatchedRecords = plan.items.map((it) => it.record);
+              const hardwareDispatchResult = await PrinterService.getInstance().dispatchPrintJob({
+                template: currentTemplate,
+                printer: plan.printer,
+                records: dispatchedRecords,
+                copies: 1,
+                dpi: plan.effectiveDpi || undefined,
+                rendererOverride: 'WINDOWS_DRIVER',
+              });
+
+              if (!hardwareDispatchResult.success) {
+                alert(`Print execution error: ${hardwareDispatchResult.error || hardwareDispatchResult.message}`);
+                return;
+              }
+
+              // Advance serialization
+              const advancedTemplate = advanceTemplateSerialState(currentTemplate, dispatchedRecords.length);
+              updateTemplate(advancedTemplate);
+
+              showToast(`Printed ${plan.totalLabels} label(s) to "${plan.printer.name}" successfully!`, 'success');
+              setIsPrintPreviewActive(false);
+            } catch (err: any) {
+              alert(`Print error: ${err.message}`);
+            }
+          }}
+        />
+      )}
 
       <NewDocumentWizardModal
         isOpen={isNewDocWizardOpen}
@@ -4367,6 +4476,7 @@ export default function App() {
       <BarcodePropertiesModal
         isOpen={isBarcodePropertiesOpen}
         onClose={() => setIsBarcodePropertiesOpen(false)}
+        initialCategory={barcodePropsInitialCategory}
         element={
           (currentTemplate.elements.find((e) => selectedElementIds.includes(e.id) && e.type === 'barcode') ||
             currentTemplate.elements.find((e) => e.type === 'barcode') ||
@@ -4404,6 +4514,22 @@ export default function App() {
         currentRecord={currentRecordData}
         currentConnection={currentTemplate.databaseConnection}
         onConnectDataset={handleConnectDatasetToTemplate}
+      />
+
+      {/* BarTender Data Edit Modal (Screenshot 5) */}
+      <DataEditModal
+        isOpen={isDataEditOpen}
+        onClose={() => setIsDataEditOpen(false)}
+        element={dataEditTargetElement}
+        onUpdateElement={(id, updates) => {
+          updateSingleElement(id, updates);
+        }}
+        onOpenDataSources={(el) => {
+          setIsDataEditOpen(false);
+          setBarcodePropsInitialCategory('datasource-item');
+          setSelectedElementIds([el.id]);
+          setIsBarcodePropertiesOpen(true);
+        }}
       />
 
       {/* GS1 Application Identifier Wizard Modal */}

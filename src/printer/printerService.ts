@@ -224,7 +224,9 @@ export class PrinterService {
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            parsed.forEach((p) => printers.push(p));
+            parsed
+              .filter((p: any) => !p.isVirtual && !p.id?.includes('citizen') && !p.id?.includes('sato') && !p.id?.includes('zebra') && !p.id?.includes('tsc') && !p.id?.includes('virtual'))
+              .forEach((p) => printers.push(p));
           }
         }
       } catch {}
@@ -268,16 +270,8 @@ export class PrinterService {
       }
     }
 
-    // 4. Populate Generic Virtual Label Printer Profiles
-    const virtuals = VERIFIED_PRINTER_PROFILES.filter((p) => p.isVirtual);
-    virtuals.forEach((vp) => {
-      if (!printers.some((p) => p.id === vp.id)) {
-        printers.push({ ...vp });
-      }
-    });
-
-    // 5. Determine single real default printer
-    const realDefault = printers.find((p) => !p.isVirtual && p.isDefault) || printers.find((p) => !p.isVirtual) || null;
+    // 4. Determine single real default printer
+    const realDefault = printers.find((p) => p.isDefault) || printers[0] || null;
     this.state.defaultPrinter = realDefault;
 
     // 4. Determine active printer: preserve existing active printer if still available, otherwise use realDefault or first available

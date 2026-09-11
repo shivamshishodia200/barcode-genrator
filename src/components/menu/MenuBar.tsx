@@ -289,6 +289,28 @@ export const MenuBar: React.FC<MenuBarProps> = (props) => {
                 )}
                 <MenuDivider />
 
+                {props.onOpenDatabaseConnection && (
+                  <MenuItem
+                    icon={<Database className="w-3.5 h-3.5 text-emerald-600" />}
+                    label="Database Connection Setup..."
+                    onClick={() => executeAction(props.onOpenDatabaseConnection)}
+                  />
+                )}
+                {props.onPageSetup && (
+                  <MenuItem
+                    icon={<FileText className="w-3.5 h-3.5 text-blue-600" />}
+                    label="Page Setup..."
+                    onClick={() => executeAction(props.onPageSetup)}
+                  />
+                )}
+                {props.onPrintPreview && (
+                  <MenuItem
+                    icon={<Eye className="w-3.5 h-3.5 text-indigo-600" />}
+                    label="Print Preview"
+                    shortcut="Ctrl+R"
+                    onClick={() => executeAction(props.onPrintPreview)}
+                  />
+                )}
                 <MenuItem
                   icon={<Printer className="w-3.5 h-3.5 text-blue-700" />}
                   label="Print..."

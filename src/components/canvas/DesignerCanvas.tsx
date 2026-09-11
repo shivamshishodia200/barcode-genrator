@@ -53,6 +53,8 @@ interface DesignerCanvasProps {
   onCloseOthers?: (instanceId: string) => void;
   onCloseAll?: () => void;
   activePrinterName?: string;
+  activeTool?: string;
+  onDataEditElement?: (element: LabelElement) => void;
 }
 
 export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
@@ -100,6 +102,8 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
   onCloseOthers,
   onCloseAll,
   activePrinterName,
+  activeTool,
+  onDataEditElement,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [cursorMm, setCursorMm] = useState({ x: 10.9, y: 22.1 });
@@ -410,21 +414,14 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
       return;
     }
 
-    // 2. Dragging Elements with smooth delta & boundary clamping
+    // 2. Dragging Elements with smooth delta & unbounded movement beyond label boundaries
     if (isDragging && dragInitialElements.length > 0) {
       const deltaX = (e.clientX - dragStartPos.x) / scale;
       const deltaY = (e.clientY - dragStartPos.y) / scale;
 
       const updates = dragInitialElements.map(item => {
-        const targetEl = template.elements.find(el => el.id === item.id);
-        const elW = targetEl ? targetEl.width : 20;
-        const elH = targetEl ? targetEl.height : 10;
-
-        const maxAllowedX = Math.max(0, template.dimensions.width - elW);
-        const maxAllowedY = Math.max(0, template.dimensions.height - elH);
-
-        const targetX = Math.min(maxAllowedX, Math.max(0, item.x + deltaX));
-        const targetY = Math.min(maxAllowedY, Math.max(0, item.y + deltaY));
+        const targetX = item.x + deltaX;
+        const targetY = item.y + deltaY;
 
         return {
           id: item.id,
@@ -444,16 +441,16 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
       const deltaY = (e.clientY - dragStartPos.y) / scale;
       let { x, y, w, h } = resizeInitialState;
 
-      if (resizeHandle.includes('right')) w = Math.max(4, snapValue(w + deltaX));
-      if (resizeHandle.includes('bottom')) h = Math.max(3, snapValue(h + deltaY));
+      if (resizeHandle.includes('right')) w = Math.max(2, snapValue(w + deltaX));
+      if (resizeHandle.includes('bottom')) h = Math.max(2, snapValue(h + deltaY));
       if (resizeHandle.includes('left')) {
-        const newW = Math.max(4, snapValue(w - deltaX));
-        x = snapValue(Math.max(0, x + (w - newW)));
+        const newW = Math.max(2, snapValue(w - deltaX));
+        x = snapValue(x + (w - newW));
         w = newW;
       }
       if (resizeHandle.includes('top')) {
-        const newH = Math.max(3, snapValue(h - deltaY));
-        y = snapValue(Math.max(0, y + (h - newH)));
+        const newH = Math.max(2, snapValue(h - deltaY));
+        y = snapValue(y + (h - newH));
         h = newH;
       }
 
@@ -554,6 +551,14 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
   // Element Selection with Group Awareness
   const handleElementSelect = (e: React.MouseEvent, element: LabelElement) => {
     e.stopPropagation();
+    if (activeTool === 'data-edit') {
+      onSelectElements([element.id]);
+      if (onDataEditElement) {
+        onDataEditElement(element);
+      }
+      return;
+    }
+
     const targetGroupIds = element.groupId
       ? template.elements.filter((el) => el.groupId === element.groupId).map((el) => el.id)
       : [element.id];
@@ -573,6 +578,9 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
 
   // Start Dragging Selected Element(s)
   const handleStartDrag = (e: React.MouseEvent, element: LabelElement) => {
+    if (activeTool === 'data-edit') {
+      return;
+    }
     e.stopPropagation();
     setIsDragging(true);
     setDragStartPos({ x: e.clientX, y: e.clientY });
@@ -862,7 +870,11 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
         <div
           ref={containerRef}
           className={`flex-1 h-full bg-[#9fbddb] relative overflow-hidden ${
-            isSpacePressed || isPanning ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
+            isSpacePressed || isPanning
+              ? 'cursor-grab active:cursor-grabbing'
+              : activeTool === 'data-edit'
+              ? 'cursor-cell'
+              : 'cursor-default'
           }`}
           onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleMouseMove}
@@ -989,6 +1001,7 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
                     setContextMenu({ x: e.clientX, y: e.clientY, element });
                   }}
                   onBindField={onBindElementToField}
+                  labelDimensions={{ width: template.dimensions.width, height: template.dimensions.height }}
                 />
               ))}
 

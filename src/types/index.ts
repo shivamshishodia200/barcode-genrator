@@ -565,7 +565,35 @@ export interface BarcodeElement extends BaseElement {
   humanReadableSuffix?: string;
   humanReadableLetterSpacing?: number;
   textFormatType?: 'single-line' | 'paragraph';
+  autoSize?: boolean;
   autoSizeText?: boolean;
+  minFontSize?: number;
+  maxFontSize?: number;
+  minWidthScale?: number;
+  maxWidthScale?: number;
+  horizontalAlignment?: 'left' | 'center' | 'right';
+  verticalAlignment?: 'top' | 'middle' | 'bottom';
+  tabsConfig?: Array<{
+    id: string;
+    positionMm: number;
+    alignment: 'left' | 'center' | 'right' | 'decimal';
+    leader: 'none' | 'dots' | 'dashes' | 'line';
+  }>;
+  effectsConfig?: {
+    outline?: boolean;
+    outlineColor?: string;
+    outlineWidth?: number;
+    shadow?: boolean;
+    shadowColor?: string;
+    shadowBlur?: number;
+    shadowOffsetX?: number;
+    shadowOffsetY?: number;
+    opacity?: number;
+    letterSpacing?: number;
+    lineSpacing?: number;
+    strikeout?: boolean;
+    underline?: boolean;
+  };
   borderType?: 'none' | 'rectangle' | 'ellipse';
   borderThickness?: number;
   borderColor?: string;
@@ -575,6 +603,8 @@ export interface BarcodeElement extends BaseElement {
   borderMargins?: { top: number; left: number; bottom: number; right: number };
   borderCornerType?: 'square' | 'rounded' | 'concave';
   borderCornerSize?: number;
+  cornerRadius?: number;
+  borderPadding?: number;
   textEncoding?: string;
   density?: number;
   ratio?: string | number;
@@ -822,6 +852,20 @@ export interface NamedDataSource {
   transforms?: TransformRule[];
 }
 
+export type TextPrintMethod = 'auto' | 'text-output' | 'vector' | 'raster';
+export type BarcodePrintMethod = 'auto' | 'native' | 'vector' | 'raster';
+export type ShapePrintMethod = 'auto' | 'native' | 'vector' | 'raster';
+
+export interface ObjectPrintMethodSettings {
+  scope: 'global' | 'document';
+  trueTypeText: TextPrintMethod;
+  unsupported1D: BarcodePrintMethod;
+  unsupported2D: BarcodePrintMethod;
+  lines: ShapePrintMethod;
+  boxes: ShapePrintMethod;
+  ellipses: ShapePrintMethod;
+}
+
 export interface LabelTemplate {
   id: string;
   name: string;
@@ -858,6 +902,7 @@ export interface LabelTemplate {
   mediaType?: 'gap' | 'continuous' | 'black_mark' | 'die_cut';
   printOrder?: TemplatePrintOrder;
   background?: TemplateBackgroundConfig;
+  objectPrintMethodSettings?: ObjectPrintMethodSettings;
 }
 
 export interface TemplateComment {
@@ -1152,6 +1197,7 @@ export interface BarcodeFlowAPI {
     printRaw: (req: any) => Promise<{ success: boolean; bytesWritten: number; message: string; error?: string }>;
     testPrint: (req: any) => Promise<{ success: boolean; message: string; error?: string }>;
     openProperties?: (printerName: string) => Promise<{ success: boolean; error?: string }>;
+    cancelQueuedJobs?: (printerName: string) => Promise<{ success: boolean; message: string; error?: string }>;
   };
   database?: {
     detectDependencies: (providerType: string) => Promise<any>;
