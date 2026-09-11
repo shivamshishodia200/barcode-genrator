@@ -3,6 +3,7 @@ import { PrinterModel, SupportedRenderer } from './types';
 import { VERIFIED_PRINTER_PROFILES, resolvePrinterProfile } from './printerProfiles';
 import { executeRender } from '../printing/renderers';
 import { LabelTemplate } from '../types';
+import { apiService } from '../services/apiService';
 
 export interface DispatchOptions {
   template: LabelTemplate;
@@ -162,26 +163,121 @@ export class PrinterService {
       }
     }
 
-    // 2. Populate Virtual & Verified Profiles
-    if (!this.isElectron()) {
-      // In Web Browser environment (no native Windows spooler access), include all verified industrial models & virtuals
-      VERIFIED_PRINTER_PROFILES.forEach((vp) => {
-        if (!printers.some((p) => p.id === vp.id)) {
-          printers.push({ ...vp });
+    // 2. Query Local Backend for Real Windows Spooler Printers (if running in Web Browser or Electron returned 0)
+    if (printers.length === 0) {
+      try {
+        const backendPrinters = await apiService.printers.list(forceRefresh);
+        if (Array.isArray(backendPrinters) && backendPrinters.length > 0) {
+          backendPrinters.forEach((bp: any) => {
+            const profile = resolvePrinterProfile(bp.name, bp.driverName);
+            const resolvedDpi = bp.dpi !== undefined && bp.dpi !== null ? bp.dpi : (profile.dpi || null);
+            printers.push({
+              id: bp.id || `prn-${bp.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+              name: bp.name,
+              systemName: bp.name,
+              displayName: bp.name,
+              manufacturer: profile.manufacturer || bp.brand || 'Installed Device',
+              model: bp.model || profile.model || bp.name,
+              driverName: bp.driverName || profile.driverName,
+              port: bp.port || bp.portName,
+              portName: bp.portName || bp.port,
+              connectionType: 'windows-driver',
+              isDefault: Boolean(bp.isDefault),
+              status: bp.status === 'online' || bp.status === 'READY' ? 'READY' : 'OFFLINE',
+              statusDetails: bp.statusDetails,
+              dpi: resolvedDpi,
+              nativeLanguages: (profile.nativeLanguages as any) || [],
+              preferredRenderer: (profile.preferredRenderer as any) || 'WINDOWS_DRIVER',
+              renderer: 'WINDOWS_DRIVER',
+              isVirtual: false,
+              capabilities: {
+                color: !!profile.capabilities?.color,
+                duplex: !!profile.capabilities?.duplex,
+                speedControl: !!profile.capabilities?.speedControl,
+                darknessControl: !!profile.capabilities?.darknessControl,
+                gapMedia: !!profile.capabilities?.gapMedia,
+                blackMarkMedia: !!profile.capabilities?.blackMarkMedia,
+                continuousMedia: true,
+                cutter: !!profile.capabilities?.cutter,
+                peeler: !!profile.capabilities?.peeler,
+                rfid: !!profile.capabilities?.rfid,
+                minDpi: resolvedDpi,
+                maxDpi: resolvedDpi,
+                maxPrintWidthMm: profile.capabilities?.maxPrintWidthMm || 215.9,
+              },
+            });
+          });
         }
-      });
-    } else {
-      // In Electron Desktop environment, include virtual generic presets alongside real Windows discovered printers
-      const virtuals = VERIFIED_PRINTER_PROFILES.filter((p) => p.isVirtual);
-      virtuals.forEach((vp) => {
-        if (!printers.some((p) => p.id === vp.id)) {
-          printers.push({ ...vp });
-        }
-      });
+      } catch (err: any) {
+        console.warn('[PrinterService] Backend printer discovery error:', err);
+      }
     }
 
-    // 3. Determine single real default printer
-    const realDefault = printers.find((p) => !p.isVirtual && p.isDefault) || null;
+    // 3. Cache or restore discovered printers from LocalStorage
+    if (printers.length > 0) {
+      try {
+        localStorage.setItem('barcodeflow_discovered_printers', JSON.stringify(printers));
+      } catch {}
+    } else {
+      try {
+        const cached = localStorage.getItem('barcodeflow_discovered_printers');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            parsed.forEach((p) => printers.push(p));
+          }
+        }
+      } catch {}
+
+      // Fallback: If no system printers found via API or cache, add standard Windows printers
+      if (printers.length === 0) {
+        printers.push({
+          id: 'prn-win-pdf',
+          name: 'Microsoft Print to PDF',
+          systemName: 'Microsoft Print to PDF',
+          displayName: 'Microsoft Print to PDF',
+          manufacturer: 'Microsoft',
+          model: 'Microsoft Print To PDF',
+          driverName: 'Microsoft Print To PDF',
+          port: 'PORTPROMPT:',
+          portName: 'PORTPROMPT:',
+          connectionType: 'windows-driver',
+          isDefault: true,
+          status: 'READY',
+          dpi: 300,
+          nativeLanguages: [],
+          preferredRenderer: 'WINDOWS_DRIVER',
+          renderer: 'WINDOWS_DRIVER',
+          isVirtual: false,
+          capabilities: {
+            color: true,
+            duplex: false,
+            speedControl: false,
+            darknessControl: false,
+            gapMedia: false,
+            blackMarkMedia: false,
+            continuousMedia: true,
+            cutter: false,
+            peeler: false,
+            rfid: false,
+            minDpi: 300,
+            maxDpi: 300,
+            maxPrintWidthMm: 215.9,
+          },
+        });
+      }
+    }
+
+    // 4. Populate Generic Virtual Label Printer Profiles
+    const virtuals = VERIFIED_PRINTER_PROFILES.filter((p) => p.isVirtual);
+    virtuals.forEach((vp) => {
+      if (!printers.some((p) => p.id === vp.id)) {
+        printers.push({ ...vp });
+      }
+    });
+
+    // 5. Determine single real default printer
+    const realDefault = printers.find((p) => !p.isVirtual && p.isDefault) || printers.find((p) => !p.isVirtual) || null;
     this.state.defaultPrinter = realDefault;
 
     // 4. Determine active printer: preserve existing active printer if still available, otherwise use realDefault or first available

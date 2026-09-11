@@ -9,8 +9,46 @@ const audit = AuditService.getInstance();
 const printService = NetworkPrintService.getInstance();
 
 // GET /api/printers
-printersRouter.get('/', (req: Request, res: Response) => {
-  const printers = storage.read<any>('printers', []);
+printersRouter.get('/', async (req: Request, res: Response) => {
+  let printers = storage.read<any>('printers', []);
+  const needsDiscovery =
+    !printers ||
+    printers.length === 0 ||
+    req.query.refresh === 'true' ||
+    !printers.some((p: any) => p.location?.includes('Workstation') || p.driverName || p.brand === 'Desktop PDF');
+
+  if (needsDiscovery) {
+    try {
+      const discovered = await printService.discoverInstalledPrinters();
+      if (discovered && discovered.length > 0) {
+        const combinedMap = new Map<string, any>();
+        discovered.forEach((p, idx) => {
+          combinedMap.set(p.name.toLowerCase(), {
+            id: `prn-os-${idx + 1}`,
+            name: p.name,
+            model: p.driverName || p.name,
+            brand: p.protocol === 'zpl' ? 'Zebra' : p.protocol === 'tspl' ? 'TSC' : 'Desktop PDF',
+            dpi: p.protocol === 'zpl' ? 300 : 203,
+            status: p.status,
+            protocol: p.protocol,
+            location: 'Local Workstation / USB Spooler',
+            mediaWidth: 104,
+            mediaHeight: 152,
+            ipAddress: p.portName || '127.0.0.1',
+            port: 9100,
+            isDefault: p.isDefault,
+            driverName: p.driverName,
+            isThermal: p.isThermal,
+          });
+        });
+        printers = Array.from(combinedMap.values());
+        storage.write('printers', printers);
+      }
+    } catch (err) {
+      console.warn('[PrintersRouter] Auto-discovery error on GET:', err);
+    }
+  }
+
   res.json(printers);
 });
 

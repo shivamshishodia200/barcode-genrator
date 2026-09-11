@@ -192,30 +192,40 @@ export class NetworkPrintService {
 
     if (process.platform === 'win32') {
       try {
-        const psCommand = `powershell -Command "Get-Printer | Select-Object Name, PrinterStatus, DriverName, PortName, IsDefault | ConvertTo-Json"`;
+        const psCommand = `powershell -NoProfile -NonInteractive -Command "$ProgressPreference = 'SilentlyContinue'; Get-CimInstance Win32_Printer | Select-Object Name, Default, DriverName, PortName, PrinterStatus, WorkOffline | ConvertTo-Json -Compress"`;
         const { stdout } = await execAsync(psCommand);
         if (stdout.trim()) {
-          const parsed = JSON.parse(stdout);
+          const jsonStart = stdout.indexOf('[');
+          const jsonObjStart = stdout.indexOf('{');
+          const start = jsonStart !== -1 && (jsonObjStart === -1 || jsonStart < jsonObjStart) ? jsonStart : jsonObjStart;
+          const end = Math.max(stdout.lastIndexOf(']'), stdout.lastIndexOf('}'));
+          const jsonStr = start !== -1 && end !== -1 && end > start ? stdout.slice(start, end + 1) : stdout.trim();
+          const parsed = JSON.parse(jsonStr);
           const list = Array.isArray(parsed) ? parsed : [parsed];
 
           for (const p of list) {
-            const name = p.Name || 'Printer';
+            const name = String(p.Name || '').trim();
+            if (!name) continue;
             const lower = name.toLowerCase();
-            const isZebra = lower.includes('zebra') || lower.includes('zt') || lower.includes('zd');
-            const isTsc = lower.includes('tsc');
-            const isBrother = lower.includes('brother');
+            const lowerDriver = String(p.DriverName || '').toLowerCase();
+            const isZebra = lower.includes('zebra') || lower.includes('zt') || lower.includes('zd') || lowerDriver.includes('zdesigner');
+            const isTsc = lower.includes('tsc') || lowerDriver.includes('tsc');
+            const isBrother = lower.includes('brother') || lowerDriver.includes('brother');
             const isThermal = isZebra || isTsc || isBrother || lower.includes('thermal') || lower.includes('label');
 
             let protocol: 'zpl' | 'tspl' | 'epl' | 'escpos' | 'pdf' = 'zpl';
             if (isTsc) protocol = 'tspl';
             else if (lower.includes('epl')) protocol = 'epl';
             else if (lower.includes('pos') || lower.includes('receipt')) protocol = 'escpos';
-            else if (lower.includes('pdf')) protocol = 'pdf';
+            else if (lower.includes('pdf') || lower.includes('onenote') || lower.includes('document')) protocol = 'pdf';
+
+            const isOffline = Boolean(p.WorkOffline);
+            const isDefault = Boolean(p.Default);
 
             results.push({
               name,
-              isDefault: !!p.IsDefault,
-              status: p.PrinterStatus === 0 || p.PrinterStatus === 3 ? 'online' : 'offline',
+              isDefault,
+              status: isOffline ? 'offline' : (p.PrinterStatus === 0 || p.PrinterStatus === 3 ? 'online' : 'offline'),
               driverName: p.DriverName,
               portName: p.PortName,
               protocol,
@@ -224,7 +234,39 @@ export class NetworkPrintService {
           }
         }
       } catch (err) {
-        console.warn('[NetworkPrintService] Windows printer discovery error:', err);
+        console.warn('[NetworkPrintService] Win32_Printer query error, falling back to Get-Printer:', err);
+        try {
+          const psCommand = `powershell -Command "Get-Printer | Select-Object Name, PrinterStatus, DriverName, PortName | ConvertTo-Json"`;
+          const { stdout } = await execAsync(psCommand);
+          if (stdout.trim()) {
+            const parsed = JSON.parse(stdout);
+            const list = Array.isArray(parsed) ? parsed : [parsed];
+            for (const p of list) {
+              const name = String(p.Name || '').trim();
+              if (!name) continue;
+              const lower = name.toLowerCase();
+              const isZebra = lower.includes('zebra');
+              const isTsc = lower.includes('tsc');
+              const isBrother = lower.includes('brother');
+              const isThermal = isZebra || isTsc || isBrother || lower.includes('thermal');
+              let protocol: 'zpl' | 'tspl' | 'epl' | 'escpos' | 'pdf' = 'zpl';
+              if (isTsc) protocol = 'tspl';
+              else if (lower.includes('pdf') || lower.includes('onenote')) protocol = 'pdf';
+
+              results.push({
+                name,
+                isDefault: false,
+                status: p.PrinterStatus === 0 || p.PrinterStatus === 3 ? 'online' : 'offline',
+                driverName: p.DriverName,
+                portName: p.PortName,
+                protocol,
+                isThermal,
+              });
+            }
+          }
+        } catch (e2) {
+          console.warn('[NetworkPrintService] Get-Printer fallback failed:', e2);
+        }
       }
     } else {
       // macOS and Linux CUPS lpstat

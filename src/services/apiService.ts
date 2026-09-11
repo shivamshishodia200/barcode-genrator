@@ -266,8 +266,14 @@ export const apiService = {
 
   // --- Printers API ---
   printers: {
-    list: async (): Promise<PrinterDefinition[]> => {
-      return request<PrinterDefinition[]>('/printers');
+    list: async (refresh?: boolean): Promise<PrinterDefinition[]> => {
+      return request<PrinterDefinition[]>(`/printers${refresh ? '?refresh=true' : ''}`);
+    },
+
+    refresh: async (): Promise<{ success: boolean; printers: PrinterDefinition[] }> => {
+      return request<{ success: boolean; printers: PrinterDefinition[] }>('/printers/refresh', {
+        method: 'POST',
+      });
     },
 
     create: async (printer: Partial<PrinterDefinition>): Promise<PrinterDefinition> => {
