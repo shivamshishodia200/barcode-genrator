@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   LabelTemplate,
   LabelElement,
+  TextElement,
   ViewportState,
   PrinterDefinition,
   PrintJob,
@@ -22,6 +23,8 @@ import { INITIAL_PRINT_JOBS, INITIAL_AUDIT_LOGS, INITIAL_USERS, INITIAL_BATCH_JO
 import { PrinterService, useCentralPrinterState } from './printer/printerService';
 import { PrinterModel } from './printer/types';
 import { advanceTemplateSerialState } from './services/serializationEngine';
+import { measureTextObject, recalculateTextElementDimensions } from './services/textMeasurementEngine';
+import { evaluateElementData } from './services/dataSourceEngine';
 import { PrintPreviewWorkspace } from './components/views/PrintPreviewWorkspace';
 import { MenuBar } from './components/menu/MenuBar';
 import { ObjectToolbar } from './components/toolbar/ObjectToolbar';
@@ -638,24 +641,118 @@ export default function App() {
 
   const updateSingleElement = useCallback(
     (id: string, updates: Partial<LabelElement>) => {
-      const nextElements = currentTemplate.elements.map((el) => (el.id === id ? ({ ...el, ...updates } as LabelElement) : el));
+      const activeRecord =
+        currentTemplate.databaseConnection?.records?.[viewport.previewRecordIndex] ||
+        currentTemplate.sampleRecords?.[viewport.previewRecordIndex] ||
+        currentTemplate.databaseConnection?.records?.[0] ||
+        currentTemplate.sampleRecords?.[0] ||
+        {};
+
+      const nextElements = currentTemplate.elements.map((el) => {
+        if (el.id !== id) return el;
+        const merged = { ...el, ...updates } as LabelElement;
+
+        if (merged.type === 'text') {
+          const textEl = merged as TextElement;
+          const textUpdates = updates as Partial<TextElement>;
+          // If updates include explicit width or height without explicit autoSize setting,
+          // then manual resize takes effect and Auto Size is turned off.
+          if (
+            (textUpdates.width !== undefined || textUpdates.height !== undefined) &&
+            textUpdates.autoSize === undefined &&
+            textUpdates.autoFit === undefined
+          ) {
+            textEl.autoSize = false;
+            textEl.autoFit = false;
+            if (textEl.autoSizeConfig) {
+              textEl.autoSizeConfig = { ...textEl.autoSizeConfig, enabled: false };
+            }
+          }
+
+          const isAutoSizeActive =
+            textEl.autoSize !== false &&
+            (textEl.autoSize === true ||
+              textEl.autoSizeConfig?.enabled === true ||
+              textEl.textType === 'single-line' ||
+              !textEl.textType ||
+              textEl.textFormatType === 'single-line');
+
+          if (isAutoSizeActive) {
+            const resolvedText = evaluateElementData(textEl, {
+              record: activeRecord,
+              datasets,
+              variables: currentTemplate.variables,
+            });
+            const dims = recalculateTextElementDimensions(textEl, resolvedText);
+            textEl.width = dims.width;
+            textEl.height = dims.height;
+            textEl.autoSize = true;
+          }
+        }
+
+        return merged;
+      });
       updateElements(nextElements);
     },
-    [currentTemplate.elements, updateElements]
+    [currentTemplate.elements, currentTemplate.variables, currentTemplate.databaseConnection, currentTemplate.sampleRecords, datasets, viewport.previewRecordIndex, updateElements]
   );
 
   const updateMultipleElements = useCallback(
     (updatesList: { id: string; updates: Partial<LabelElement> }[]) => {
+      const activeRecord =
+        currentTemplate.databaseConnection?.records?.[viewport.previewRecordIndex] ||
+        currentTemplate.sampleRecords?.[viewport.previewRecordIndex] ||
+        currentTemplate.databaseConnection?.records?.[0] ||
+        currentTemplate.sampleRecords?.[0] ||
+        {};
+
       const updateMap = new Map(updatesList.map((u) => [u.id, u.updates]));
       const nextElements = currentTemplate.elements.map((el) => {
-        if (updateMap.has(el.id)) {
-          return { ...el, ...updateMap.get(el.id) } as LabelElement;
+        if (!updateMap.has(el.id)) return el;
+        const updates = updateMap.get(el.id)!;
+        const merged = { ...el, ...updates } as LabelElement;
+
+        if (merged.type === 'text') {
+          const textEl = merged as TextElement;
+          const textUpdates = updates as Partial<TextElement>;
+          if (
+            (textUpdates.width !== undefined || textUpdates.height !== undefined) &&
+            textUpdates.autoSize === undefined &&
+            textUpdates.autoFit === undefined
+          ) {
+            textEl.autoSize = false;
+            textEl.autoFit = false;
+            if (textEl.autoSizeConfig) {
+              textEl.autoSizeConfig = { ...textEl.autoSizeConfig, enabled: false };
+            }
+          }
+
+          const isAutoSizeActive =
+            textEl.autoSize !== false &&
+            (textEl.autoSize === true ||
+              textEl.autoSizeConfig?.enabled === true ||
+              textEl.textType === 'single-line' ||
+              !textEl.textType ||
+              textEl.textFormatType === 'single-line');
+
+          if (isAutoSizeActive) {
+            const resolvedText = evaluateElementData(textEl, {
+              record: activeRecord,
+              datasets,
+              variables: currentTemplate.variables,
+            });
+            const dims = recalculateTextElementDimensions(textEl, resolvedText);
+            textEl.width = dims.width;
+            textEl.height = dims.height;
+            textEl.autoSize = true;
+          }
         }
-        return el;
+
+        return merged;
       });
       updateElements(nextElements);
     },
-    [currentTemplate.elements, updateElements]
+    [currentTemplate.elements, currentTemplate.variables, currentTemplate.databaseConnection, currentTemplate.sampleRecords, datasets, viewport.previewRecordIndex, updateElements]
   );
 
   // Reorder Elements (Z-Index)
@@ -695,68 +792,76 @@ export default function App() {
 
   const handleInsertTextType = (textType: TextObjectType = 'single-line') => {
     let name = 'Single Line Text';
-    let text = 'SAMPLE TEXT';
-    let width = 40;
-    let height = 8;
+    let text = 'Sample Text';
     let fontSize = 10;
     let fontWeight: 'normal' | 'bold' | '600' | '700' | '800' = 'bold';
     let multiline = false;
+    let wrap = false;
 
     if (textType === 'multi-line') {
       name = 'Multi-line Text';
       text = 'Enterprise Logistics Label\nDirect Thermal Stock\nHandling: DRY & COOL';
-      width = 50;
-      height = 16;
       fontSize = 9;
       fontWeight = 'normal';
       multiline = true;
+    } else if (textType === 'paragraph') {
+      name = 'Paragraph Text';
+      text = 'This is a multi-line paragraph block that reflows and wraps dynamically based on width.';
+      fontSize = 9;
+      fontWeight = 'normal';
+      multiline = true;
+      wrap = true;
     } else if (textType === 'word-processor') {
       name = 'Word Processor Document';
       text = '<b>Product:</b> High Grade Polymer<br/><i>Rating:</i> Heat Resistant Class 2<br/><u>Standard:</u> ISO 9001:2015 Compliant';
-      width = 60;
-      height = 18;
       fontSize = 9;
       multiline = true;
     } else if (textType === 'arc') {
       name = 'Arc Text Box';
       text = '• CAUTION • HIGH VOLTAGE • DANGER •';
-      width = 50;
-      height = 25;
       fontSize = 9;
     } else if (textType === 'symbol-font') {
       name = 'Symbol Font Characters';
       text = '⚠ ⚡ ♻ ♺ 📦 ☂ ❄ ✂ ✈ ⛟ ☢ ☣ ⏻ ⚙ ✦ ★ ✔ ✖';
-      width = 65;
-      height = 12;
       fontSize = 13;
       fontWeight = 'normal';
     } else if (textType === 'rtf') {
       name = 'RTF Markup Container';
       text = '{\\rtf1\\ansi\\b LOT-BATCH:\\b0 99402-A\\par\\i INSPECTED & CERTIFIED\\i0}';
-      width = 55;
-      height = 16;
       fontSize = 9;
       multiline = true;
     } else if (textType === 'html') {
       name = 'HTML Markup Container';
       text = '<div style="background:#fef2f2;border:1px solid #dc2626;padding:3px"><b style="color:#b91c1c">DANGER:</b> Flammable Liquid<br/><span style="color:#475569;font-size:9px">UN 1993 Class 3 Packaging</span></div>';
-      width = 58;
-      height = 20;
       fontSize = 8.5;
       multiline = true;
     } else if (textType === 'xaml') {
       name = 'XAML Markup Container';
       text = '<TextBlock FontSize="12" FontFamily="Segoe UI"><Run Text="LOT: "/><Run Text="98402-A" Foreground="#dc2626" FontWeight="Bold"/><Run Text=" (PASS)" Foreground="#16a34a"/></TextBlock>';
-      width = 55;
-      height = 14;
       fontSize = 9;
       multiline = true;
     }
 
+    const fontFamily = textType === 'symbol-font' ? 'Arial, sans-serif' : 'Arial';
+    const measuredDims = measureTextObject({
+      text,
+      fontFamily,
+      fontSize,
+      fontWeight,
+      fontStyle: 'normal',
+      letterSpacing: 0,
+      lineHeight: 1.2,
+      textType,
+      textFormatType: textType === 'paragraph' ? 'paragraph' : 'single-line',
+      multiline,
+      wrap,
+      containerWidthMm: textType === 'paragraph' ? 45 : undefined,
+    });
+
+    const elW = measuredDims.width;
+    const elH = measuredDims.height;
     const labelW = currentTemplate.dimensions?.width || 100;
     const labelH = currentTemplate.dimensions?.height || 60;
-    const elW = Math.min(width, Math.max(10, labelW - 10));
-    const elH = Math.min(height, Math.max(5, labelH - 8));
     const stagger = (currentTemplate.elements.length % 6) * 4;
     const spawnX = Math.min(Math.max(4, 10 + stagger), Math.max(4, labelW - elW - 4));
     const spawnY = Math.min(Math.max(4, 8 + stagger), Math.max(4, labelH - elH - 4));
@@ -766,8 +871,9 @@ export default function App() {
       name: `${name} ${currentTemplate.elements.length + 1}`,
       type: 'text',
       textType,
+      textFormatType: textType === 'paragraph' ? 'paragraph' : 'single-line',
       text,
-      fontFamily: textType === 'symbol-font' ? 'Arial, sans-serif' : 'Arial',
+      fontFamily,
       fontSize,
       fontWeight,
       fontStyle: 'normal',
@@ -778,6 +884,21 @@ export default function App() {
       lineHeight: 1.2,
       letterSpacing: 0,
       multiline,
+      wordWrap: wrap,
+      wrap,
+      autoSize: true,
+      autoFit: false,
+      autoSizeConfig: {
+        enabled: true,
+        minFontSize: 6,
+        maxFontSize: 720,
+        minWidthScale: 50,
+        maxWidthScale: 200,
+        objectWidth: elW,
+        objectHeight: elH,
+        horizontalAlignment: 'left',
+        verticalAlignment: 'top',
+      },
       x: spawnX,
       y: spawnY,
       width: elW,
@@ -1206,11 +1327,30 @@ export default function App() {
           zIndex: currentTemplate.elements.length + 1,
         };
       } else {
+        const activeRecord =
+          currentTemplate.databaseConnection?.records?.[viewport.previewRecordIndex] ||
+          currentTemplate.sampleRecords?.[viewport.previewRecordIndex] ||
+          currentTemplate.sampleRecords?.[0] ||
+          {};
+        const sampleVal = activeRecord[fieldName] || payload.sampleValue || fieldName || 'Sample Data';
+        const measured = measureTextObject({
+          text: sampleVal,
+          fontFamily: 'Arial',
+          fontSize: 10,
+          fontWeight: 'normal',
+          fontStyle: 'normal',
+          letterSpacing: 0,
+          lineHeight: 1.2,
+          textType: 'single-line',
+          textFormatType: 'single-line',
+        });
+
         newEl = {
           id: `el-text-${Date.now()}`,
           name: `Text (${fieldName})`,
           type: 'text',
           textType: 'single-line',
+          textFormatType: 'single-line',
           text: `{{${fieldName}}}`,
           dataBinding: `{{${fieldName}}}`,
           dataSources: [bindingSource],
@@ -1224,10 +1364,23 @@ export default function App() {
           color: '#000000',
           lineHeight: 1.2,
           letterSpacing: 0,
+          autoSize: true,
+          autoFit: false,
+          autoSizeConfig: {
+            enabled: true,
+            minFontSize: 6,
+            maxFontSize: 720,
+            minWidthScale: 50,
+            maxWidthScale: 200,
+            objectWidth: measured.width,
+            objectHeight: measured.height,
+            horizontalAlignment: 'left',
+            verticalAlignment: 'top',
+          },
           x: xMm,
           y: yMm,
-          width: 40,
-          height: 10,
+          width: measured.width,
+          height: measured.height,
           rotation: 0,
           opacity: 1,
           locked: false,
@@ -1240,7 +1393,7 @@ export default function App() {
       setSelectedElementIds([newEl.id]);
       showToast(`Added ${newEl.name} bound to "${fieldName}"`, 'success');
     },
-    [currentTemplate.elements, currentTemplate.databaseConnection, updateElements]
+    [currentTemplate.elements, currentTemplate.databaseConnection, currentTemplate.sampleRecords, viewport.previewRecordIndex, updateElements]
   );
 
   // Clipboard & Manipulation Handlers
@@ -2637,6 +2790,23 @@ export default function App() {
         } else if (e.key === 'F12') {
           e.preventDefault();
           setIsBarcodePropertiesOpen(true);
+        } else if (e.key === 'F8' || (e.altKey && e.key === 'Enter')) {
+          e.preventDefault();
+          const selEl = currentTemplate.elements.find((el) => selectedElementIds.includes(el.id));
+          if (selEl) {
+            if (selEl.type === 'barcode') {
+              setBarcodePropsInitialCategory('symbology');
+              setIsBarcodePropertiesOpen(true);
+            } else if (selEl.type === 'text') {
+              setIsTextPropertiesOpen(true);
+            } else if (selEl.type === 'shape') {
+              setIsShapePropertiesOpen(true);
+            } else {
+              setShowRightDock(true);
+            }
+          } else {
+            setIsPageSetupOpen(true);
+          }
         } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
           if (selectedElementIds.length > 0) {
             e.preventDefault();
@@ -3363,6 +3533,18 @@ export default function App() {
             onLockToggle={handleLockToggle}
             onOpenBarcodePicker={() => setIsBarcodePickerOpen(true)}
             onOpenBarcodeProperties={() => setIsBarcodePropertiesOpen(true)}
+            onOpenTextProperties={() => setIsTextPropertiesOpen(true)}
+            onOpenProperties={() => {
+              const selEl = currentTemplate.elements.find((e) => selectedElementIds.includes(e.id));
+              if (selEl) {
+                if (selEl.type === 'barcode') setIsBarcodePropertiesOpen(true);
+                else if (selEl.type === 'text') setIsTextPropertiesOpen(true);
+                else if (selEl.type === 'shape') setIsShapePropertiesOpen(true);
+                else setShowRightDock(true);
+              } else {
+                setIsPageSetupOpen(true);
+              }
+            }}
             onOpenPrintDialog={() => setIsPrintDialogOpen(true)}
             onPrintPreview={() => setIsPrintPreviewActive(true)}
             onOpenBatchPrint={() => setActiveView('viewer')}
@@ -3483,6 +3665,19 @@ export default function App() {
               onOpenBarcodeProperties={() => {
                 setBarcodePropsInitialCategory('symbology');
                 setIsBarcodePropertiesOpen(true);
+              }}
+              onOpenTextProperties={() => setIsTextPropertiesOpen(true)}
+              onOpenShapeProperties={() => setIsShapePropertiesOpen(true)}
+              onOpenProperties={() => {
+                const selEl = currentTemplate.elements.find((e) => selectedElementIds.includes(e.id));
+                if (selEl) {
+                  if (selEl.type === 'barcode') setIsBarcodePropertiesOpen(true);
+                  else if (selEl.type === 'text') setIsTextPropertiesOpen(true);
+                  else if (selEl.type === 'shape') setIsShapePropertiesOpen(true);
+                  else setShowRightDock(true);
+                } else {
+                  setIsPageSetupOpen(true);
+                }
               }}
               selectedElement={currentTemplate.elements.find((e) => selectedElementIds.includes(e.id))}
               onUpdateSelectedElement={(updates) => {
@@ -3780,6 +3975,19 @@ export default function App() {
                   onUpdateElement={updateSingleElement}
                   onOpenBarcodePicker={() => setIsBarcodePickerOpen(true)}
                   onOpenBarcodeProperties={() => setIsBarcodePropertiesOpen(true)}
+                  onOpenTextProperties={() => setIsTextPropertiesOpen(true)}
+                  onOpenShapeProperties={() => setIsShapePropertiesOpen(true)}
+                  onOpenProperties={() => {
+                    const selEl = currentTemplate.elements.find((e) => selectedElementIds.includes(e.id));
+                    if (selEl) {
+                      if (selEl.type === 'barcode') setIsBarcodePropertiesOpen(true);
+                      else if (selEl.type === 'text') setIsTextPropertiesOpen(true);
+                      else if (selEl.type === 'shape') setIsShapePropertiesOpen(true);
+                      else setShowRightDock(true);
+                    } else {
+                      setIsPageSetupOpen(true);
+                    }
+                  }}
                   onClose={() => setShowRightDock(false)}
                   currentRecordData={currentRecordData}
                   currentRecordIndex={safePreviewIndex}

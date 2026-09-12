@@ -113,6 +113,8 @@ interface MenuBarProps {
   onLockToggle: () => void;
   onOpenBarcodePicker: () => void;
   onOpenBarcodeProperties?: () => void;
+  onOpenTextProperties?: () => void;
+  onOpenProperties?: () => void;
   onOpenPrintDialog: () => void;
   onOpenBatchPrint: () => void;
   onOpenApproval: () => void;
@@ -454,6 +456,17 @@ export const MenuBar: React.FC<MenuBarProps> = (props) => {
                   shortcut="Ctrl+A"
                   onClick={() => executeAction(props.onSelectAll)}
                 />
+                {(props.onOpenProperties || props.onOpenTextProperties || props.onOpenBarcodeProperties) && (
+                  <>
+                    <MenuDivider />
+                    <MenuItem
+                      icon={<Sliders className="w-3.5 h-3.5 text-cyan-600" />}
+                      label="Object Properties..."
+                      shortcut="F8"
+                      onClick={() => executeAction(props.onOpenProperties || props.onOpenBarcodeProperties!)}
+                    />
+                  </>
+                )}
                 <MenuDivider />
                 <MenuItem
                   icon={<Sliders className="w-3.5 h-3.5 text-slate-700" />}
@@ -928,6 +941,21 @@ export const MenuBar: React.FC<MenuBarProps> = (props) => {
                   label="Symbology Library Catalog..."
                   onClick={() => executeAction(props.onOpenBarcodePicker)}
                 />
+                {props.onOpenProperties && (
+                  <MenuItem
+                    icon={<Sliders className="w-3.5 h-3.5 text-blue-600" />}
+                    label="Selected Object Properties..."
+                    shortcut="F8"
+                    onClick={() => executeAction(props.onOpenProperties!)}
+                  />
+                )}
+                {props.onOpenTextProperties && (
+                  <MenuItem
+                    icon={<Sliders className="w-3.5 h-3.5 text-emerald-600" />}
+                    label="Text Properties..."
+                    onClick={() => executeAction(props.onOpenTextProperties!)}
+                  />
+                )}
                 {props.onOpenBarcodeProperties && (
                   <MenuItem
                     icon={<Sliders className="w-3.5 h-3.5 text-blue-600" />}

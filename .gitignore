@@ -13,3 +13,4 @@ scratch/
 **/watch_folders/processed/*
 **/watch_folders/error/*
 dist-electron-build/
+barcode-automation-backend/barcode-automation-backend/

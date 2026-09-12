@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { LabelTemplate, LabelElement, CanvasGuide, ViewportState, OpenDocument } from '../../types';
+import { LabelTemplate, LabelElement, TextElement, CanvasGuide, ViewportState, OpenDocument } from '../../types';
+import { measureTextObject } from '../../services/textMeasurementEngine';
+import { evaluateElementData } from '../../services/dataSourceEngine';
 import { HorizontalRuler, VerticalRuler, RulerCorner } from './Rulers';
 import { CanvasElement } from './CanvasElement';
 import { ContextMenu } from './ContextMenu';
@@ -136,6 +138,103 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
     { id: 'g1', type: 'vertical', position: 10 },
     { id: 'g2', type: 'horizontal', position: 10 },
   ]);
+
+  // Inline direct text editing state
+  const [editingElementId, setEditingElementId] = useState<string | null>(null);
+
+  // Exit edit mode if edited element is deselected
+  useEffect(() => {
+    if (editingElementId && !selectedElementIds.includes(editingElementId)) {
+      setEditingElementId(null);
+    }
+  }, [selectedElementIds, editingElementId]);
+
+  const handleStartTextEdit = useCallback((el: LabelElement) => {
+    if (el.locked || el.isEditable === false || el.editable === false) return;
+    if (el.type !== 'text') return;
+
+    // Check if element is data-bound
+    const isDataBound = Boolean(
+      el.dataBinding ||
+      (el.dataSources && el.dataSources.length > 0 && el.dataSources.some(ds => ds.type !== 'embedded' && ds.enabled !== false)) ||
+      (el.dataSources && el.dataSources.length > 1)
+    );
+
+    if (isDataBound) {
+      if (onDataEditElement) {
+        onDataEditElement(el);
+      } else if (onOpenProperties) {
+        onOpenProperties();
+      }
+      return;
+    }
+
+    setEditingElementId(el.id);
+  }, [onDataEditElement, onOpenProperties]);
+
+  const handleCommitInlineText = useCallback((id: string, newText: string) => {
+    const targetEl = template.elements.find((e) => e.id === id);
+    if (!targetEl || targetEl.type !== 'text') {
+      setEditingElementId(null);
+      return;
+    }
+
+    const textEl = targetEl as TextElement;
+    if (textEl.text === newText) {
+      setEditingElementId(null);
+      return;
+    }
+
+    const updates: Partial<TextElement> = {
+      text: newText,
+    };
+
+    if (textEl.dataSources && textEl.dataSources.length === 1 && textEl.dataSources[0].type === 'embedded') {
+      updates.dataSources = [{ ...textEl.dataSources[0], value: newText }];
+    }
+
+    const isAutoSizeActive =
+      textEl.autoSize !== false &&
+      (textEl.autoSize === true ||
+        textEl.autoSizeConfig?.enabled === true ||
+        textEl.textType === 'single-line' ||
+        !textEl.textType ||
+        textEl.textFormatType === 'single-line');
+
+    if (isAutoSizeActive) {
+      const isParagraph = textEl.textFormatType === 'paragraph' || textEl.textType === 'paragraph';
+      const dims = measureTextObject({
+        text: newText,
+        fontFamily: textEl.fontFamily,
+        fontSize: textEl.fontSize,
+        fontWeight: textEl.fontWeight,
+        fontStyle: textEl.fontStyle,
+        letterSpacing: textEl.letterSpacing,
+        lineHeight: textEl.lineHeight,
+        fontWidthScale: textEl.fontWidthScale,
+        textType: textEl.textType,
+        textFormatType: textEl.textFormatType,
+        multiline: textEl.multiline,
+        wrap: textEl.wrap || textEl.wordWrap,
+        containerWidthMm: isParagraph && textEl.width > 0 ? textEl.width : undefined,
+        borderConfig: textEl.borderConfig,
+      });
+      updates.width = isParagraph && textEl.width > 0 ? textEl.width : dims.width;
+      updates.height = dims.height;
+      updates.autoSize = true;
+    }
+
+    onUpdateElement(id, updates);
+    setEditingElementId(null);
+  }, [template.elements, onUpdateElement]);
+
+  const handleCancelInlineText = useCallback(() => {
+    setEditingElementId(null);
+  }, []);
+
+  const handleDraftResize = useCallback((id: string, widthMm: number, heightMm: number) => {
+    onUpdateElement(id, { width: widthMm, height: heightMm, autoSize: true });
+  }, [onUpdateElement]);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; element: LabelElement | null } | null>(null);
@@ -454,7 +553,42 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
         h = newH;
       }
 
-      onUpdateElement(resizingElementId, { x, y, width: w, height: h });
+      const targetEl = template.elements.find((el) => el.id === resizingElementId);
+      if (targetEl && targetEl.type === 'text') {
+        const textEl = targetEl as TextElement;
+        const isParagraph = textEl.textFormatType === 'paragraph' || textEl.textType === 'paragraph';
+
+        // In paragraph mode with horizontal resize only, reflow height dynamically
+        if (
+          isParagraph &&
+          (resizeHandle === 'middle-left' || resizeHandle === 'middle-right') &&
+          textEl.autoSize !== false
+        ) {
+          const dims = measureTextObject({
+            text: evaluateElementData(textEl, { record: recordData }),
+            fontFamily: textEl.fontFamily,
+            fontSize: textEl.fontSize,
+            fontWeight: textEl.fontWeight,
+            fontStyle: textEl.fontStyle,
+            letterSpacing: textEl.letterSpacing,
+            lineHeight: textEl.lineHeight,
+            fontWidthScale: textEl.fontWidthScale,
+            textType: textEl.textType,
+            textFormatType: textEl.textFormatType,
+            multiline: true,
+            wrap: true,
+            containerWidthMm: w,
+            borderConfig: textEl.borderConfig,
+          });
+          h = dims.height;
+          onUpdateElement(resizingElementId, { x, y, width: w, height: h, autoSize: true });
+        } else {
+          // Explicit manual resize disables Auto Size
+          onUpdateElement(resizingElementId, { x, y, width: w, height: h, autoSize: false, autoFit: false });
+        }
+      } else {
+        onUpdateElement(resizingElementId, { x, y, width: w, height: h });
+      }
       return;
     }
 
@@ -984,20 +1118,30 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
                   key={el.id}
                   element={el}
                   isSelected={selectedElementIds.includes(el.id)}
+                  isEditing={editingElementId === el.id}
                   onSelect={handleElementSelect}
                   onDoubleClick={() => {
-                    if (el.type === 'barcode' && onOpenBarcodeProperties) {
+                    if (el.type === 'text') {
+                      handleStartTextEdit(el);
+                    } else if (el.type === 'barcode' && onOpenBarcodeProperties) {
                       onOpenBarcodeProperties();
-                    } else {
+                    } else if (onOpenProperties) {
                       onOpenProperties();
                     }
                   }}
+                  onStartEdit={handleStartTextEdit}
+                  onCommitEdit={handleCommitInlineText}
+                  onCancelEdit={handleCancelInlineText}
+                  onDraftResize={handleDraftResize}
                   scale={scale}
                   recordData={recordData}
                   onStartDrag={handleStartDrag}
                   onStartResize={handleStartResize}
                   onStartRotate={handleStartRotate}
                   onContextMenu={(e, element) => {
+                    if (!selectedElementIds.includes(element.id)) {
+                      onSelectElements([element.id]);
+                    }
                     setContextMenu({ x: e.clientX, y: e.clientY, element });
                   }}
                   onBindField={onBindElementToField}
@@ -1255,10 +1399,22 @@ export const DesignerCanvas: React.FC<DesignerCanvasProps> = ({
           onSendBackward={onSendBackward}
           onGroup={onGroup}
           onUngroup={onUngroup}
+          onEditText={() => {
+            if (contextMenu.element && contextMenu.element.type === 'text') {
+              handleStartTextEdit(contextMenu.element);
+            }
+          }}
           onOpenProperties={() => {
-            if (contextMenu.element?.type === 'barcode' && onOpenBarcodeProperties) {
-              onOpenBarcodeProperties();
-            } else {
+            if (contextMenu.element) {
+              if (!selectedElementIds.includes(contextMenu.element.id)) {
+                onSelectElements([contextMenu.element.id]);
+              }
+              if (contextMenu.element.type === 'barcode' && onOpenBarcodeProperties) {
+                onOpenBarcodeProperties();
+                return;
+              }
+            }
+            if (onOpenProperties) {
               onOpenProperties();
             }
           }}

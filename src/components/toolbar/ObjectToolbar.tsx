@@ -98,6 +98,9 @@ interface ObjectToolbarProps {
   snapToGrid: boolean;
   onToggleSnap: () => void;
   onOpenBarcodeProperties?: () => void;
+  onOpenTextProperties?: () => void;
+  onOpenShapeProperties?: () => void;
+  onOpenProperties?: () => void;
   // Formatting Props for active selected element
   selectedElement?: LabelElement | null;
   onUpdateSelectedElement?: (updates: Partial<LabelElement>) => void;
@@ -186,7 +189,11 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
   const handleWidthChange = (newVal: number) => {
     const val = Math.max(1, Number(newVal));
     if (props.selectedElement && props.onUpdateSelectedElement) {
-      props.onUpdateSelectedElement({ width: val });
+      if (props.selectedElement.type === 'text') {
+        props.onUpdateSelectedElement({ width: val, autoSize: false, autoFit: false } as any);
+      } else {
+        props.onUpdateSelectedElement({ width: val });
+      }
     } else if (props.onUpdateTemplateDimensions) {
       props.onUpdateTemplateDimensions({ width: val });
     }
@@ -195,7 +202,11 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
   const handleHeightChange = (newVal: number) => {
     const val = Math.max(1, Number(newVal));
     if (props.selectedElement && props.onUpdateSelectedElement) {
-      props.onUpdateSelectedElement({ height: val });
+      if (props.selectedElement.type === 'text') {
+        props.onUpdateSelectedElement({ height: val, autoSize: false, autoFit: false } as any);
+      } else {
+        props.onUpdateSelectedElement({ height: val });
+      }
     } else if (props.onUpdateTemplateDimensions) {
       props.onUpdateTemplateDimensions({ height: val });
     }
@@ -694,6 +705,22 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
                     <span className="font-sans font-extrabold text-[#7c3aed] text-[10px] leading-none tracking-tighter">TT</span>
                   </div>
                 </button>
+
+                {(props.onOpenTextProperties || props.onOpenProperties) && (
+                  <>
+                    <div className="h-px bg-[#cbd5e1] my-0.5" />
+                    <button
+                      onClick={() => {
+                        setTextDropdownOpen(false);
+                        (props.onOpenTextProperties || props.onOpenProperties)?.();
+                      }}
+                      className="w-full text-left px-3 py-1 hover:bg-[#cce0f5] text-emerald-900 transition-colors font-medium flex items-center justify-between border-t border-slate-100"
+                    >
+                      <span>Text Properties...</span>
+                      <span className="text-[9px] text-slate-500 font-mono">F8</span>
+                    </button>
+                  </>
+                )}
               </div>
             </>
           )}
@@ -1172,6 +1199,17 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
                 <option value={3}>3.0 mm</option>
               </select>
             </div>
+
+            {(props.onOpenShapeProperties || props.onOpenProperties) && (
+              <button
+                onClick={props.onOpenShapeProperties || props.onOpenProperties}
+                className="h-5 px-2 bg-slate-700 hover:bg-slate-800 text-white rounded text-[10.5px] font-semibold flex items-center gap-1 shadow-2xs cursor-pointer ml-auto"
+                title="Shape Properties Dialog (F8)"
+              >
+                <Sliders className="w-3 h-3 text-white" />
+                <span>Shape Properties...</span>
+              </button>
+            )}
           </>
         ) : selectedTextEl ? (
           <>
@@ -1204,11 +1242,22 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
 
             <Divider />
 
-            {/* B, I, U, W buttons */}
+            {/* B, I, U, Auto buttons */}
             <ToolFormatBtn label="B" active={isBold} title="Bold" bold onClick={toggleBold} />
             <ToolFormatBtn label="I" active={isItalic} title="Italic" italic onClick={toggleItalic} />
             <ToolFormatBtn label="U" active={isUnderline} title="Underline" underline onClick={toggleUnderline} />
-            <ToolFormatBtn label="W" active={false} title="Word Wrap / Fit" onClick={() => {}} />
+            <ToolFormatBtn
+              label="Auto"
+              active={selectedTextEl.autoSize !== false}
+              title={selectedTextEl.autoSize !== false ? 'Auto Size: ON (Fitting content tightly)' : 'Auto Size: OFF (Fixed box dimensions)'}
+              bold
+              onClick={() => {
+                if (props.selectedElement && props.onUpdateSelectedElement && selectedTextEl) {
+                  const nextAuto = selectedTextEl.autoSize === false;
+                  props.onUpdateSelectedElement({ autoSize: nextAuto, autoFit: false } as any);
+                }
+              }}
+            />
 
             <Divider />
 
@@ -1267,6 +1316,17 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
                 props.onUpdateSelectedElement({ rotation: ((props.selectedElement.rotation || 0) + 90) % 360 });
               }
             }} />
+
+            {(props.onOpenTextProperties || props.onOpenProperties) && (
+              <button
+                onClick={props.onOpenTextProperties || props.onOpenProperties}
+                className="h-5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10.5px] font-semibold flex items-center gap-1 shadow-2xs cursor-pointer ml-auto"
+                title="Text Properties Dialog (F8)"
+              >
+                <Sliders className="w-3 h-3 text-white" />
+                <span>Text Properties...</span>
+              </button>
+            )}
           </>
         ) : selectedImageEl ? (
           <>

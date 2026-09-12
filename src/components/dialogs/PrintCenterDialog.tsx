@@ -198,7 +198,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
 
   const displayPrinters: PrinterModel[] = useMemo(() => {
     if (availablePrinters && availablePrinters.length > 0) {
-      return availablePrinters.filter(
+      const realPrinters = availablePrinters.filter(
         (p) =>
           !p.isVirtual &&
           !p.id?.includes('citizen') &&
@@ -207,6 +207,14 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
           !p.id?.includes('tsc') &&
           !p.id?.includes('virtual')
       );
+
+      // Only show printers that are currently active / connected / ready
+      const activePrinters = realPrinters.filter((p) => {
+        const s = String(p.status || '').toUpperCase();
+        return s === 'READY' || s === 'ONLINE' || s === 'IDLE' || s === '';
+      });
+
+      return activePrinters.length > 0 ? activePrinters : realPrinters;
     }
     return [];
   }, [availablePrinters]);

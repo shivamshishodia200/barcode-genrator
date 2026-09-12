@@ -36,6 +36,9 @@ interface RightDockPanelProps {
   onUpdateElement: (id: string, updates: Partial<LabelElement>) => void;
   onOpenBarcodePicker: () => void;
   onOpenBarcodeProperties?: () => void;
+  onOpenTextProperties?: () => void;
+  onOpenShapeProperties?: () => void;
+  onOpenProperties?: () => void;
   onClose?: () => void;
   currentRecordData?: Record<string, any>;
   currentRecordIndex?: number;
@@ -49,6 +52,9 @@ export const RightDockPanel: React.FC<RightDockPanelProps> = ({
   onUpdateElement,
   onOpenBarcodePicker,
   onOpenBarcodeProperties,
+  onOpenTextProperties,
+  onOpenShapeProperties,
+  onOpenProperties,
   onClose,
   currentRecordData,
   currentRecordIndex = 0,
@@ -91,9 +97,24 @@ export const RightDockPanel: React.FC<RightDockPanelProps> = ({
         </div>
         <div className="flex items-center gap-1.5">
           {selectedElement && (
-            <span className="text-[10px] font-mono font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded uppercase">
-              {selectedElement.type}
-            </span>
+            <>
+              <button
+                onClick={() => {
+                  if (selectedElement.type === 'text') (onOpenTextProperties || onOpenProperties)?.();
+                  else if (selectedElement.type === 'barcode') (onOpenBarcodeProperties || onOpenProperties)?.();
+                  else if (selectedElement.type === 'shape') (onOpenShapeProperties || onOpenProperties)?.();
+                  else onOpenProperties?.();
+                }}
+                title="Open Advanced Properties Dialog (F8)"
+                className="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <Sliders className="w-3 h-3 text-blue-600" />
+                <span>Modal (F8)</span>
+              </button>
+              <span className="text-[10px] font-mono font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded uppercase">
+                {selectedElement.type}
+              </span>
+            </>
           )}
           {onClose && (
             <button
@@ -479,28 +500,38 @@ export const RightDockPanel: React.FC<RightDockPanelProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-slate-500 font-medium block mb-0.5">
-                    Width (mm)
-                  </label>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <label className="text-[10px] text-slate-500 font-medium">
+                      Width (mm)
+                    </label>
+                    {selectedElement.type === 'text' && (selectedElement as TextElement).autoSize !== false && (
+                      <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 rounded">Auto</span>
+                    )}
+                  </div>
                   <input
                     type="number"
                     step="0.5"
                     disabled={selectedElement.isEditable === false}
                     value={selectedElement.width}
-                    onChange={(e) => updateProp({ width: Number(e.target.value) })}
+                    onChange={(e) => updateProp({ width: Number(e.target.value), autoSize: false, autoFit: false } as any)}
                     className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-mono outline-none disabled:bg-slate-100 disabled:text-slate-400"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-slate-500 font-medium block mb-0.5">
-                    Height (mm)
-                  </label>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <label className="text-[10px] text-slate-500 font-medium">
+                      Height (mm)
+                    </label>
+                    {selectedElement.type === 'text' && (selectedElement as TextElement).autoSize !== false && (
+                      <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 rounded">Auto</span>
+                    )}
+                  </div>
                   <input
                     type="number"
                     step="0.5"
                     disabled={selectedElement.isEditable === false}
                     value={selectedElement.height}
-                    onChange={(e) => updateProp({ height: Number(e.target.value) })}
+                    onChange={(e) => updateProp({ height: Number(e.target.value), autoSize: false, autoFit: false } as any)}
                     className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-mono outline-none disabled:bg-slate-100 disabled:text-slate-400"
                   />
                 </div>
@@ -540,18 +571,65 @@ export const RightDockPanel: React.FC<RightDockPanelProps> = ({
             {selectedElement.type === 'text' && (
               <Section title="Typography & Content">
                 <div className="space-y-2">
+                  <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-1.5 rounded">
+                    <span className="text-[11px] font-semibold text-emerald-950">BarTender Text Object</span>
+                    {(onOpenTextProperties || onOpenProperties) && (
+                      <button
+                        onClick={onOpenTextProperties || onOpenProperties}
+                        className="px-2 py-0.5 bg-white hover:bg-emerald-100 border border-emerald-300 text-emerald-900 text-[10px] font-bold rounded shadow-2xs cursor-pointer flex items-center gap-1"
+                      >
+                        <Sliders className="w-3 h-3 text-emerald-700" />
+                        Full Properties Dialog...
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between bg-emerald-50/70 border border-emerald-200 rounded p-1.5 shadow-2xs">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-emerald-950 select-none">
+                      <input
+                        type="checkbox"
+                        checked={(selectedElement as TextElement).autoSize !== false}
+                        onChange={(e) => {
+                          const isAuto = e.target.checked;
+                          updateProp({
+                            autoSize: isAuto,
+                            autoFit: false,
+                            autoSizeConfig: {
+                              ...((selectedElement as TextElement).autoSizeConfig || {}),
+                              enabled: isAuto,
+                            },
+                          } as any);
+                        }}
+                        className="rounded text-emerald-600 focus:ring-0 w-3.5 h-3.5 accent-[#16a34a]"
+                      />
+                      <span>Auto Size (Fit Bounding Box)</span>
+                    </label>
+                    <span className="text-[10px] text-emerald-700 font-semibold">
+                      {(selectedElement as TextElement).autoSize !== false ? 'Dynamic' : 'Fixed Box'}
+                    </span>
+                  </div>
+
                   <div>
                     <label className="text-[10px] text-slate-500 font-medium block mb-0.5">
                       Text Object Type
                     </label>
                     <select
                       value={(selectedElement as TextElement).textType || 'single-line'}
-                      onChange={(e) => updateProp({ textType: e.target.value as any, multiline: e.target.value === 'multi-line' || e.target.value === 'word-processor' })}
+                      onChange={(e) =>
+                        updateProp({
+                          textType: e.target.value as any,
+                          textFormatType: e.target.value === 'paragraph' ? 'paragraph' : 'single-line',
+                          multiline: e.target.value === 'multi-line' || e.target.value === 'word-processor' || e.target.value === 'paragraph',
+                          wrap: e.target.value === 'paragraph',
+                          wordWrap: e.target.value === 'paragraph',
+                        })
+                      }
                       className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs outline-none font-medium text-slate-800"
                     >
                       <optgroup label="Text Objects">
                         <option value="single-line">Single Line</option>
                         <option value="multi-line">Multi-line</option>
+                        <option value="paragraph">Paragraph (Wrapping)</option>
                         <option value="word-processor">Word Processor</option>
                         <option value="arc">Arc (Curved)</option>
                         <option value="symbol-font">Symbol Font Characters</option>
@@ -600,14 +678,21 @@ export const RightDockPanel: React.FC<RightDockPanelProps> = ({
                         Font Family
                       </label>
                       <select
-                        value={(selectedElement as TextElement).fontFamily}
+                        value={(selectedElement as TextElement).fontFamily || 'Arial'}
                         onChange={(e) => updateProp({ fontFamily: e.target.value })}
                         className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs outline-none"
                       >
-                        <option value="Helvetica, Arial, sans-serif">Helvetica</option>
-                        <option value="Courier, monospace">Courier (Thermal OCR)</option>
-                        <option value="'Times New Roman', serif">Times New Roman</option>
-                        <option value="Arial Black, sans-serif">Arial Heavy</option>
+                        <option value="Arial">Arial</option>
+                        <option value="Arial Black">Arial Black</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Courier New">Courier New</option>
+                        <option value="Helvetica">Helvetica</option>
+                        <option value="Segoe UI">Segoe UI</option>
+                        <option value="Tahoma">Tahoma</option>
+                        <option value="Verdana">Verdana</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Impact">Impact</option>
+                        <option value="Consolas">Consolas</option>
                       </select>
                     </div>
 
@@ -617,6 +702,9 @@ export const RightDockPanel: React.FC<RightDockPanelProps> = ({
                       </label>
                       <input
                         type="number"
+                        min="4"
+                        max="720"
+                        step="0.5"
                         value={(selectedElement as TextElement).fontSize}
                         onChange={(e) => updateProp({ fontSize: Number(e.target.value) })}
                         className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-mono outline-none"
@@ -630,29 +718,62 @@ export const RightDockPanel: React.FC<RightDockPanelProps> = ({
                         Font Weight
                       </label>
                       <select
-                        value={(selectedElement as TextElement).fontWeight}
+                        value={(selectedElement as TextElement).fontWeight || 'normal'}
                         onChange={(e) => updateProp({ fontWeight: e.target.value as any })}
                         className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs outline-none"
                       >
                         <option value="normal">Regular</option>
-                        <option value="bold">Bold (Zebra Heavy)</option>
+                        <option value="bold">Bold (Heavy)</option>
+                        <option value="600">Semi Bold</option>
                         <option value="800">Black / Extra Bold</option>
                       </select>
                     </div>
 
                     <div>
                       <label className="text-[10px] text-slate-500 font-medium block mb-0.5">
+                        Font Style
+                      </label>
+                      <select
+                        value={(selectedElement as TextElement).fontStyle || 'normal'}
+                        onChange={(e) => updateProp({ fontStyle: e.target.value as any })}
+                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs outline-none"
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="italic">Italic</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-slate-500 font-medium block mb-0.5">
                         Text Align
                       </label>
                       <select
-                        value={(selectedElement as TextElement).textAlign}
+                        value={(selectedElement as TextElement).textAlign || 'left'}
                         onChange={(e) => updateProp({ textAlign: e.target.value as any })}
                         className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs outline-none"
                       >
                         <option value="left">Left</option>
                         <option value="center">Center</option>
                         <option value="right">Right</option>
+                        <option value="justify">Justify</option>
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-500 font-medium block mb-0.5">
+                        Line Height
+                      </label>
+                      <input
+                        type="number"
+                        step="0.05"
+                        min="0.8"
+                        max="3.0"
+                        value={(selectedElement as TextElement).lineHeight || 1.15}
+                        onChange={(e) => updateProp({ lineHeight: Number(e.target.value) })}
+                        className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-mono outline-none"
+                      />
                     </div>
                   </div>
 
@@ -674,6 +795,7 @@ export const RightDockPanel: React.FC<RightDockPanelProps> = ({
                       </label>
                       <input
                         type="number"
+                        step="0.5"
                         value={(selectedElement as TextElement).letterSpacing || 0}
                         onChange={(e) => updateProp({ letterSpacing: Number(e.target.value) })}
                         className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-mono outline-none"
@@ -816,6 +938,19 @@ export const RightDockPanel: React.FC<RightDockPanelProps> = ({
             {selectedElement.type === 'shape' && (
               <Section title="Shape & Border Styling">
                 <div className="space-y-2">
+                  <div className="flex items-center justify-between bg-slate-50 border border-slate-200 p-1.5 rounded">
+                    <span className="text-[11px] font-semibold text-slate-800">Shape Object</span>
+                    {(onOpenShapeProperties || onOpenProperties) && (
+                      <button
+                        onClick={onOpenShapeProperties || onOpenProperties}
+                        className="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 text-[10px] font-bold rounded shadow-2xs cursor-pointer flex items-center gap-1"
+                      >
+                        <Sliders className="w-3 h-3 text-slate-700" />
+                        Full Properties Dialog...
+                      </button>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[10px] text-slate-500 font-medium block mb-0.5">

@@ -2,13 +2,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import { LabelElement, BarcodeElement, TextElement, ShapeElement, ImageElement, TableElement } from '../../types';
 import { renderBarcodeToCanvas } from '../../services/barcodeEngine';
 import { evaluateElementData } from '../../services/dataSourceEngine';
+import { measureTextObject } from '../../services/textMeasurementEngine';
+import { InlineTextEditor } from './InlineTextEditor';
 import { Lock } from 'lucide-react';
 
 interface CanvasElementProps {
   element: LabelElement;
   isSelected: boolean;
+  isEditing?: boolean;
   onSelect: (e: React.MouseEvent, el: LabelElement) => void;
   onDoubleClick?: (el: LabelElement) => void;
+  onStartEdit?: (el: LabelElement) => void;
+  onCommitEdit?: (id: string, newText: string) => void;
+  onCancelEdit?: () => void;
+  onDraftResize?: (id: string, widthMm: number, heightMm: number) => void;
   scale: number; // px per mm
   recordData: Record<string, string>;
   onStartDrag: (e: React.MouseEvent, el: LabelElement) => void;
@@ -22,8 +29,13 @@ interface CanvasElementProps {
 export const CanvasElement: React.FC<CanvasElementProps> = ({
   element,
   isSelected,
+  isEditing = false,
   onSelect,
   onDoubleClick,
+  onStartEdit,
+  onCommitEdit,
+  onCancelEdit,
+  onDraftResize,
   scale,
   recordData,
   onStartDrag,
@@ -37,18 +49,63 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
   const [barcodeRenderError, setBarcodeRenderError] = useState(false);
   const [isDragOverTarget, setIsDragOverTarget] = useState(false);
 
+  const evaluatedContent = evaluateElementData(element, { record: recordData });
+  const isLocked = !!element.locked;
+  const isEditable = !isLocked && (element.editable !== undefined ? element.editable : element.isEditable !== undefined ? element.isEditable : true);
+  const allowMove = isEditable && element.allowMove !== false;
+  const allowResize = isEditable && element.allowResize !== false;
+  const allowRotate = isEditable && element.allowRotate !== false;
+  const isMissingField = typeof evaluatedContent === 'string' && evaluatedContent.startsWith('⚠ Missing Field');
+
+  const isTextEl = element.type === 'text';
+  const textEl = isTextEl ? (element as TextElement) : null;
+  const isTextAutoSize =
+    isTextEl &&
+    textEl &&
+    textEl.autoSize !== false &&
+    (textEl.autoSize === true ||
+      textEl.autoSizeConfig?.enabled === true ||
+      textEl.textType === 'single-line' ||
+      !textEl.textType ||
+      textEl.textFormatType === 'single-line');
+
+  let dynamicWidth = element.width;
+  let dynamicHeight = element.height;
+
+  if (isTextAutoSize && textEl) {
+    const isParagraph = textEl.textFormatType === 'paragraph' || textEl.textType === 'paragraph';
+    const dims = measureTextObject({
+      text: typeof evaluatedContent === 'string' ? evaluatedContent : textEl.text,
+      fontFamily: textEl.fontFamily,
+      fontSize: textEl.fontSize,
+      fontWeight: textEl.fontWeight,
+      fontStyle: textEl.fontStyle,
+      letterSpacing: textEl.letterSpacing,
+      lineHeight: textEl.lineHeight,
+      fontWidthScale: textEl.fontWidthScale,
+      textType: textEl.textType,
+      textFormatType: textEl.textFormatType,
+      multiline: textEl.multiline,
+      wrap: textEl.wrap || textEl.wordWrap,
+      containerWidthMm: isParagraph && textEl.width > 0 ? textEl.width : undefined,
+      borderConfig: textEl.borderConfig,
+    });
+    dynamicWidth = isParagraph && textEl.width > 0 ? textEl.width : dims.width;
+    dynamicHeight = dims.height;
+  }
+
   // Position & Dimensions in screen pixels
   const leftPx = element.x * scale;
   const topPx = element.y * scale;
-  const widthPx = element.width * scale;
-  const heightPx = element.height * scale;
+  const widthPx = dynamicWidth * scale;
+  const heightPx = dynamicHeight * scale;
 
   // Out of bounds detection
   const isOutOfBounds = labelDimensions
     ? element.x < 0 ||
       element.y < 0 ||
-      element.x + element.width > labelDimensions.width ||
-      element.y + element.height > labelDimensions.height
+      element.x + dynamicWidth > labelDimensions.width ||
+      element.y + dynamicHeight > labelDimensions.height
     : false;
 
   // Re-render barcode when value or element specs change
@@ -68,19 +125,13 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
 
   if (!element.visible) return null;
 
-  const evaluatedContent = evaluateElementData(element, { record: recordData });
-  const isLocked = !!element.locked;
-  const isEditable = !isLocked && (element.editable !== undefined ? element.editable : element.isEditable !== undefined ? element.isEditable : true);
-  const allowMove = isEditable && element.allowMove !== false;
-  const allowResize = isEditable && element.allowResize !== false;
-  const allowRotate = isEditable && element.allowRotate !== false;
-  const isMissingField = typeof evaluatedContent === 'string' && evaluatedContent.startsWith('⚠ Missing Field');
-
   return (
     <div
       id={`canvas-el-${element.id}`}
       className={`absolute select-none transition-all duration-75 ${
-        isDragOverTarget
+        isEditing
+          ? 'ring-1 ring-[#16a34a] ring-offset-1 shadow-sm bg-white/40'
+          : isDragOverTarget
           ? 'ring-2 ring-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.6)] bg-emerald-50/25'
           : isMissingField
           ? 'ring-2 ring-red-500 bg-red-50/20'
@@ -88,9 +139,9 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
           ? isLocked ? 'cursor-not-allowed ring-1 ring-amber-400/50' : 'cursor-default'
           : 'cursor-move'
       } ${
-        isSelected && !isDragOverTarget && !isMissingField
+        isSelected && !isEditing && !isDragOverTarget && !isMissingField
           ? isLocked ? 'ring-2 ring-amber-500 shadow-xs' : 'ring-1 ring-[#16a34a] shadow-xs'
-          : !isDragOverTarget && !isMissingField ? 'hover:ring-1 hover:ring-[#93c5fd]' : ''
+          : !isEditing && !isDragOverTarget && !isMissingField ? 'hover:ring-1 hover:ring-[#93c5fd]' : ''
       }`}
       style={{
         left: `${leftPx}px`,
@@ -106,7 +157,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
         if (e.button === 0) {
           e.stopPropagation();
           onSelect(e, element);
-          if (allowMove) {
+          if (allowMove && !isEditing) {
             onStartDrag(e, element);
           }
         }
@@ -123,7 +174,11 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
       }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        if (onDoubleClick) onDoubleClick(element);
+        if (element.type === 'text' && onStartEdit) {
+          onStartEdit(element);
+        } else if (onDoubleClick) {
+          onDoubleClick(element);
+        }
       }}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('application/json')) {
@@ -162,7 +217,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
       )}
 
       {/* Out of Bounds Warning Badge */}
-      {isOutOfBounds && isSelected && (
+      {isOutOfBounds && isSelected && !isEditing && (
         <div className="absolute -top-6 left-0 bg-amber-600 text-white font-semibold text-[9.5px] px-1.5 py-0.5 rounded shadow z-50 whitespace-nowrap flex items-center gap-1 pointer-events-none ring-1 ring-white/50">
           <span>⚠ {element.type === 'barcode' ? 'Barcode extends outside printable area' : 'Object extends outside printable area'}</span>
         </div>
@@ -171,6 +226,19 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
       {/* Element Content Rendering */}
       {element.type === 'text' && (() => {
         const textEl = element as TextElement;
+
+        // Render live Inline Text Editor if actively editing
+        if (isEditing && onCommitEdit && onCancelEdit) {
+          return (
+            <InlineTextEditor
+              element={textEl}
+              scale={scale}
+              onCommit={onCommitEdit}
+              onCancel={onCancelEdit}
+              onDraftDimensionsChange={onDraftResize}
+            />
+          );
+        }
 
         // Border configuration
         const border = textEl.borderConfig;
@@ -235,7 +303,7 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
                 <path id={pathId} d={pathData} fill="none" stroke="transparent" />
                 <text
                   fill={textEl.whiteOnBlack ? '#ffffff' : textEl.color || '#000000'}
-                  fontSize={textEl.fontSize * (scale / 3.78) * 0.85}
+                  fontSize={(textEl.fontSize || 10) * (25.4 / 72) * scale}
                   fontFamily={textEl.fontFamily || 'Arial, sans-serif'}
                   fontWeight={textEl.fontWeight || 'normal'}
                   fontStyle={textEl.fontStyle || 'normal'}
@@ -250,15 +318,18 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
           );
         }
 
-        // Dynamic Auto-Fit Font Size Calculation
-        let effectiveFontSize = textEl.fontSize * (scale / 3.78) * 0.85;
-        if ((textEl.autoFit || textEl.autoSize || textEl.autoSizeConfig?.enabled) && evaluatedContent) {
+        // Standard Font Size in screen pixels (1 pt = 25.4/72 mm * scale)
+        const baseFontSizePx = (textEl.fontSize || 10) * (25.4 / 72) * scale;
+        let effectiveFontSize = baseFontSizePx;
+
+        // Explicit Auto-Fit font scaling only when enabled on a fixed-size container (autoFit === true && !isTextAutoSize)
+        if (textEl.autoFit && !isTextAutoSize && evaluatedContent) {
           const maxW = Math.max(10, widthPx - mLeft - mRight);
           const maxH = Math.max(10, heightPx - mTop - mBottom);
           const textLength = evaluatedContent.length || 1;
           const approxCharWidthRatio = 0.55;
-          const minSz = textEl.autoSizeConfig?.minFontSize ?? textEl.minFontSize ?? 6;
-          const maxSz = textEl.autoSizeConfig?.maxFontSize ?? textEl.maxFontSize ?? 720;
+          const minSz = (textEl.autoSizeConfig?.minFontSize ?? textEl.minFontSize ?? 6) * (25.4 / 72) * scale;
+          const maxSz = (textEl.autoSizeConfig?.maxFontSize ?? textEl.maxFontSize ?? 720) * (25.4 / 72) * scale;
 
           if (!textEl.multiline && textEl.textType !== 'multi-line' && textEl.textFormatType !== 'paragraph') {
             const estimatedWidth = textLength * effectiveFontSize * approxCharWidthRatio;
@@ -458,8 +529,8 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
         </div>
       )}
 
-      {/* Resize Handles if selected and allowed */}
-      {isSelected && allowResize && (
+      {/* Resize Handles if selected, not actively editing, and allowed */}
+      {isSelected && !isEditing && allowResize && (
         <>
           {/* Top-Left */}
           <div
@@ -528,8 +599,8 @@ export const CanvasElement: React.FC<CanvasElementProps> = ({
         </>
       )}
 
-      {/* Rotate Handle if selected and allowed */}
-      {isSelected && allowRotate && (
+      {/* Rotate Handle if selected, not editing, and allowed */}
+      {isSelected && !isEditing && allowRotate && (
         <div
           className="absolute -top-7 left-1/2 -translate-x-1/2 flex flex-col items-center cursor-grab active:cursor-grabbing z-20"
           onMouseDown={(e) => {

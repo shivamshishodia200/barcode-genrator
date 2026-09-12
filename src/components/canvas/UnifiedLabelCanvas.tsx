@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { LabelTemplate, LabelElement, CanvasAnnotation, ViewportState } from '../../types';
+import { LabelTemplate, LabelElement, TextElement, CanvasAnnotation, ViewportState } from '../../types';
 import { CanvasElement } from './CanvasElement';
 import { renderBarcodeToCanvas } from '../../services/barcodeEngine';
+import { measureTextObject } from '../../services/textMeasurementEngine';
 import { Lock, MessageSquare, AlertCircle, Sparkles, CheckCircle2, Shield } from 'lucide-react';
 
 export interface UnifiedLabelCanvasProps {
@@ -255,10 +256,57 @@ const ReadOnlyCanvasElement: React.FC<ReadOnlyCanvasElementProps> = ({
   onHover,
 }) => {
   const barcodeCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Evaluate content with dynamic records
+  let evaluatedContent = (element as any).text || (element as any).value || '';
+  if ((element as any).dataBinding) {
+    const key = (element as any).dataBinding.replace(/[{}]/g, '').trim();
+    if (recordData[key] !== undefined) {
+      evaluatedContent = recordData[key];
+    }
+  }
+
+  const isTextEl = element.type === 'text';
+  const textEl = isTextEl ? (element as TextElement) : null;
+  const isTextAutoSize =
+    isTextEl &&
+    textEl &&
+    textEl.autoSize !== false &&
+    (textEl.autoSize === true ||
+      textEl.autoSizeConfig?.enabled === true ||
+      textEl.textType === 'single-line' ||
+      !textEl.textType ||
+      textEl.textFormatType === 'single-line');
+
+  let dynamicWidth = element.width;
+  let dynamicHeight = element.height;
+
+  if (isTextAutoSize && textEl) {
+    const isParagraph = textEl.textFormatType === 'paragraph' || textEl.textType === 'paragraph';
+    const dims = measureTextObject({
+      text: typeof evaluatedContent === 'string' ? evaluatedContent : textEl.text,
+      fontFamily: textEl.fontFamily,
+      fontSize: textEl.fontSize,
+      fontWeight: textEl.fontWeight,
+      fontStyle: textEl.fontStyle,
+      letterSpacing: textEl.letterSpacing,
+      lineHeight: textEl.lineHeight,
+      fontWidthScale: textEl.fontWidthScale,
+      textType: textEl.textType,
+      textFormatType: textEl.textFormatType,
+      multiline: textEl.multiline,
+      wrap: textEl.wrap || textEl.wordWrap,
+      containerWidthMm: isParagraph && textEl.width > 0 ? textEl.width : undefined,
+      borderConfig: textEl.borderConfig,
+    });
+    dynamicWidth = isParagraph && textEl.width > 0 ? textEl.width : dims.width;
+    dynamicHeight = dims.height;
+  }
+
   const leftPx = element.x * scale;
   const topPx = element.y * scale;
-  const widthPx = element.width * scale;
-  const heightPx = element.height * scale;
+  const widthPx = dynamicWidth * scale;
+  const heightPx = dynamicHeight * scale;
 
   useEffect(() => {
     if (element.type === 'barcode' && barcodeCanvasRef.current) {
@@ -272,15 +320,6 @@ const ReadOnlyCanvasElement: React.FC<ReadOnlyCanvasElementProps> = ({
   }, [element, recordData, scale]);
 
   if (!element.visible) return null;
-
-  // Evaluate content with dynamic records
-  let evaluatedContent = (element as any).text || (element as any).value || '';
-  if ((element as any).dataBinding) {
-    const key = (element as any).dataBinding.replace(/[{}]/g, '').trim();
-    if (recordData[key] !== undefined) {
-      evaluatedContent = recordData[key];
-    }
-  }
 
   // Diff styles
   const diffClass =
@@ -323,15 +362,16 @@ const ReadOnlyCanvasElement: React.FC<ReadOnlyCanvasElementProps> = ({
     >
       {/* 1. Text Element */}
       {element.type === 'text' && (() => {
-        const textEl = element as any;
-        // Dynamic Auto-Fit Font Size Calculation
-        let effectiveFontSize = (textEl.fontSize || 12) * (scale / 3.78) * 0.85;
-        if (textEl.autoFit && evaluatedContent) {
+        const textElement = element as TextElement;
+        const baseFontSizePx = (textElement.fontSize || 10) * (25.4 / 72) * scale;
+        let effectiveFontSize = baseFontSizePx;
+
+        if (textElement.autoFit && !isTextAutoSize && evaluatedContent) {
           const maxW = widthPx;
           const maxH = heightPx;
           const textLength = evaluatedContent.length || 1;
           const approxCharWidthRatio = 0.55;
-          if (!textEl.multiline && textEl.textType !== 'multi-line') {
+          if (!textElement.multiline && textElement.textType !== 'multi-line') {
             const estimatedWidth = textLength * effectiveFontSize * approxCharWidthRatio;
             if (estimatedWidth > maxW && maxW > 0) {
               const widthRatio = maxW / estimatedWidth;
@@ -343,7 +383,7 @@ const ReadOnlyCanvasElement: React.FC<ReadOnlyCanvasElementProps> = ({
           } else {
             const charsPerLine = Math.max(1, Math.floor(maxW / (effectiveFontSize * approxCharWidthRatio)));
             const estimatedLines = Math.ceil(textLength / charsPerLine);
-            const estimatedHeight = estimatedLines * effectiveFontSize * (textEl.lineHeight || 1.15);
+            const estimatedHeight = estimatedLines * effectiveFontSize * (textElement.lineHeight || 1.15);
             if (estimatedHeight > maxH && maxH > 0) {
               const heightRatio = Math.sqrt(maxH / estimatedHeight);
               effectiveFontSize = Math.max(6, effectiveFontSize * heightRatio);
@@ -351,18 +391,18 @@ const ReadOnlyCanvasElement: React.FC<ReadOnlyCanvasElementProps> = ({
           }
         }
 
-        if (textEl.textType === 'html' || textEl.textType === 'word-processor' || textEl.textType === 'rtf' || textEl.richContentHtml) {
+        if (textElement.textType === 'html' || textElement.textType === 'word-processor' || textElement.textType === 'rtf' || textElement.richContentHtml) {
           return (
             <div
               className="w-full h-full overflow-hidden p-0.5 text-slate-900"
               style={{
-                fontFamily: textEl.fontFamily || 'Arial, sans-serif',
+                fontFamily: textElement.fontFamily || 'Arial, sans-serif',
                 fontSize: `${effectiveFontSize}px`,
-                color: textEl.color || '#000000',
-                backgroundColor: textEl.backgroundColor || 'transparent',
-                lineHeight: textEl.lineHeight || 1.25,
+                color: textElement.color || '#000000',
+                backgroundColor: textElement.backgroundColor || 'transparent',
+                lineHeight: textElement.lineHeight || 1.25,
               }}
-              dangerouslySetInnerHTML={{ __html: textEl.richContentHtml || evaluatedContent }}
+              dangerouslySetInnerHTML={{ __html: textElement.richContentHtml || evaluatedContent }}
             />
           );
         }

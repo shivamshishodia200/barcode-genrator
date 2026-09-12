@@ -11,6 +11,7 @@ import {
   ReferencePoint,
 } from '../../types';
 import { evaluateElementData, evaluateTextElement, formatCustomDate } from '../../services/dataSourceEngine';
+import { recalculateTextElementDimensions } from '../../services/textMeasurementEngine';
 import { SerializationModal } from './SerializationModal';
 import {
   SuppressionModal,
@@ -247,6 +248,14 @@ export const TextPropertiesModal: React.FC<TextPropertiesModalProps> = ({
       // Re-evaluate combined text
       const compiled = evaluateTextElement(updated, { record: currentRecord, datasets });
       updated.text = compiled;
+
+      // If Auto Size is active and manual width/height wasn't explicitly changed without autoSize
+      if (updated.autoSize !== false) {
+        const dims = recalculateTextElementDimensions(updated, compiled);
+        updated.width = dims.width;
+        updated.height = dims.height;
+      }
+
       return updated;
     });
   };
@@ -978,20 +987,21 @@ export const TextPropertiesModal: React.FC<TextPropertiesModalProps> = ({
 
                   {formatSubTab === 'autosize' && (
                     <div className="space-y-3 text-[11.5px]">
-                      <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
                         <input
                           type="checkbox"
-                          checked={!!draftElement.autoSize || !!draftElement.autoFit}
-                          onChange={(e) =>
+                          checked={draftElement.autoSize !== false}
+                          onChange={(e) => {
+                            const isChecked = e.target.checked;
                             updateDraft({
-                              autoSize: e.target.checked,
-                              autoFit: e.target.checked,
-                              autoSizeConfig: { ...draftElement.autoSizeConfig!, enabled: e.target.checked },
-                            })
-                          }
+                              autoSize: isChecked,
+                              autoFit: false,
+                              autoSizeConfig: { ...draftElement.autoSizeConfig!, enabled: isChecked },
+                            });
+                          }}
                           className="accent-[#0078d7]"
                         />
-                        <span>Auto Size (Fit text into bounding box dynamically)</span>
+                        <span>Auto Size (Fit bounding box to rendered text content)</span>
                       </label>
 
                       <fieldset className="border border-[#cbd5e1] rounded p-2.5 space-y-2">
