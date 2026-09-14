@@ -8,11 +8,15 @@ export interface DetectedSystemPrinter {
   id: string;
   name: string;
   systemName: string;
+  deviceName: string;
   displayName: string;
   driverName?: string;
   port?: string;
   portName?: string;
+  location?: string;
+  comment?: string;
   isDefault: boolean;
+  isInteractive: boolean;
   status: 'READY' | 'OFFLINE' | 'PAUSED' | 'ERROR' | 'BUSY' | 'UNKNOWN' | 'ready' | 'offline' | 'paused' | 'error' | 'unknown';
   statusDetails?: string;
   connectionType: 'windows-driver';
@@ -39,9 +43,58 @@ export interface DetectedSystemPrinter {
   };
 }
 
+export function isInteractiveDriverPrinter(meta: {
+  name: string;
+  driverName?: string;
+  portName?: string;
+}): boolean {
+  const port = (meta.portName || '').trim().toLowerCase();
+  const driver = (meta.driverName || '').trim().toLowerCase();
+  const name = meta.name.trim().toLowerCase();
+
+  // 1. Port indicates prompt or virtual document sink
+  if (
+    port === 'portprompt:' ||
+    port === 'nul:' ||
+    port.startsWith('file:') ||
+    port.includes('prompt') ||
+    port.includes('virtual') ||
+    port.includes('kingsoft') ||
+    port.includes('nitro') ||
+    port.includes('pdf')
+  ) {
+    return true;
+  }
+
+  // 2. Driver indicates virtual document generator / interactive driver
+  if (
+    driver.includes('print to pdf') ||
+    driver.includes('pdf driver') ||
+    driver.includes('virtual printer') ||
+    driver.includes('onenote') ||
+    driver.includes('document writer') ||
+    driver.includes('fax')
+  ) {
+    return true;
+  }
+
+  // 3. Printer name indicates virtual printer
+  if (
+    name.includes('print to pdf') ||
+    name.includes('wps pdf') ||
+    name.includes('onenote') ||
+    name.includes('nitro pdf')
+  ) {
+    return true;
+  }
+
+  // Physical USB, Network (IP_*, WSD-*, \\*), Serial, Parallel -> Direct print (silent: true)
+  return false;
+}
+
 /**
  * Discovers real installed Windows printers using Electron WebContents and Windows CIM/Spooler API.
- * Uses Get-CimInstance Win32_Printer for 100% reliable Default, WorkOffline, PortName, and DriverName.
+ * Uses Get-CimInstance Win32_Printer for 100% reliable Default, WorkOffline, PortName, DriverName, Location, Comment.
  */
 export async function discoverSystemPrinters(
   window?: BrowserWindow | null
@@ -50,9 +103,10 @@ export async function discoverSystemPrinters(
   let electronDefaultName: string | null = null;
 
   // 1. Probe via Electron native getPrintersAsync if window is available
-  if (window && !window.isDestroyed()) {
+  const activeWin = window && !window.isDestroyed() ? window : (BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) || null);
+  if (activeWin) {
     try {
-      const electronPrinters = await window.webContents.getPrintersAsync();
+      const electronPrinters = await activeWin.webContents.getPrintersAsync();
       electronPrinters.forEach((p, idx) => {
         const isDefault = Boolean(p.isDefault);
         if (isDefault) {
@@ -75,11 +129,15 @@ export async function discoverSystemPrinters(
     }
   }
 
-  // 2. Query Windows CIM Win32_Printer for enriched driver, port, offline state, and exact Default printer
+  // 2. Query Windows CIM Win32_Printer for enriched driver, port, offline state, location, comment, and exact Default printer
   if (process.platform === 'win32') {
     try {
-      const psCommand = `powershell -NoProfile -NonInteractive -Command "$ProgressPreference = 'SilentlyContinue'; Get-CimInstance Win32_Printer | Select-Object Name, Default, DriverName, PortName, PrinterStatus, WorkOffline | ConvertTo-Json -Compress"`;
-      const { stdout } = await execAsync(psCommand);
+      const psCommand = `powershell -NoProfile -NonInteractive -Command "$ProgressPreference = 'SilentlyContinue'; Get-CimInstance Win32_Printer | Select-Object Name, Default, DriverName, PortName, PrinterStatus, WorkOffline, Location, Comment | ConvertTo-Json -Compress"`;
+      const execPromise = execAsync(psCommand);
+      const timeoutPromise = new Promise<{ stdout: string }>((_, reject) =>
+        setTimeout(() => reject(new Error('PowerShell CIM query timed out')), 2500)
+      );
+      const { stdout } = await Promise.race([execPromise, timeoutPromise]);
       if (stdout.trim()) {
         const jsonStart = stdout.indexOf('[');
         const jsonObjStart = stdout.indexOf('{');
@@ -113,14 +171,26 @@ export async function discoverSystemPrinters(
             existing.driverName = p.DriverName || existing.driverName;
             existing.port = p.PortName || existing.port;
             existing.portName = p.PortName || existing.portName;
+            existing.location = p.Location || existing.location;
+            existing.comment = p.Comment || existing.comment;
+            existing.isInteractive = isInteractiveDriverPrinter({
+              name: existing.name,
+              driverName: existing.driverName,
+              portName: existing.portName,
+            });
             existing.status = psStatus;
-            if (isDefault) existing.isDefault = true;
+            if (isDefault) {
+              existing.isDefault = true;
+              existing.displayName = `Default (currently ${existing.name})`;
+            }
           } else {
             const item = buildDetectedPrinterFromMeta({
               id: `prn-cim-${idx + 1}`,
               name,
               driverName: p.DriverName,
               port: p.PortName,
+              location: p.Location,
+              comment: p.Comment,
               isDefault,
               status: psStatus,
             });
@@ -132,7 +202,9 @@ export async function discoverSystemPrinters(
         if (!hasCimDefault && electronDefaultName) {
           const defaultKey = electronDefaultName.toLowerCase();
           if (printerMap.has(defaultKey)) {
-            printerMap.get(defaultKey)!.isDefault = true;
+            const defPrn = printerMap.get(defaultKey)!;
+            defPrn.isDefault = true;
+            defPrn.displayName = `Default (currently ${defPrn.name})`;
           }
         }
       }
@@ -147,9 +219,13 @@ export async function discoverSystemPrinters(
     if (printer.isDefault) {
       if (foundDefault) {
         printer.isDefault = false;
+        printer.displayName = printer.name;
       } else {
         foundDefault = true;
+        printer.displayName = `Default (currently ${printer.name})`;
       }
+    } else {
+      printer.displayName = printer.name;
     }
   });
 
@@ -161,6 +237,8 @@ function buildDetectedPrinterFromMeta(meta: {
   name: string;
   driverName?: string;
   port?: string;
+  location?: string;
+  comment?: string;
   isDefault: boolean;
   status: DetectedSystemPrinter['status'];
 }): DetectedSystemPrinter {
@@ -200,15 +278,25 @@ function buildDetectedPrinterFromMeta(meta: {
     manufacturer = meta.driverName?.split(' ')[0] || undefined;
   }
 
+  const isInteractive = isInteractiveDriverPrinter({
+    name: meta.name,
+    driverName: meta.driverName,
+    portName: meta.port,
+  });
+
   return {
     id: meta.id,
     name: meta.name,
     systemName: meta.name,
-    displayName: meta.name,
+    deviceName: meta.name,
+    displayName: meta.isDefault ? `Default (currently ${meta.name})` : meta.name,
     driverName: meta.driverName,
     port: meta.port,
     portName: meta.port,
+    location: meta.location,
+    comment: meta.comment,
     isDefault: meta.isDefault,
+    isInteractive,
     status: meta.status,
     connectionType: 'windows-driver',
     manufacturer,

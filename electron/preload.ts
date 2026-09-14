@@ -30,8 +30,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Desktop Document File APIs
   showSaveDialog: (defaultFileName?: string, defaultDir?: string): Promise<{ canceled: boolean; filePath?: string; fileName?: string }> =>
     ipcRenderer.invoke('document:show-save-dialog', defaultFileName, defaultDir),
+  showSavePdfDialog: (defaultFileName?: string, defaultDir?: string): Promise<{ canceled: boolean; filePath?: string; fileName?: string }> =>
+    ipcRenderer.invoke('document:show-save-pdf-dialog', defaultFileName, defaultDir),
+  showDirectoryDialog: (defaultDir?: string): Promise<{ canceled: boolean; folderPath?: string }> =>
+    ipcRenderer.invoke('document:show-directory-dialog', defaultDir),
   saveFile: (filePath: string, documentData: any): Promise<{ success: boolean; filePath?: string; fileName?: string; sizeBytes?: number; lastModified?: string; error?: string }> =>
     ipcRenderer.invoke('document:save-file', { filePath, documentData }),
+  saveBinaryFile: (filePath: string, base64Data: string): Promise<{ success: boolean; filePath?: string; fileName?: string; sizeBytes?: number; lastModified?: string; error?: string }> =>
+    ipcRenderer.invoke('document:save-binary-file', { filePath, base64Data }),
   showOpenDialog: (defaultDir?: string): Promise<{ canceled: boolean; filePath?: string; fileName?: string }> =>
     ipcRenderer.invoke('document:show-open-dialog', defaultDir),
   readFile: (filePath: string): Promise<{ success: boolean; document?: any; filePath?: string; fileName?: string; sizeBytes?: number; lastModified?: string; error?: string }> =>
@@ -40,6 +46,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('document:check-file-exists', filePath),
   openDocumentLocation: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke('document:open-location', filePath),
+  openDocumentFile: (filePath: string): Promise<boolean> =>
+    ipcRenderer.invoke('document:open-file', filePath),
   getFonts: (): Promise<string[]> =>
     ipcRenderer.invoke('fonts:list'),
   exitApp: (): Promise<boolean> =>
@@ -78,6 +86,13 @@ contextBridge.exposeInMainWorld('barcodeFlow', {
       ipcRenderer.invoke('printers:open-properties', printerName),
     cancelQueuedJobs: (printerName: string): Promise<{ success: boolean; message: string; error?: string }> =>
       ipcRenderer.invoke('printers:cancel-queued-jobs', printerName),
+    generatePdf: (req: {
+      htmlContent: string;
+      widthMm: number;
+      heightMm: number;
+      landscape?: boolean;
+    }): Promise<{ success: boolean; base64Data?: string; sizeBytes?: number; error?: string }> =>
+      ipcRenderer.invoke('printers:generate-pdf', req),
   },
   fonts: {
     list: (): Promise<string[]> => ipcRenderer.invoke('fonts:list'),

@@ -21,7 +21,9 @@ import {
   Settings,
   Trash2,
   RefreshCw,
+  Folder,
 } from 'lucide-react';
+import { promptSelectFolder } from '../../services/fileSavePromptService';
 import { generateZPL, generateTSPL, generateEPL } from '../../services/zplEngine';
 import { renderTSPL, renderZPL, renderCPCL, renderSBPL } from '../../printing/renderers';
 import { exportLabelsToPDF } from '../../services/pdfExportService';
@@ -41,6 +43,7 @@ import { PrinterCodeModifierModal, PrinterCodeModifierConfig } from './PrinterCo
 import { PrinterService, useCentralPrinterState } from '../../printer/printerService';
 import { PrinterModel } from '../../printer/types';
 import { createPrintPlan, PrintPlan } from '../../services/printPlanService';
+import { PrintExecutionService, resolveExactDeviceName } from '../../services/printExecutionService';
 import {
   getGlobalObjectPrintMethodSettings,
   saveGlobalObjectPrintMethodSettings,
@@ -90,6 +93,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     activePrinter,
     printersLoading,
     setActivePrinter,
+    refreshPrinters,
   } = useCentralPrinterState();
 
   // Dialog top tabs: 'print' | 'objectPrintMethod'
@@ -139,6 +143,9 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
   const [userDpiOverride, setUserDpiOverride] = useState<number | null>(null);
 
   // Execution states
+  type PrintProgressState = 'IDLE' | 'PREPARING' | 'RENDERING' | 'DISPATCHING' | 'SUBMITTED' | 'CANCELLED' | 'FAILED';
+  const [printProgressState, setPrintProgressState] = useState<PrintProgressState>('IDLE');
+  const [printErrorMessage, setPrintErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [jobSuccess, setJobSuccess] = useState<string | null>(null);
   const [testPrintSuccess, setTestPrintSuccess] = useState<string | null>(null);
@@ -162,6 +169,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
   const [isPageSetupModalOpen, setIsPageSetupModalOpen] = useState(false);
   const [isCodeModifierModalOpen, setIsCodeModifierModalOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isOfflinePrinterModalOpen, setIsOfflinePrinterModalOpen] = useState(false);
 
   // Database Connection Toggle
   const hasDatabaseConnection = Boolean(
@@ -196,28 +204,147 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     template.databaseConnection?.quantityColumn || ''
   );
 
-  const displayPrinters: PrinterModel[] = useMemo(() => {
-    if (availablePrinters && availablePrinters.length > 0) {
-      const realPrinters = availablePrinters.filter(
-        (p) =>
-          !p.isVirtual &&
-          !p.id?.includes('citizen') &&
-          !p.id?.includes('sato') &&
-          !p.id?.includes('zebra') &&
-          !p.id?.includes('tsc') &&
-          !p.id?.includes('virtual')
-      );
+  // Output Save Destination (Prompt every time vs Dedicated Folder)
+  const [saveMode, setSaveMode] = useState<'prompt' | 'custom_folder'>('prompt');
+  const [targetFolderHandle, setTargetFolderHandle] = useState<any>(null);
+  const [targetFolderName, setTargetFolderName] = useState<string>('');
+  const [targetFolderPath, setTargetFolderPath] = useState<string>('');
 
-      // Only show printers that are currently active / connected / ready
-      const activePrinters = realPrinters.filter((p) => {
-        const s = String(p.status || '').toUpperCase();
-        return s === 'READY' || s === 'ONLINE' || s === 'IDLE' || s === '';
-      });
-
-      return activePrinters.length > 0 ? activePrinters : realPrinters;
+  const handleSelectOutputFolder = async () => {
+    try {
+      const res = await promptSelectFolder();
+      if (!res.canceled) {
+        if (res.folderHandle) setTargetFolderHandle(res.folderHandle);
+        if (res.folderName) setTargetFolderName(res.folderName);
+        if (res.folderPath) setTargetFolderPath(res.folderPath);
+        setSaveMode('custom_folder');
+      }
+    } catch (err: any) {
+      console.warn('Folder selection error:', err);
     }
-    return [];
-  }, [availablePrinters]);
+  };
+
+  const displayPrinters: PrinterModel[] = useMemo(() => {
+    let list: PrinterModel[] = [];
+
+    // 1. From central state (live Windows discovery)
+    if (availablePrinters && availablePrinters.length > 0) {
+      list = availablePrinters.filter(
+        (p) => !p.isVirtual && !p.id?.startsWith('virtual-generic')
+      );
+    }
+
+    // 2. From prop printers (if available)
+    if (list.length === 0 && propPrinters && propPrinters.length > 0) {
+      list = (propPrinters as any[]).map((p) => ({
+        id: p.id || `prn-${p.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+        name: p.name,
+        systemName: p.systemName || p.name,
+        deviceName: p.deviceName || p.name,
+        displayName: p.displayName || p.name,
+        isDefault: Boolean(p.isDefault),
+        isInteractive: Boolean(p.isInteractive),
+        status: p.status || 'READY',
+        dpi: p.dpi || 300,
+        driverName: p.driverName || p.model,
+        port: p.portName || p.port || 'PORTPROMPT:',
+        portName: p.portName || p.port || 'PORTPROMPT:',
+        connectionType: 'windows-driver',
+        preferredRenderer: 'WINDOWS_DRIVER',
+        renderer: 'WINDOWS_DRIVER',
+        capabilities: p.capabilities || {},
+      }));
+    }
+
+    // 3. Fallback to LocalStorage cache
+    if (list.length === 0 && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached = localStorage.getItem('barcodeflow_discovered_printers');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            list = parsed.filter((p: any) => !p.isVirtual && !p.id?.startsWith('virtual-generic'));
+          }
+        }
+      } catch {}
+    }
+
+    // 4. Guaranteed standard Windows PDF driver fallback
+    if (list.length === 0) {
+      list = [
+        {
+          id: 'prn-win-default-pdf',
+          name: 'Microsoft Print to PDF',
+          systemName: 'Microsoft Print to PDF',
+          deviceName: 'Microsoft Print to PDF',
+          displayName: 'Microsoft Print to PDF',
+          isDefault: true,
+          isInteractive: true,
+          status: 'READY',
+          dpi: 300,
+          driverName: 'Microsoft Print To PDF',
+          port: 'PORTPROMPT:',
+          portName: 'PORTPROMPT:',
+          connectionType: 'windows-driver',
+          preferredRenderer: 'WINDOWS_DRIVER',
+          renderer: 'WINDOWS_DRIVER',
+          location: 'Local',
+          comment: 'None',
+          capabilities: {
+            color: true,
+            duplex: false,
+            speedControl: false,
+            darknessControl: false,
+            gapMedia: false,
+            blackMarkMedia: false,
+            continuousMedia: true,
+            cutter: false,
+            peeler: false,
+            rfid: false,
+            minDpi: 300,
+            maxDpi: 600,
+          },
+        },
+      ];
+    }
+
+    return list;
+  }, [availablePrinters, propPrinters]);
+
+  // Robust selectedPrinterId resolution: guarantees matching a valid option in displayPrinters
+  const effectiveSelectedId = useMemo(() => {
+    if (selectedPrinterId && displayPrinters.some((p) => p.id === selectedPrinterId)) {
+      return selectedPrinterId;
+    }
+    if (template.printer?.name) {
+      const match = displayPrinters.find(
+        (p) =>
+          p.name.toLowerCase() === template.printer!.name.toLowerCase() ||
+          p.systemName.toLowerCase() === (template.printer!.systemName || '').toLowerCase()
+      );
+      if (match) return match.id;
+    }
+    if (activePrinter && displayPrinters.some((p) => p.id === activePrinter.id)) {
+      return activePrinter.id;
+    }
+    if (defaultPrinter && displayPrinters.some((p) => p.id === defaultPrinter.id)) {
+      return defaultPrinter.id;
+    }
+    const def = displayPrinters.find((p) => p.isDefault);
+    if (def) return def.id;
+    return displayPrinters[0]?.id || '';
+  }, [selectedPrinterId, displayPrinters, defaultPrinter, activePrinter, template.printer]);
+
+  // Sync state if effectiveSelectedId changes
+  useEffect(() => {
+    if (effectiveSelectedId && effectiveSelectedId !== selectedPrinterId) {
+      setSelectedPrinterId(effectiveSelectedId);
+      const matched = displayPrinters.find((p) => p.id === effectiveSelectedId);
+      if (matched) {
+        setActivePrinter(matched);
+      }
+    }
+  }, [effectiveSelectedId]);
 
   // Sync initial selection when opened or when template changes
   useEffect(() => {
@@ -267,24 +394,39 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
 
   const selectedPrinter = useMemo(() => {
     return (
-      displayPrinters.find((p) => p.id === selectedPrinterId) ||
-      displayPrinters[0] ||
-      ({
-        id: 'fallback-pdf',
-        name: 'Microsoft Print to PDF',
-        systemName: 'Microsoft Print to PDF',
-        isDefault: true,
-        status: 'READY' as const,
-        dpi: 300,
-        driverName: 'Microsoft Print To PDF',
-        port: 'PORTPROMPT:',
-        portName: 'PORTPROMPT:',
-        connectionType: 'windows-driver' as const,
-        preferredRenderer: 'WINDOWS_DRIVER' as const,
-        renderer: 'WINDOWS_DRIVER' as const,
-      } as PrinterModel)
+      displayPrinters.find((p) => p.id === effectiveSelectedId) ||
+      displayPrinters[0]
     );
-  }, [displayPrinters, selectedPrinterId]);
+  }, [displayPrinters, effectiveSelectedId]);
+
+  // Section 12 & 14 Physical printer availability and offline state
+  const hasUsablePhysicalPrinter = useMemo(() => {
+    return availablePrinters.some((p) => !p.isInteractive && (p.status === 'READY' || (p.status as any) === 'ready'));
+  }, [availablePrinters]);
+
+  const isVirtualOrInteractivePrinter = useMemo(() => {
+    if (!selectedPrinter) return true;
+    const name = (selectedPrinter.name || '').toLowerCase();
+    const sysName = (selectedPrinter.systemName || '').toLowerCase();
+    const devName = (selectedPrinter.deviceName || '').toLowerCase();
+    return (
+      Boolean(selectedPrinter.isInteractive) ||
+      name.includes('pdf') ||
+      name.includes('wps') ||
+      name.includes('onenote') ||
+      sysName.includes('pdf') ||
+      sysName.includes('wps') ||
+      sysName.includes('onenote') ||
+      devName.includes('pdf') ||
+      devName.includes('wps') ||
+      devName.includes('onenote')
+    );
+  }, [selectedPrinter]);
+
+  const isSelectedPhysicalOffline = useMemo(() => {
+    if (!selectedPrinter) return false;
+    return !selectedPrinter.isInteractive && (selectedPrinter.status === 'OFFLINE' || selectedPrinter.status === 'ERROR');
+  }, [selectedPrinter]);
 
   // Sync DPI
   useEffect(() => {
@@ -451,44 +593,82 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     }
   };
 
-  // Test Print
+  // Test Print (Section 28)
   const handleTestPrint = async () => {
     setIsTestingPrint(true);
     setTestPrintSuccess(null);
     try {
       const sampleRecord = recordsToPrint[0] || recordData;
-      const testRes = await PrinterService.getInstance().executeTestPrint(
+      const testRes = await PrintExecutionService.getInstance().executeTestPrint(
         template,
         selectedPrinter,
-        sampleRecord,
-        {
-          dpi: effectiveDpi || undefined,
-          rendererOverride:
-            outputFormat === 'tspl'
-              ? 'TSPL'
-              : outputFormat === 'zpl'
-              ? 'ZPL'
-              : outputFormat === 'epl'
-              ? 'EPL'
-              : outputFormat === 'cpcl'
-              ? 'CPCL'
-              : outputFormat === 'sbpl'
-              ? 'SBPL'
-              : 'WINDOWS_DRIVER',
-        }
+        sampleRecord
       );
 
-      if (!testRes.success) {
-        alert(`Test print failed: ${testRes.error || testRes.message || 'Printer not found.'}`);
+      if (testRes.status === 'cancelled') {
+        alert('Test print canceled by user.');
         return;
       }
 
-      setTestPrintSuccess(`Test print sent to "${selectedPrinter.name}"`);
+      if (testRes.status === 'failed') {
+        alert(`Test print failed: ${testRes.error || 'Spooler rejected test label.'}`);
+        return;
+      }
+
+      setTestPrintSuccess(`Test print sent to "${testRes.deviceName}"`);
       setTimeout(() => setTestPrintSuccess(null), 3500);
     } catch (err: any) {
       alert(`Test print failed: ${err.message}`);
     } finally {
       setIsTestingPrint(false);
+    }
+  };
+
+  // Section 12: BarcodeFlow Internal "Save as PDF" Fallback
+  const handleSaveAsPdfFallback = async () => {
+    setPrintProgressState('PREPARING');
+    setIsSubmitting(true);
+    try {
+      const result = await PrintExecutionService.getInstance().saveAsPdfFallback(
+        template,
+        recordsToPrint,
+        copies,
+        saveMode === 'custom_folder' ? { targetFolderHandle, targetFolderPath } : undefined
+      );
+
+      if (result.status === 'cancelled') {
+        setPrintProgressState('CANCELLED');
+        setPrintErrorMessage('PDF save canceled by user.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (result.status === 'failed') {
+        setPrintProgressState('FAILED');
+        setPrintErrorMessage(result.error || 'Failed to generate and save PDF fallback.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Confirmed PDF output
+      if (onUpdateTemplate) {
+        const advancedTemplate = advanceTemplateSerialState(template, recordsToPrint.length * copies);
+        onUpdateTemplate(advancedTemplate);
+      }
+
+      setPrintProgressState('SUBMITTED');
+      const fileName = result.filePath ? result.filePath.split(/[\\/]/).pop() : 'Document1.pdf';
+      setJobSuccess(`PDF saved successfully: ${fileName}`);
+      setTimeout(() => {
+        setIsSubmitting(false);
+        onClose();
+        setJobSuccess(null);
+        setPrintProgressState('IDLE');
+      }, 1500);
+    } catch (err: any) {
+      setPrintProgressState('FAILED');
+      setPrintErrorMessage(err.message || 'PDF fallback error');
+      setIsSubmitting(false);
     }
   };
 
@@ -512,97 +692,43 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     }
   };
 
-  // Main Print Execution
+  // Main Print Execution (Sections 1, 2, 3, 5, 14, 18, 19, 23)
   const handleExecutePrint = async () => {
-    if (!validationResult.isValid) return;
+    if (!validationResult.isValid || isSubmitting) return;
 
-    // 1. Commit print method settings
-    commitPrintMethodSettings(printMethodSettings);
-
-    // 2. Pre-job Queue Cancellation if checked
-    if (cancelQueuedJobsBeforePrint && selectedPrinter) {
-      try {
-        if (window.barcodeFlow?.printers?.cancelQueuedJobs) {
-          await window.barcodeFlow.printers.cancelQueuedJobs(selectedPrinter.systemName || selectedPrinter.name);
-        } else {
-          await fetch(`http://localhost:3001/api/printers/${selectedPrinter.id}/cancel-jobs`, { method: 'POST' });
-        }
-      } catch (e) {
-        console.warn('[PrintCenter] Pre-job queue cancel failed:', e);
-      }
+    // Check offline physical printer (Section 14)
+    if (isSelectedPhysicalOffline) {
+      setIsOfflinePrinterModalOpen(true);
+      return;
     }
 
+    // When no physical printer is connected OR virtual driver is targeted,
+    // seamlessly execute Save As PDF + Auto-Open (Exact BarTender behavior)
+    if (!hasUsablePhysicalPrinter || isVirtualOrInteractivePrinter) {
+      await handleSaveAsPdfFallback();
+      return;
+    }
+
+    setPrintProgressState('PREPARING');
+    setPrintErrorMessage(null);
+    setJobSuccess(null);
     setIsSubmitting(true);
+
     try {
-      // Build deterministic print plan
-      const plan = createPrintPlan(template, {
+      commitPrintMethodSettings(printMethodSettings);
+      setPrintProgressState('RENDERING');
+
+      const executionResult = await PrintExecutionService.getInstance().print({
+        document: template,
         printer: selectedPrinter,
         copies,
-        recordsToPrint,
+        records: recordsToPrint,
         quantitySource,
         selectedQtyColumn: quantitySource === 'database_field' ? selectedQtyColumn : undefined,
-        serializedLabels,
-        startingSlot,
-        effectiveDpi,
-      });
-
-      const dispatchedRecords = plan.items.map((it) => it.record);
-
-      // Render raw code if thermal or printToFile
-      let generatedRawCode = '';
-      if (outputFormat === 'tspl') {
-        generatedRawCode = renderTSPL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
-      } else if (outputFormat === 'epl') {
-        generatedRawCode = dispatchedRecords.map((r) => generateEPL(template, r as any)).join('\n');
-      } else if (outputFormat === 'cpcl') {
-        generatedRawCode = renderCPCL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
-      } else if (outputFormat === 'sbpl') {
-        generatedRawCode = renderSBPL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
-      } else if (outputFormat === 'zpl') {
-        generatedRawCode = renderZPL(template, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi || undefined });
-      }
-
-      // Apply Printer Code Modifier if active
-      if (enableCodeModifier && codeModifierConfig.enabled && generatedRawCode) {
-        let modified = generatedRawCode;
-        if (codeModifierConfig.rules && codeModifierConfig.rules.length > 0) {
-          codeModifierConfig.rules.forEach((rule) => {
-            if (rule.find) {
-              modified = modified.split(rule.find).join(rule.replace || '');
-            }
-          });
-        }
-        if (codeModifierConfig.prefix) {
-          modified = `${codeModifierConfig.prefix}\n${modified}`;
-        }
-        if (codeModifierConfig.suffix) {
-          modified = `${modified}\n${codeModifierConfig.suffix}`;
-        }
-        generatedRawCode = modified;
-      }
-
-      // Handle "Print to file" (PRN / ZPL / TSPL download)
-      if (printToFile && generatedRawCode) {
-        const blob = new Blob([generatedRawCode], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${(template.name || 'Document1').replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}.${outputFormat === 'zpl' ? 'zpl' : outputFormat === 'tspl' ? 'txt' : 'prn'}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      }
-
-      if (outputFormat === 'pdf') {
-        await exportLabelsToPDF(template, dispatchedRecords);
-      }
-
-      const hardwareDispatchResult = await PrinterService.getInstance().dispatchPrintJob({
-        template,
-        printer: selectedPrinter,
-        records: dispatchedRecords,
-        copies: 1,
+        serialization: {
+          enabled: serializedLabels > 1,
+          labelsCount: serializedLabels,
+        },
         darkness,
         speed: printSpeed,
         dpi: effectiveDpi || undefined,
@@ -618,80 +744,89 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
             : outputFormat === 'sbpl'
             ? 'SBPL'
             : 'WINDOWS_DRIVER',
+        cancelQueuedJobsBeforePrint,
+        startingSlot,
+        printToFile,
       });
 
-      if (!hardwareDispatchResult.success) {
+      if (executionResult.status === 'cancelled') {
         setIsSubmitting(false);
-        alert(`Print execution error: ${hardwareDispatchResult.error || hardwareDispatchResult.message || 'Spooler failed.'}`);
+        setPrintProgressState('CANCELLED');
+        setPrintErrorMessage('Print job canceled by user.');
         return;
       }
 
-      // Advance serial sequence counters on template elements upon confirmed print dispatch
+      if (executionResult.status === 'failed') {
+        setIsSubmitting(false);
+        if (executionResult.error === 'PRINTER_UNAVAILABLE') {
+          setIsOfflinePrinterModalOpen(true);
+          return;
+        }
+        setPrintProgressState('FAILED');
+        setPrintErrorMessage(executionResult.error || 'Windows print spooler rejected the job.');
+        return;
+      }
+
+      // 4. Confirmed Success: Advance serial sequence counters on template elements (Section 19)
       if (onUpdateTemplate) {
-        const advancedTemplate = advanceTemplateSerialState(template, dispatchedRecords.length);
+        const advancedTemplate = advanceTemplateSerialState(
+          template,
+          executionResult.pagesPrinted || recordsToPrint.length * copies
+        );
         onUpdateTemplate(advancedTemplate);
       }
 
+      // 5. Spooler record entry
       const spooler = EnterprisePrintSpooler.getInstance();
       const dispatchedJob = spooler.dispatchJob({
         template,
         printer: {
           id: selectedPrinter.id,
-          name: selectedPrinter.name,
-          model: selectedPrinter.model || selectedPrinter.name,
-          brand: (selectedPrinter.manufacturer?.includes('Zebra') ? 'Zebra' : selectedPrinter.manufacturer?.includes('TSC') ? 'TSC' : 'Desktop PDF') as any,
+          name: executionResult.deviceName,
+          model: selectedPrinter.model || selectedPrinter.driverName || selectedPrinter.name,
+          brand: (selectedPrinter.manufacturer?.includes('Zebra') ? 'Zebra' : selectedPrinter.manufacturer?.includes('TSC') ? 'TSC' : 'Desktop Driver') as any,
           dpi: (selectedPrinter.dpi || 300) as any,
-          ipAddress: selectedPrinter.portName || selectedPrinter.port || '127.0.0.1',
-          port: 9100,
+          ipAddress: selectedPrinter.portName || (typeof selectedPrinter.port === 'string' ? selectedPrinter.port : 'LOCAL'),
+          port: typeof selectedPrinter.port === 'number' ? selectedPrinter.port : 0,
           status: 'online',
           protocol: outputFormat as any,
-          location: 'Local Windows Spooler',
+          location: selectedPrinter.location || 'Local Windows Spooler',
           mediaWidth: template.dimensions.width,
           mediaHeight: template.dimensions.height,
         },
         copies: 1,
-        records: dispatchedRecords as any,
+        records: recordsToPrint as any,
         format: outputFormat,
         submittedBy: 'Operator (BarcodeFlow Suite)',
         darkness,
         speed: printSpeed,
       });
 
-      dispatchedJob.dataSnapshot = recordsToPrint.map((r) => ({ ...r }));
-      dispatchedJob.printMode = recordSelectionMode;
-      dispatchedJob.quantityColumn = quantitySource === 'database_field' ? selectedQtyColumn : undefined;
-      dispatchedJob.totalLabelsPrinted = dispatchedRecords.length;
-      dispatchedJob.datasetName = template.databaseConnection?.name;
-      dispatchedJob.excelFilePath = template.databaseConnection?.filePath;
-      dispatchedJob.excelSheetName = template.databaseConnection?.sheetName;
+      dispatchedJob.totalLabelsPrinted = executionResult.pagesPrinted || recordsToPrint.length * copies;
       dispatchedJob.status = 'completed';
-
       onJobSubmitted(dispatchedJob);
 
-      // Check if Show Printer Code modal should be displayed
-      if (showPrinterCodeAtEnd && generatedRawCode) {
-        setGeneratedCodePayload({
-          isOpen: true,
-          code: generatedRawCode,
-          format: outputFormat.toUpperCase(),
-        });
-      }
-
-      setJobSuccess(`Dispatched ${dispatchedRecords.length} label(s) to "${selectedPrinter.name}" successfully.`);
+      setPrintProgressState('SUBMITTED');
+      setJobSuccess(
+        executionResult.outputType === 'file-download' || executionResult.outputType === 'pdf-fallback'
+          ? `File saved successfully to ${executionResult.filePath || 'disk'}`
+          : `Print job submitted to ${executionResult.deviceName}`
+      );
 
       if (!showPrinterCodeAtEnd && !repeatDataEntry) {
         setTimeout(() => {
           setIsSubmitting(false);
           onClose();
           setJobSuccess(null);
-        }, 1200);
+          setPrintProgressState('IDLE');
+        }, 1500);
       } else {
         setIsSubmitting(false);
-        setTimeout(() => setJobSuccess(null), 3500);
       }
     } catch (err: any) {
       setIsSubmitting(false);
-      alert(`Print execution error: ${err.message}`);
+      setPrintProgressState('FAILED');
+      setPrintErrorMessage(err.message || 'Print dispatch failed.');
     }
   };
 
@@ -745,6 +880,88 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
 
         {/* Tab Body */}
         <div className="p-3 bg-white space-y-3 flex-1 overflow-y-auto overflow-x-hidden min-h-[380px]">
+          {/* Print Progress / Notification Banner */}
+          {printProgressState === 'PREPARING' && (
+            <div className="p-2 bg-blue-50 border border-blue-200 rounded flex items-center gap-2 text-[11px] text-blue-800">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
+              <span>Preparing print plan...</span>
+            </div>
+          )}
+          {printProgressState === 'RENDERING' && (
+            <div className="p-2 bg-blue-50 border border-blue-200 rounded flex items-center gap-2 text-[11px] text-blue-800">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
+              <span>Rendering label document & vector elements...</span>
+            </div>
+          )}
+          {printProgressState === 'DISPATCHING' && (
+            <div className="p-2 bg-blue-50 border border-blue-200 rounded flex items-center gap-2 text-[11px] text-blue-800">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
+              <span>
+                Submitting to <strong>{selectedPrinter.deviceName || selectedPrinter.name}</strong>...
+                {selectedPrinter.isInteractive ? ' (Waiting for Windows printer destination dialog...)' : ''}
+              </span>
+            </div>
+          )}
+          {printProgressState === 'CANCELLED' && (
+            <div className="p-2 bg-amber-50 border border-amber-200 rounded flex items-center justify-between gap-2 text-[11px] text-amber-800">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Print job canceled by user. Serialization sequence was not consumed.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPrintProgressState('IDLE')}
+                className="text-amber-700 hover:text-amber-900 font-bold text-[11px] cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+          {printProgressState === 'FAILED' && (
+            <div className="p-2.5 bg-red-50 border border-red-300 rounded text-[11px] text-red-900 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold">Print Spooler Error</p>
+                  <p className="text-slate-700">Printer: <span className="font-medium text-slate-900">{selectedPrinter.deviceName || selectedPrinter.name}</span></p>
+                  <p className="text-red-700 font-mono text-[10.5px] mt-0.5">{printErrorMessage}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1 border-t border-red-200">
+                <button
+                  type="button"
+                  onClick={handleExecutePrint}
+                  className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-semibold text-[11px] cursor-pointer"
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    refreshPrinters && refreshPrinters();
+                    setPrintProgressState('IDLE');
+                  }}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 rounded font-medium text-[11px] cursor-pointer"
+                >
+                  Refresh Printers
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintProgressState('IDLE')}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-medium text-[11px] cursor-pointer"
+                >
+                  Choose Another Printer
+                </button>
+              </div>
+            </div>
+          )}
+          {printProgressState === 'SUBMITTED' && (
+            <div className="p-2 bg-emerald-50 border border-emerald-300 rounded flex items-center gap-2 text-[11px] text-emerald-800">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{jobSuccess || `Print job submitted to ${selectedPrinter.deviceName || selectedPrinter.name}`}</span>
+            </div>
+          )}
+
           {activeTopTab === 'print' ? (
             <>
               {/* 1. PRINTER FIELDSET GROUP */}
@@ -762,7 +979,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
                         Name:
                       </label>
                       <select
-                        value={selectedPrinterId}
+                        value={effectiveSelectedId}
                         onChange={(e) => {
                           setSelectedPrinterId(e.target.value);
                           const p = displayPrinters.find((x) => x.id === e.target.value);
@@ -784,17 +1001,31 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
                           </option>
                         ))}
                       </select>
+                      <button
+                        type="button"
+                        onClick={() => refreshPrinters && refreshPrinters()}
+                        title="Refresh installed Windows printers"
+                        className="p-1 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded border border-[#a4bed8] transition-colors cursor-pointer shrink-0"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${printersLoading ? 'animate-spin' : ''}`} />
+                      </button>
                     </div>
 
-                    {/* Status */}
+                    {/* Status (Section 15 Normalized Status) */}
                     <div className="flex items-center gap-2">
                       <span className="w-16 text-right text-slate-500 font-medium shrink-0">
                         Status:
                       </span>
                       <span className="text-slate-800 font-medium">
-                        {String(selectedPrinter.status).toUpperCase() === 'READY' || String(selectedPrinter.status).toLowerCase() === 'online'
-                          ? 'Ready'
-                          : String(selectedPrinter.status || 'Ready')}
+                        {(() => {
+                          const s = String(selectedPrinter.status || '').toUpperCase();
+                          if (s === 'READY' || s === 'ONLINE') return <span className="text-emerald-700 font-semibold">Ready</span>;
+                          if (s === 'OFFLINE') return <span className="text-rose-600 font-semibold">Offline</span>;
+                          if (s === 'PAUSED') return <span className="text-amber-600 font-semibold">Paused</span>;
+                          if (s === 'ERROR') return <span className="text-red-700 font-semibold">Error</span>;
+                          if (s === 'BUSY') return <span className="text-orange-600 font-semibold">Busy</span>;
+                          return <span className="text-slate-600 font-medium">Unknown</span>;
+                        })()}
                       </span>
                     </div>
 
@@ -814,7 +1045,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
                         Port:
                       </span>
                       <span className="text-slate-800 font-mono text-[11px] truncate">
-                        {selectedPrinter.portName || selectedPrinter.port || 'PORTPROMPT:'}
+                        {selectedPrinter.portName || selectedPrinter.port || 'Unknown'}
                       </span>
                     </div>
 
@@ -824,7 +1055,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
                         Location:
                       </span>
                       <span className="text-slate-800 truncate">
-                        {(selectedPrinter as any).location || ''}
+                        {selectedPrinter.location || 'Local'}
                       </span>
                     </div>
 
@@ -834,7 +1065,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
                         Comment:
                       </span>
                       <span className="text-slate-800 truncate">
-                        {(selectedPrinter as any).comment || ''}
+                        {selectedPrinter.comment || 'None'}
                       </span>
                     </div>
                   </div>
@@ -853,7 +1084,7 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
                       onClick={async () => {
                         if (selectedPrinter && window.barcodeFlow?.printers?.openProperties) {
                           const res = await window.barcodeFlow.printers.openProperties(
-                            selectedPrinter.systemName || selectedPrinter.name
+                            selectedPrinter.deviceName || selectedPrinter.systemName || selectedPrinter.name
                           );
                           if (!res?.success) {
                             setIsPrinterPropertiesModalOpen(true);
@@ -890,6 +1121,96 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
                         />
                         <span>Print to File</span>
                       </label>
+                    </div>
+                  </div>
+                </div>
+              </fieldset>
+
+              {/* Section 12 Fallback Banner: When no physical printer exists */}
+              {!hasUsablePhysicalPrinter && (
+                <div className="p-2 bg-blue-50/90 border border-blue-200 rounded flex items-center justify-between text-[11px] text-blue-900 shadow-2xs">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>No physical printer is currently available.</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleSaveAsPdfFallback}
+                      className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded text-[10.5px] cursor-pointer shadow-2xs"
+                    >
+                      Save as PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => refreshPrinters && refreshPrinters()}
+                      className="px-2 py-0.5 bg-white hover:bg-slate-50 border border-blue-300 text-slate-700 font-medium rounded text-[10.5px] cursor-pointer"
+                    >
+                      Refresh Printers
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Output Save Destination (Windows Save As / Folder Selection) */}
+              <fieldset className="border border-[#c5d4e4] rounded p-2.5 bg-[#f5f9fd] shadow-2xs">
+                <legend className="px-1 text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                  <Folder className="w-3.5 h-3.5 text-amber-500" />
+                  Save / Output Destination
+                </legend>
+                <div className="space-y-2 text-[11.5px]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-800">
+                      <input
+                        type="radio"
+                        name="outputSaveMode"
+                        checked={saveMode === 'prompt'}
+                        onChange={() => setSaveMode('prompt')}
+                        className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span>
+                        <strong>Prompt Every Time:</strong> Open Windows "Save As" dialog to select folder & file name
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1 border-t border-slate-200/70">
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-800 shrink-0">
+                      <input
+                        type="radio"
+                        name="outputSaveMode"
+                        checked={saveMode === 'custom_folder'}
+                        onChange={() => {
+                          if (!targetFolderName && !targetFolderPath) {
+                            handleSelectOutputFolder();
+                          } else {
+                            setSaveMode('custom_folder');
+                          }
+                        }}
+                        className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span>Save directly to folder:</span>
+                    </label>
+
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {targetFolderName || targetFolderPath ? (
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-50 border border-amber-300 rounded text-amber-900 font-medium text-[11px] truncate flex-1 min-w-0" title={targetFolderPath || targetFolderName}>
+                          <Folder className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span className="truncate">{targetFolderPath || targetFolderName}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 italic text-[11px] flex-1">
+                          No folder selected (Click Choose Folder to select destination)
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleSelectOutputFolder}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-[#a4bed8] text-slate-800 rounded text-[11px] font-medium shadow-2xs transition-colors cursor-pointer shrink-0"
+                      >
+                        Choose Folder...
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1157,37 +1478,43 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
                             </select>
                           </div>
 
-                          <div className="flex items-center justify-between gap-1">
-                            <span className={`font-medium ${!isSpeedSupported ? 'text-slate-400' : 'text-slate-600'}`}>
-                              Print Speed:
-                            </span>
-                            <select
-                              value={printSpeed}
-                              onChange={(e) => setPrintSpeed(parseInt(e.target.value, 10))}
-                              disabled={!isSpeedSupported}
-                              className="px-1.5 py-0.5 bg-white border border-[#a4bed8] rounded disabled:opacity-40 text-[10.5px]"
-                            >
-                              <option value={2}>2 ips (High Quality)</option>
-                              <option value={4}>4 ips (Standard)</option>
-                              <option value={6}>6 ips (High Speed)</option>
-                              <option value={8}>8 ips (Draft)</option>
-                            </select>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-1">
-                            <span className={`font-medium ${!isDarknessSupported ? 'text-slate-400' : 'text-slate-600'}`}>
-                              Darkness (Heat):
-                            </span>
-                            <input
-                              type="number"
-                              min={1}
-                              max={30}
-                              value={darkness}
-                              onChange={(e) => setDarkness(parseInt(e.target.value, 10) || 18)}
-                              disabled={!isDarknessSupported}
-                              className="w-16 px-1.5 py-0.5 bg-white border border-[#a4bed8] rounded text-center disabled:opacity-40"
-                            />
-                          </div>
+                          {/* Thermal Speed & Darkness (Hidden for virtual/PDF/desktop drivers per Section 36) */}
+                          {isSpeedSupported || isDarknessSupported ? (
+                            <>
+                              {isSpeedSupported && (
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-medium text-slate-600">Print Speed:</span>
+                                  <select
+                                    value={printSpeed}
+                                    onChange={(e) => setPrintSpeed(parseInt(e.target.value, 10))}
+                                    className="px-1.5 py-0.5 bg-white border border-[#a4bed8] rounded text-[10.5px]"
+                                  >
+                                    <option value={2}>2 ips (High Quality)</option>
+                                    <option value={4}>4 ips (Standard)</option>
+                                    <option value={6}>6 ips (High Speed)</option>
+                                    <option value={8}>8 ips (Draft)</option>
+                                  </select>
+                                </div>
+                              )}
+                              {isDarknessSupported && (
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-medium text-slate-600">Darkness (Heat):</span>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={30}
+                                    value={darkness}
+                                    onChange={(e) => setDarkness(parseInt(e.target.value, 10) || 18)}
+                                    className="w-16 px-1.5 py-0.5 bg-white border border-[#a4bed8] rounded text-center"
+                                  />
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="text-[10.5px] text-slate-500 italic py-1 text-center bg-slate-50 border border-dashed border-slate-200 rounded">
+                              Standard Windows Driver printing (speed & darkness controlled by Windows driver).
+                            </div>
+                          )}
                         </div>
                       </fieldset>
                     </div>
@@ -1407,10 +1734,22 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
             <button
               type="button"
               onClick={handleExecutePrint}
-              disabled={isSubmitting || !validationResult.isValid}
-              className="min-w-[65px] px-4 py-1 bg-[#1973e8] hover:bg-[#1557b0] text-white border border-[#1350a2] rounded text-[11.5px] font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-40 text-center"
+              disabled={
+                isSubmitting ||
+                printProgressState === 'PREPARING' ||
+                printProgressState === 'RENDERING' ||
+                printProgressState === 'DISPATCHING' ||
+                !validationResult.isValid
+              }
+              className="min-w-[70px] px-4 py-1 bg-[#1973e8] hover:bg-[#1557b0] text-white border border-[#1350a2] rounded text-[11.5px] font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-40 text-center"
             >
-              {isSubmitting ? 'Printing...' : 'Print'}
+              {printProgressState === 'PREPARING'
+                ? 'Preparing document...'
+                : printProgressState === 'RENDERING'
+                ? 'Rendering...'
+                : printProgressState === 'DISPATCHING'
+                ? `Dispatching to ${selectedPrinter?.deviceName || selectedPrinter?.name || 'printer'}...`
+                : 'Print'}
             </button>
 
             <button
@@ -1562,6 +1901,75 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
                 className="px-4 py-1 bg-blue-600 text-white rounded font-medium text-xs hover:bg-blue-700"
               >
                 OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Section 14: Offline Physical Printer Warning Modal */}
+      {isOfflinePrinterModalOpen && (
+        <div className="fixed inset-0 z-60 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl border border-amber-300 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-slate-800">
+            <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <h3 className="text-sm font-bold text-slate-900">Selected printer is unavailable.</h3>
+            </div>
+            <div className="p-4 space-y-3 text-xs text-slate-700">
+              <p>
+                The printer <strong className="text-slate-900 font-semibold">{selectedPrinter ? (selectedPrinter.displayName || selectedPrinter.name) : 'Selected device'}</strong> is currently unreachable, offline, or experiencing an error in the Windows print spooler.
+              </p>
+              <p className="text-slate-500">
+                To prevent lost print jobs, BarcodeFlow will not silently route hardware jobs without your confirmation.
+              </p>
+            </div>
+            <div className="bg-slate-50 px-4 py-3 border-t border-slate-200 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsOfflinePrinterModalOpen(false);
+                  await handleExecutePrint();
+                }}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-xs shadow-xs cursor-pointer"
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (refreshPrinters) await refreshPrinters();
+                }}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded font-medium text-xs cursor-pointer"
+              >
+                Refresh Printers
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsOfflinePrinterModalOpen(false);
+                  await handleSaveAsPdfFallback();
+                }}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-medium text-xs shadow-xs cursor-pointer"
+              >
+                Save as PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOfflinePrinterModalOpen(false);
+                  const printerSelectEl = document.getElementById('printer-selection-dropdown');
+                  if (printerSelectEl) printerSelectEl.focus();
+                }}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded font-medium text-xs cursor-pointer"
+              >
+                Choose Another Printer
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsOfflinePrinterModalOpen(false)}
+                className="px-3 py-1.5 text-slate-600 hover:text-slate-900 text-xs font-medium cursor-pointer"
+              >
+                Cancel
               </button>
             </div>
           </div>

@@ -22,6 +22,7 @@ export interface DispatchResult {
   message: string;
   bytesWritten?: number;
   error?: string;
+  cancelled?: boolean;
   rawPreview?: string;
 }
 
@@ -113,6 +114,12 @@ export class PrinterService {
 
     const printers: PrinterModel[] = [];
 
+    if (forceRefresh) {
+      try {
+        localStorage.removeItem('barcodeflow_discovered_printers');
+      } catch {}
+    }
+
     // 1. Electron Desktop Native Discovery
     if (this.isElectron()) {
       try {
@@ -125,12 +132,16 @@ export class PrinterService {
               id: sp.id || `prn-${sp.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
               name: sp.name,
               systemName: sp.name,
-              displayName: sp.name,
-              manufacturer: profile.manufacturer || sp.manufacturer || 'Installed Device',
-              model: profile.model || sp.model || sp.name,
-              driverName: sp.driverName,
+              deviceName: sp.deviceName || sp.name,
+              displayName: sp.displayName || (sp.isDefault ? `Default (currently ${sp.name})` : sp.name),
+              manufacturer: sp.manufacturer || profile.manufacturer || 'Installed Device',
+              model: sp.model || sp.driverName || profile.model || sp.name,
+              driverName: sp.driverName || profile.driverName,
               port: sp.port || sp.portName,
               portName: sp.portName || sp.port,
+              location: sp.location,
+              comment: sp.comment,
+              isInteractive: Boolean(sp.isInteractive),
               connectionType: 'windows-driver',
               isDefault: Boolean(sp.isDefault),
               status: sp.status || 'READY',
@@ -175,12 +186,16 @@ export class PrinterService {
               id: bp.id || `prn-${bp.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
               name: bp.name,
               systemName: bp.name,
-              displayName: bp.name,
-              manufacturer: profile.manufacturer || bp.brand || 'Installed Device',
-              model: bp.model || profile.model || bp.name,
+              deviceName: bp.deviceName || bp.name,
+              displayName: bp.displayName || (bp.isDefault ? `Default (currently ${bp.name})` : bp.name),
+              manufacturer: bp.manufacturer || bp.brand || profile.manufacturer || 'Installed Device',
+              model: bp.model || bp.driverName || profile.model || bp.name,
               driverName: bp.driverName || profile.driverName,
               port: bp.port || bp.portName,
               portName: bp.portName || bp.port,
+              location: bp.location,
+              comment: bp.comment,
+              isInteractive: Boolean(bp.isInteractive),
               connectionType: 'windows-driver',
               isDefault: Boolean(bp.isDefault),
               status: bp.status === 'online' || bp.status === 'READY' ? 'READY' : 'OFFLINE',
@@ -213,61 +228,23 @@ export class PrinterService {
       }
     }
 
-    // 3. Cache or restore discovered printers from LocalStorage
+    // 3. Cache or restore discovered printers from LocalStorage (if not forceRefresh)
     if (printers.length > 0) {
       try {
         localStorage.setItem('barcodeflow_discovered_printers', JSON.stringify(printers));
       } catch {}
-    } else {
+    } else if (!forceRefresh) {
       try {
         const cached = localStorage.getItem('barcodeflow_discovered_printers');
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
             parsed
-              .filter((p: any) => !p.isVirtual && !p.id?.includes('citizen') && !p.id?.includes('sato') && !p.id?.includes('zebra') && !p.id?.includes('tsc') && !p.id?.includes('virtual'))
+              .filter((p: any) => !p.isVirtual && !p.id?.includes('virtual'))
               .forEach((p) => printers.push(p));
           }
         }
       } catch {}
-
-      // Fallback: If no system printers found via API or cache, add standard Windows printers
-      if (printers.length === 0) {
-        printers.push({
-          id: 'prn-win-pdf',
-          name: 'Microsoft Print to PDF',
-          systemName: 'Microsoft Print to PDF',
-          displayName: 'Microsoft Print to PDF',
-          manufacturer: 'Microsoft',
-          model: 'Microsoft Print To PDF',
-          driverName: 'Microsoft Print To PDF',
-          port: 'PORTPROMPT:',
-          portName: 'PORTPROMPT:',
-          connectionType: 'windows-driver',
-          isDefault: true,
-          status: 'READY',
-          dpi: 300,
-          nativeLanguages: [],
-          preferredRenderer: 'WINDOWS_DRIVER',
-          renderer: 'WINDOWS_DRIVER',
-          isVirtual: false,
-          capabilities: {
-            color: true,
-            duplex: false,
-            speedControl: false,
-            darknessControl: false,
-            gapMedia: false,
-            blackMarkMedia: false,
-            continuousMedia: true,
-            cutter: false,
-            peeler: false,
-            rfid: false,
-            minDpi: 300,
-            maxDpi: 300,
-            maxPrintWidthMm: 215.9,
-          },
-        });
-      }
     }
 
     // 4. Determine single real default printer
@@ -356,7 +333,7 @@ export class PrinterService {
       if (renderResult.isNative && renderResult.rawPayload) {
         // Native RAW printer language spooling (ZPL, TSPL, EPL)
         const rawRes = await window.barcodeFlow!.printers.printRaw({
-          printerName: printer.systemName || printer.name,
+          printerName: printer.deviceName || printer.systemName || printer.name,
           rawContent: renderResult.rawPayload,
           format: renderResult.format,
           jobTitle,
@@ -371,7 +348,7 @@ export class PrinterService {
       } else if (renderResult.driverHtml) {
         // Universal Windows Driver Printing Pipeline
         const driverRes = await window.barcodeFlow!.printers.printDriver({
-          printerName: printer.systemName || printer.name,
+          printerName: printer.deviceName || printer.systemName || printer.name,
           htmlContent: renderResult.driverHtml,
           widthMm: template.dimensions.width,
           heightMm: template.dimensions.height,
@@ -383,6 +360,7 @@ export class PrinterService {
           success: driverRes.success,
           message: driverRes.message,
           error: driverRes.error,
+          cancelled: driverRes.cancelled,
         };
       }
     }

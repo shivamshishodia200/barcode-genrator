@@ -1,5 +1,716 @@
 [
   {
+    "id": "tmpl-1789378844834",
+    "name": "Document842.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [
+      {
+        "id": "el-bar-1789378846885",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "10850006531238",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1.5,
+        "barHeight": 16,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 6,
+        "y": 6,
+        "width": 40,
+        "height": 15,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 1
+      },
+      {
+        "id": "el-text-1789378849081",
+        "name": "Single Line Text 2",
+        "type": "text",
+        "textType": "single-line",
+        "textFormatType": "single-line",
+        "text": "Sample Text",
+        "fontFamily": "Arial",
+        "fontSize": 10,
+        "fontWeight": "bold",
+        "fontStyle": "normal",
+        "textDecoration": "none",
+        "textAlign": "left",
+        "verticalAlign": "top",
+        "color": "#000000",
+        "lineHeight": 1.2,
+        "letterSpacing": 0,
+        "multiline": false,
+        "wordWrap": false,
+        "wrap": false,
+        "autoSize": true,
+        "autoFit": false,
+        "autoSizeConfig": {
+          "enabled": true,
+          "minFontSize": 6,
+          "maxFontSize": 720,
+          "minWidthScale": 50,
+          "maxWidthScale": 200,
+          "objectWidth": 21.3,
+          "objectHeight": 4.8,
+          "horizontalAlignment": "left",
+          "verticalAlignment": "top"
+        },
+        "x": 14.5,
+        "y": 1.5,
+        "width": 21.3,
+        "height": 4.8,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 2
+      }
+    ],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-14T09:40:44.834Z",
+    "updatedAt": "2026-09-14T09:40:53.204Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789377841625",
+    "name": "Document850.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [
+      {
+        "id": "el-bar-1789377875241",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "10850006531238",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1.5,
+        "barHeight": 16,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 6,
+        "y": 6,
+        "width": 40,
+        "height": 15,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 1
+      }
+    ],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-14T09:24:01.625Z",
+    "updatedAt": "2026-09-14T09:25:13.394Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789369824056",
+    "name": "Document371.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-14T07:10:24.056Z",
+    "updatedAt": "2026-09-14T07:10:53.605Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789367810103",
+    "name": "Document669.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [
+      {
+        "id": "el-bar-1789367812880",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "10850006531238",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1.5,
+        "barHeight": 16,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 6,
+        "y": 6,
+        "width": 40,
+        "height": 15,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 1
+      }
+    ],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-14T06:36:50.103Z",
+    "updatedAt": "2026-09-14T06:37:06.018Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789366466934",
+    "name": "Document100.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-14T06:14:26.934Z",
+    "updatedAt": "2026-09-14T06:14:35.393Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789366262052",
+    "name": "Document824.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-14T06:11:02.052Z",
+    "updatedAt": "2026-09-14T06:11:08.375Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789365953711",
+    "name": "Document532.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-14T06:05:53.711Z",
+    "updatedAt": "2026-09-14T06:07:27.973Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789365242454",
+    "name": "Document305.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [
+      {
+        "id": "el-bar-1789365247467",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "10850006531238",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1.5,
+        "barHeight": 16,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 6,
+        "y": 6,
+        "width": 40,
+        "height": 15,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 1
+      },
+      {
+        "id": "el-bar-1789365247884",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "10850006531238",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1.5,
+        "barHeight": 16,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 6,
+        "y": 6,
+        "width": 40,
+        "height": 15,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 2
+      }
+    ],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-14T05:54:02.454Z",
+    "updatedAt": "2026-09-14T05:55:58.603Z",
+    "createdBy": "Shivam"
+  },
+  {
     "id": "tmpl-1789227943709",
     "name": "Document894.btw",
     "description": "Blank 50 × 25 mm document created via New Document Wizard",

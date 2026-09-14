@@ -1,5 +1,157 @@
 [
   {
+    "id": "PJ-4834",
+    "templateId": "tmpl-1789369824056",
+    "templateName": "Document371.btw",
+    "printerId": "prn-os-4",
+    "printerName": "Export to WPS PDF",
+    "copies": 1,
+    "recordCount": 1,
+    "status": "failed",
+    "format": "pdf",
+    "submittedBy": "Operator (BarcodeFlow Suite)",
+    "submittedAt": "2026-09-14T07:10:51.611Z",
+    "progressPercent": 0,
+    "rawOutput": "{\n  \"format\": \"pdf\",\n  \"templateId\": \"tmpl-1789369824056\",\n  \"templateName\": \"Document371.btw\",\n  \"dimensions\": {\n    \"width\": 50,\n    \"height\": 25,\n    \"unit\": \"mm\",\n    \"dpi\": 203,\n    \"orientation\": \"portrait\",\n    \"shape\": \"rectangle\",\n    \"cornerRadius\": 0\n  },\n  \"recordsCount\": 1,\n  \"copies\": 1,\n  \"generatedAt\": \"2026-09-14T07:10:51.611Z\"\n}",
+    "dataSnapshot": [
+      {}
+    ],
+    "errorMessage": "ENOTFOUND"
+  },
+  {
+    "id": "PJ-8447",
+    "templateId": "tmpl-1789369824056",
+    "templateName": "Document371.btw",
+    "printerId": "prn-os-2",
+    "printerName": "Nitro PDF Creator",
+    "copies": 1,
+    "recordCount": 1,
+    "status": "failed",
+    "format": "pdf",
+    "submittedBy": "Operator (BarcodeFlow Suite)",
+    "submittedAt": "2026-09-14T07:10:38.788Z",
+    "progressPercent": 0,
+    "rawOutput": "{\n  \"format\": \"pdf\",\n  \"templateId\": \"tmpl-1789369824056\",\n  \"templateName\": \"Document371.btw\",\n  \"dimensions\": {\n    \"width\": 50,\n    \"height\": 25,\n    \"unit\": \"mm\",\n    \"dpi\": 203,\n    \"orientation\": \"portrait\",\n    \"shape\": \"rectangle\",\n    \"cornerRadius\": 0\n  },\n  \"recordsCount\": 1,\n  \"copies\": 1,\n  \"generatedAt\": \"2026-09-14T07:10:38.787Z\"\n}",
+    "dataSnapshot": [
+      {}
+    ],
+    "errorMessage": "ENOTFOUND"
+  },
+  {
+    "id": "PJ-3818",
+    "templateId": "tmpl-1789367810103",
+    "templateName": "Document669.btw",
+    "printerId": "prn-os-4",
+    "printerName": "Export to WPS PDF",
+    "copies": 1,
+    "recordCount": 1,
+    "status": "failed",
+    "format": "pdf",
+    "submittedBy": "Operator (BarcodeFlow Suite)",
+    "submittedAt": "2026-09-14T06:37:04.024Z",
+    "progressPercent": 0,
+    "rawOutput": "{\n  \"format\": \"pdf\",\n  \"templateId\": \"tmpl-1789367810103\",\n  \"templateName\": \"Document669.btw\",\n  \"dimensions\": {\n    \"width\": 50,\n    \"height\": 25,\n    \"unit\": \"mm\",\n    \"dpi\": 203,\n    \"orientation\": \"portrait\",\n    \"shape\": \"rectangle\",\n    \"cornerRadius\": 0\n  },\n  \"recordsCount\": 1,\n  \"copies\": 1,\n  \"generatedAt\": \"2026-09-14T06:37:04.023Z\"\n}",
+    "dataSnapshot": [
+      {}
+    ],
+    "errorMessage": "ENOTFOUND"
+  },
+  {
+    "id": "PJ-4736",
+    "templateId": "tmpl-1789366466934",
+    "templateName": "Document100.btw",
+    "printerId": "prn-os-3",
+    "printerName": "Export to WPS PDF",
+    "copies": 1,
+    "recordCount": 1,
+    "status": "failed",
+    "format": "pdf",
+    "submittedBy": "Operator (BarcodeFlow Suite)",
+    "submittedAt": "2026-09-14T06:14:33.407Z",
+    "progressPercent": 0,
+    "rawOutput": "{\n  \"format\": \"pdf\",\n  \"templateId\": \"tmpl-1789366466934\",\n  \"templateName\": \"Document100.btw\",\n  \"dimensions\": {\n    \"width\": 50,\n    \"height\": 25,\n    \"unit\": \"mm\",\n    \"dpi\": 203,\n    \"orientation\": \"portrait\",\n    \"shape\": \"rectangle\",\n    \"cornerRadius\": 0\n  },\n  \"recordsCount\": 1,\n  \"copies\": 1,\n  \"generatedAt\": \"2026-09-14T06:14:33.407Z\"\n}",
+    "dataSnapshot": [
+      {}
+    ],
+    "errorMessage": "ENOTFOUND"
+  },
+  {
+    "id": "PJ-2760",
+    "templateId": "tmpl-1789366262052",
+    "templateName": "Document824.btw",
+    "printerId": "prn-os-2",
+    "printerName": "Microsoft Print to PDF",
+    "copies": 1,
+    "recordCount": 1,
+    "status": "failed",
+    "format": "pdf",
+    "submittedBy": "Operator (BarcodeFlow Suite)",
+    "submittedAt": "2026-09-14T06:11:06.403Z",
+    "progressPercent": 0,
+    "rawOutput": "{\n  \"format\": \"pdf\",\n  \"templateId\": \"tmpl-1789366262052\",\n  \"templateName\": \"Document824.btw\",\n  \"dimensions\": {\n    \"width\": 50,\n    \"height\": 25,\n    \"unit\": \"mm\",\n    \"dpi\": 203,\n    \"orientation\": \"portrait\",\n    \"shape\": \"rectangle\",\n    \"cornerRadius\": 0\n  },\n  \"recordsCount\": 1,\n  \"copies\": 1,\n  \"generatedAt\": \"2026-09-14T06:11:06.402Z\"\n}",
+    "dataSnapshot": [
+      {}
+    ],
+    "errorMessage": "ENOTFOUND"
+  },
+  {
+    "id": "PJ-1934",
+    "templateId": "tmpl-1789365953711",
+    "templateName": "Document532.btw",
+    "printerId": "prn-os-2",
+    "printerName": "Microsoft Print to PDF",
+    "copies": 1,
+    "recordCount": 1,
+    "status": "failed",
+    "format": "pdf",
+    "submittedBy": "Operator (BarcodeFlow Suite)",
+    "submittedAt": "2026-09-14T06:07:25.985Z",
+    "progressPercent": 0,
+    "rawOutput": "{\n  \"format\": \"pdf\",\n  \"templateId\": \"tmpl-1789365953711\",\n  \"templateName\": \"Document532.btw\",\n  \"dimensions\": {\n    \"width\": 50,\n    \"height\": 25,\n    \"unit\": \"mm\",\n    \"dpi\": 203,\n    \"orientation\": \"portrait\",\n    \"shape\": \"rectangle\",\n    \"cornerRadius\": 0\n  },\n  \"recordsCount\": 1,\n  \"copies\": 1,\n  \"generatedAt\": \"2026-09-14T06:07:25.985Z\"\n}",
+    "dataSnapshot": [
+      {}
+    ],
+    "errorMessage": "ENOTFOUND"
+  },
+  {
+    "id": "PJ-6522",
+    "templateId": "tmpl-1789365242454",
+    "templateName": "Document305.btw",
+    "printerId": "prn-os-3",
+    "printerName": "Export to WPS PDF",
+    "copies": 1,
+    "recordCount": 1,
+    "status": "failed",
+    "format": "pdf",
+    "submittedBy": "Operator (BarcodeFlow Suite)",
+    "submittedAt": "2026-09-14T05:55:56.602Z",
+    "progressPercent": 0,
+    "rawOutput": "{\n  \"format\": \"pdf\",\n  \"templateId\": \"tmpl-1789365242454\",\n  \"templateName\": \"Document305.btw\",\n  \"dimensions\": {\n    \"width\": 50,\n    \"height\": 25,\n    \"unit\": \"mm\",\n    \"dpi\": 203,\n    \"orientation\": \"portrait\",\n    \"shape\": \"rectangle\",\n    \"cornerRadius\": 0\n  },\n  \"recordsCount\": 1,\n  \"copies\": 1,\n  \"generatedAt\": \"2026-09-14T05:55:56.602Z\"\n}",
+    "dataSnapshot": [
+      {}
+    ],
+    "errorMessage": "ENOTFOUND"
+  },
+  {
+    "id": "PJ-1260",
+    "templateId": "tmpl-1789365242454",
+    "templateName": "Document305.btw",
+    "printerId": "prn-os-2",
+    "printerName": "Microsoft Print to PDF",
+    "copies": 1,
+    "recordCount": 1,
+    "status": "failed",
+    "format": "pdf",
+    "submittedBy": "Operator (BarcodeFlow Suite)",
+    "submittedAt": "2026-09-14T05:54:25.658Z",
+    "progressPercent": 0,
+    "rawOutput": "{\n  \"format\": \"pdf\",\n  \"templateId\": \"tmpl-1789365242454\",\n  \"templateName\": \"Document305.btw\",\n  \"dimensions\": {\n    \"width\": 50,\n    \"height\": 25,\n    \"unit\": \"mm\",\n    \"dpi\": 203,\n    \"orientation\": \"portrait\",\n    \"shape\": \"rectangle\",\n    \"cornerRadius\": 0\n  },\n  \"recordsCount\": 1,\n  \"copies\": 1,\n  \"generatedAt\": \"2026-09-14T05:54:25.657Z\"\n}",
+    "dataSnapshot": [
+      {}
+    ],
+    "errorMessage": "ENOTFOUND"
+  },
+  {
     "id": "PJ-8688",
     "templateId": "tmpl-1789123756508",
     "templateName": "Document993.btw",

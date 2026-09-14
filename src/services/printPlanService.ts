@@ -186,14 +186,6 @@ export function createPrintPlan(
   let pageHeight = template.dimensions.height;
   let pageSizeName = `${labelWidth} × ${labelHeight} mm`;
 
-  const isDesktopWindowsPrinter =
-    printer.name.toLowerCase().includes('pdf') ||
-    printer.name.toLowerCase().includes('onenote') ||
-    printer.name.toLowerCase().includes('laser') ||
-    printer.name.toLowerCase().includes('deskjet') ||
-    printer.name.toLowerCase().includes('wps') ||
-    (printer.preferredRenderer === 'WINDOWS_DRIVER' && !printer.nativeLanguages?.length);
-
   if (tmplAny.pageDimensions?.width && tmplAny.pageDimensions?.height) {
     pageWidth = tmplAny.pageDimensions.width;
     pageHeight = tmplAny.pageDimensions.height;
@@ -202,11 +194,16 @@ export function createPrintPlan(
     pageWidth = STANDARD_PAGE_SIZES[tmplAny.pageSize].width;
     pageHeight = STANDARD_PAGE_SIZES[tmplAny.pageSize].height;
     pageSizeName = STANDARD_PAGE_SIZES[tmplAny.pageSize].name;
-  } else if (isDesktopWindowsPrinter || rows > 1 || cols > 1) {
-    // Default to standard Letter for office / desktop print targets (Matching BarTender Screenshot 4)
+  } else if (rows > 1 || cols > 1) {
+    // Multi-up sheet grid defaults to standard Letter
     pageWidth = 215.9; // 8.5 x 11 in
     pageHeight = 279.4;
     pageSizeName = 'Letter';
+  } else {
+    // Exact single continuous / die-cut label dimensions (e.g. 50 x 25 mm) preserved
+    pageWidth = labelWidth;
+    pageHeight = labelHeight;
+    pageSizeName = `${labelWidth} × ${labelHeight} mm`;
   }
 
   // 5. Starting Slot offset (1-based slot on first page)

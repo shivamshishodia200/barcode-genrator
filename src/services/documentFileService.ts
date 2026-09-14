@@ -1,4 +1,6 @@
 import { LabelTemplate, OpenDocument, BarcodeFlowDocumentFile, RecentDocumentEntry } from '../types';
+import { detectDocumentFormat, DocumentFormatCategory } from './documentFormatDetector';
+import { parseBarTenderDocument } from './barTenderParser';
 
 const RECENT_DOCS_KEY = 'barcodeflow_recent_documents_v2';
 const MAX_RECENT_DOCS = 10;
@@ -47,21 +49,57 @@ export function serializeBarcodeFlowDocument(doc: OpenDocument, currentUserName:
 }
 
 /**
- * Deserializes raw file content (.bfl, .btw, or JSON) into a standard OpenDocument model.
+ * Deserializes raw file content (.bfl, or JSON) into a standard OpenDocument model.
  * Handles both BarcodeFlowDocument format and legacy raw LabelTemplate JSON.
+ * Genuinely blocks .btw binary files from JSON.parse.
  */
-export function deserializeBarcodeFlowDocument(rawData: any, fallbackName: string = 'Opened Document'): {
+export function deserializeBarcodeFlowDocument(
+  rawData: any,
+  fallbackName: string = 'Opened Document',
+  filePath?: string
+): {
   template?: LabelTemplate;
   form?: any;
   type: 'template' | 'form';
   name: string;
   documentId: string;
 } {
+  // Case 0: Already a parsed LabelTemplate object
+  if (rawData && typeof rawData === 'object' && rawData.elements && rawData.dimensions) {
+    const rawTemplate = rawData as LabelTemplate;
+    return {
+      type: 'template',
+      template: rawTemplate,
+      name: rawTemplate.name || fallbackName,
+      documentId: rawTemplate.id || `tmpl-${Date.now()}`,
+    };
+  }
+
+  const formatCheck = detectDocumentFormat(filePath || fallbackName, rawData);
+  if (formatCheck.format === 'BARTENDER_BTW' || formatCheck.isBinary) {
+    const parsedTemplate = parseBarTenderDocument(rawData, filePath || fallbackName);
+    return {
+      type: 'template',
+      template: parsedTemplate,
+      name: parsedTemplate.name,
+      documentId: parsedTemplate.id,
+    };
+  }
+
   if (typeof rawData === 'string') {
+    if (rawData.includes('Bar Tender') || rawData.includes('BarTender') || rawData.includes('Seagull')) {
+      const parsedTemplate = parseBarTenderDocument(rawData, filePath || fallbackName);
+      return {
+        type: 'template',
+        template: parsedTemplate,
+        name: parsedTemplate.name,
+        documentId: parsedTemplate.id,
+      };
+    }
     try {
       rawData = JSON.parse(rawData);
-    } catch (e: any) {
-      throw new Error(`Failed to parse document JSON: ${e.message}`);
+    } catch {
+      throw new Error('BarcodeFlow document is invalid or corrupted.');
     }
   }
 
@@ -308,12 +346,19 @@ export async function promptNativeOpenDialog(): Promise<{
         multiple: false,
       });
       const file = await handle.getFile();
-      const text = await file.text();
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      let content: any;
+      if (ext === 'btw') {
+        const ab = await file.arrayBuffer();
+        content = new Uint8Array(ab);
+      } else {
+        content = await file.text();
+      }
       return {
         canceled: false,
         filePath: file.name,
         fileName: file.name,
-        content: text,
+        content,
       };
     } catch (err: any) {
       if (err.name === 'AbortError') return { canceled: true };
@@ -332,13 +377,20 @@ export async function promptNativeOpenDialog(): Promise<{
       const file = input.files?.[0];
       if (file) {
         try {
-          const text = await file.text();
+          const ext = file.name.split('.').pop()?.toLowerCase();
+          let content: any;
+          if (ext === 'btw') {
+            const ab = await file.arrayBuffer();
+            content = new Uint8Array(ab);
+          } else {
+            content = await file.text();
+          }
           document.body.removeChild(input);
           resolve({
             canceled: false,
             filePath: file.name,
             fileName: file.name,
-            content: text,
+            content,
           });
         } catch (e) {
           document.body.removeChild(input);
@@ -364,6 +416,7 @@ export async function promptNativeOpenDialog(): Promise<{
  */
 export async function readDocumentFromDisk(filePath: string): Promise<{
   success: boolean;
+  format?: DocumentFormatCategory;
   data?: any;
   content?: any;
   filePath?: string;
@@ -373,14 +426,19 @@ export async function readDocumentFromDisk(filePath: string): Promise<{
   const electronAPI = (window as any).electronAPI;
   if (electronAPI?.readFile) {
     const result = await electronAPI.readFile(filePath);
-    if (result.success && result.document) {
+    if (result.success) {
+      const detected = detectDocumentFormat(filePath, result.document);
+      const effectiveFormat = result.format || detected.format;
+
       addRecentDocument({
         filePath: result.filePath || filePath,
         fileName: result.fileName || filePath.split(/[\\/]/).pop() || 'Document.bfl',
         lastOpenedAt: new Date().toISOString(),
       });
+
       return {
         success: true,
+        format: effectiveFormat,
         data: result.document,
         content: result.document,
         filePath: result.filePath || filePath,

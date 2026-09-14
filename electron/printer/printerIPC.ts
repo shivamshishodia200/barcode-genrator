@@ -11,6 +11,7 @@ export interface DriverPrintRequest {
   copies?: number;
   landscape?: boolean;
   jobTitle?: string;
+  silent?: boolean;
 }
 
 export interface RawPrintRequest {
@@ -20,16 +21,32 @@ export interface RawPrintRequest {
   jobTitle?: string;
 }
 
+/**
+ * Resolves UI aliases like "Default (currently Microsoft Print to PDF)" to exact OS deviceName.
+ */
+function resolveDeviceName(rawName: string, defaultName?: string): string {
+  if (!rawName) return defaultName || '';
+  const trimmed = rawName.trim();
+  if (trimmed.toLowerCase() === 'default' || trimmed.toLowerCase().startsWith('default (')) {
+    const match = trimmed.match(/^default\s*\((?:currently\s+)?([^)]+)\)$/i);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+    return defaultName || trimmed;
+  }
+  return trimmed;
+}
+
 export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
   // 1. Enumerate Installed Printers
   ipcMain.handle('printers:list', async () => {
-    const mainWindow = getMainWindow();
+    const mainWindow = getMainWindow() || BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) || null;
     return await discoverSystemPrinters(mainWindow);
   });
 
   // 2. Get Default Printer
   ipcMain.handle('printers:get-default', async () => {
-    const mainWindow = getMainWindow();
+    const mainWindow = getMainWindow() || BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) || null;
     const printers = await discoverSystemPrinters(mainWindow);
     return printers.find((p) => p.isDefault) || null;
   });
@@ -38,22 +55,29 @@ export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
   ipcMain.handle('printers:get-status', async (_event, printerName: string) => {
     const mainWindow = getMainWindow();
     const printers = await discoverSystemPrinters(mainWindow);
+    const resolvedName = resolveDeviceName(printerName);
     const target = printers.find(
-      (p) => p.name.toLowerCase() === (printerName || '').trim().toLowerCase()
+      (p) =>
+        p.deviceName.toLowerCase() === resolvedName.toLowerCase() ||
+        p.name.toLowerCase() === resolvedName.toLowerCase()
     );
     if (!target) {
       return { status: 'UNKNOWN', message: 'Printer not found in installed devices.' };
     }
     return {
       status: target.status,
-      name: target.name,
+      name: target.deviceName,
+      deviceName: target.deviceName,
       driverName: target.driverName,
       port: target.port,
+      portName: target.portName,
+      location: target.location,
+      comment: target.comment,
       isDefault: target.isDefault,
     };
   });
 
-  // 4. Universal Windows Driver Printing via Hidden Electron WebContents
+  // 4. Universal Windows Driver Printing via Parented Off-Screen Print Host
   ipcMain.handle('printers:print-driver', async (_event, req: DriverPrintRequest) => {
     const {
       printerName,
@@ -65,32 +89,43 @@ export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
       jobTitle = 'BarcodeFlow Label Job',
     } = req;
 
-    console.log(`[PRINT] Requested printer: ${printerName}`);
-    console.log(`[PRINT] Windows system printer: ${printerName}`);
+    const mainWindow = getMainWindow();
+    const installed = await discoverSystemPrinters(mainWindow);
+    const defaultPrinter = installed.find((p) => p.isDefault);
+    const resolvedDeviceName = resolveDeviceName(printerName, defaultPrinter?.deviceName);
+
+    const targetPrinter = installed.find(
+      (p) =>
+        p.deviceName.toLowerCase() === resolvedDeviceName.toLowerCase() ||
+        p.name.toLowerCase() === resolvedDeviceName.toLowerCase() ||
+        p.displayName.toLowerCase() === resolvedDeviceName.toLowerCase()
+    );
+
+    const targetDeviceName = targetPrinter ? targetPrinter.deviceName : resolvedDeviceName;
+
+    console.log(`[PRINT] Requested printer: "${printerName}"`);
+    console.log(`[PRINT] Resolved Windows deviceName: "${targetDeviceName}"`);
     console.log(`[PRINT] Renderer: WINDOWS_DRIVER`);
     console.log(`[PRINT] Job submitted: ${copies} label(s) (${widthMm}×${heightMm} mm)`);
 
-    // Verify printer exists in Windows Spooler
-    const mainWindow = getMainWindow();
-    const installed = await discoverSystemPrinters(mainWindow);
-    const targetPrinter = installed.find(
-      (p) => p.name.toLowerCase() === (printerName || '').trim().toLowerCase()
-    );
-
-    if (!targetPrinter && printerName !== 'Microsoft Print to PDF') {
-      console.warn(`[PRINT] Warning: Target printer "${printerName}" not found in installed devices.`);
-      return {
-        success: false,
-        error: 'PRINTER_NOT_FOUND',
-        message: `Printer "${printerName}" not found in Windows spooler.`,
-      };
+    if (!targetPrinter && installed.length > 0) {
+      console.warn(`[PRINT] Warning: Target printer "${targetDeviceName}" not found in installed devices.`);
     }
 
-    return new Promise<{ success: boolean; message: string; error?: string }>((resolve) => {
-      let printWindow: BrowserWindow | null = new BrowserWindow({
+    // Windows driver printing: silent: true dispatches directly to the Windows Spooler.
+    // For physical printers, this spools directly to hardware.
+    // For virtual printers (Microsoft Print to PDF, Nitro, WPS), Windows Spooler and the driver display their native Save As dialog.
+    const silent = req.silent !== undefined ? req.silent : true;
+    console.log(`[PRINT] Windows Spooler Dispatch: silent=${silent}`);
+
+    return new Promise<{ success: boolean; message: string; error?: string; cancelled?: boolean }>((resolve) => {
+      // Create off-screen print host window parented to mainWindow so any OS driver dialogs are centered
+      let printHost: BrowserWindow | null = new BrowserWindow({
+        parent: mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined,
         show: false,
         width: Math.max(800, Math.round(widthMm * 3.78)),
         height: Math.max(600, Math.round(heightMm * 3.78)),
+        skipTaskbar: true,
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
@@ -98,19 +133,35 @@ export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
         },
       });
 
-      printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+      printHost.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
 
-      printWindow.webContents.on('did-finish-load', () => {
-        if (!printWindow) return;
+      printHost.webContents.on('did-finish-load', async () => {
+        if (!printHost) return;
+
+        // Ensure fonts and vector graphics are ready before calling OS print
+        try {
+          await printHost.webContents.executeJavaScript(`
+            (async () => {
+              if (document.fonts) {
+                await document.fonts.ready;
+              }
+              return true;
+            })()
+          `);
+        } catch (fontErr) {
+          console.warn('[PRINT] Font readiness check warning:', fontErr);
+        }
+
+        if (!printHost) return;
 
         // Custom page size in microns (1 mm = 1000 microns)
         const widthMicrons = Math.round(widthMm * 1000);
         const heightMicrons = Math.round(heightMm * 1000);
 
         const printOptions: any = {
-          silent: true,
+          silent,
           printBackground: true,
-          deviceName: targetPrinter ? targetPrinter.name : printerName,
+          deviceName: targetDeviceName,
           color: true,
           margins: {
             marginType: 'none',
@@ -123,36 +174,48 @@ export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
           },
         };
 
-        printWindow.webContents.print(printOptions, (success, failureReason) => {
-          if (printWindow) {
-            printWindow.destroy();
-            printWindow = null;
+        printHost.webContents.print(printOptions, (success, failureReason) => {
+          if (printHost) {
+            try {
+              printHost.destroy();
+            } catch {}
+            printHost = null;
           }
 
           if (success) {
-            console.log(`[PRINT] Job successfully submitted to spooler for "${printerName}".`);
+            console.log(`[PRINT] Job successfully submitted to Windows Spooler for "${targetDeviceName}".`);
             resolve({
               success: true,
-              message: `Submitted ${copies} label(s) to Windows Spooler for "${printerName}" (${widthMm}×${heightMm} mm).`,
+              message: `Print job submitted to ${targetDeviceName}`,
             });
           } else {
-            console.error(`[PRINT] Print failure for "${printerName}":`, failureReason);
+            console.warn(`[PRINT] Print callback status for "${targetDeviceName}": success=false, reason="${failureReason}"`);
+            const isCancelled =
+              failureReason === 'Print job canceled' ||
+              failureReason === 'cancelled' ||
+              (failureReason && failureReason.toLowerCase().includes('cancel'));
             resolve({
               success: false,
-              error: failureReason,
-              message: `Windows driver printing failed: ${failureReason}`,
+              cancelled: Boolean(isCancelled),
+              error: isCancelled ? 'PRINT_CANCELLED' : failureReason || 'PRINT_FAILED',
+              message: isCancelled
+                ? 'Print job canceled by user.'
+                : `Windows driver printing failed: ${failureReason}`,
             });
           }
         });
       });
 
-      printWindow.webContents.on('did-fail-load', (_ev, errCode, errDesc) => {
-        if (printWindow) {
-          printWindow.destroy();
-          printWindow = null;
+      printHost.webContents.on('did-fail-load', (_ev, errCode, errDesc) => {
+        if (printHost) {
+          try {
+            printHost.destroy();
+          } catch {}
+          printHost = null;
         }
         resolve({
           success: false,
+          cancelled: false,
           error: errDesc,
           message: `Failed to render printable label document (${errCode}): ${errDesc}`,
         });
@@ -163,53 +226,71 @@ export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
   // 5. Native Raw Spooler Printing (ZPL, TSPL, EPL, ESC/POS)
   ipcMain.handle('printers:print-raw', async (_event, req: RawPrintRequest) => {
     const { printerName, rawContent, format, jobTitle = 'BarcodeFlow Raw Job' } = req;
+    const resolvedDeviceName = resolveDeviceName(printerName);
     console.log(`[PRINT] Requested printer: ${printerName}`);
-    console.log(`[PRINT] Windows system printer: ${printerName}`);
+    console.log(`[PRINT] Windows system printer: ${resolvedDeviceName}`);
     console.log(`[PRINT] Renderer: RAW (${format.toUpperCase()})`);
     console.log(`[PRINT] Job submitted: ${jobTitle}`);
-    return await sendRawBytesToWindowsSpooler(printerName, rawContent, jobTitle);
+    return await sendRawBytesToWindowsSpooler(resolvedDeviceName, rawContent, jobTitle);
   });
 
   // 6. Test Print (Exact 1 Label)
   ipcMain.handle('printers:test-print', async (_event, req: { printerName: string; mode: 'driver' | 'raw'; payload: any }) => {
     const { printerName, mode, payload } = req;
-    console.log(`[PRINT] [TEST PRINT] Target: "${printerName}", Mode: ${mode}`);
-
-    // Verify printer exists in Windows Spooler
     const mainWindow = getMainWindow();
     const installed = await discoverSystemPrinters(mainWindow);
-    const targetPrinter = installed.find(
-      (p) => p.name.toLowerCase() === (printerName || '').trim().toLowerCase()
-    );
+    const defaultPrinter = installed.find((p) => p.isDefault);
+    const resolvedDeviceName = resolveDeviceName(printerName, defaultPrinter?.deviceName);
 
-    if (!targetPrinter && printerName !== 'Microsoft Print to PDF') {
-      return {
-        success: false,
-        error: 'PRINTER_NOT_FOUND',
-        message: `Printer "${printerName}" not found in Windows spooler.`,
-      };
-    }
+    const targetPrinter = installed.find(
+      (p) =>
+        p.deviceName.toLowerCase() === resolvedDeviceName.toLowerCase() ||
+        p.name.toLowerCase() === resolvedDeviceName.toLowerCase() ||
+        p.displayName.toLowerCase() === resolvedDeviceName.toLowerCase()
+    );
+    const targetDeviceName = targetPrinter ? targetPrinter.deviceName : resolvedDeviceName;
+
+    console.log(`[PRINT] [TEST PRINT] Target: "${targetDeviceName}", Mode: ${mode}`);
 
     if (mode === 'raw') {
-      return await sendRawBytesToWindowsSpooler(targetPrinter ? targetPrinter.name : printerName, payload.rawContent, 'BarcodeFlow Test Label');
+      return await sendRawBytesToWindowsSpooler(targetDeviceName, payload.rawContent, 'BarcodeFlow Test Label');
     } else {
-      // Driver mode 1-label test print
+      const isInteractive = targetPrinter
+        ? targetPrinter.isInteractive
+        : targetDeviceName.toLowerCase().includes('pdf') ||
+          targetDeviceName.toLowerCase().includes('wps') ||
+          targetDeviceName.toLowerCase().includes('onenote');
+
       return new Promise((resolve) => {
-        let printWindow: BrowserWindow | null = new BrowserWindow({
+        let printHost: BrowserWindow | null = new BrowserWindow({
+          parent: mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined,
           show: false,
-          width: 600,
-          height: 400,
+          width: 800,
+          height: 600,
+          skipTaskbar: true,
           webPreferences: { nodeIntegration: false, contextIsolation: true },
         });
 
-        printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(payload.htmlContent)}`);
-        printWindow.webContents.on('did-finish-load', () => {
-          if (!printWindow) return;
-          printWindow.webContents.print(
+        printHost.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(payload.htmlContent)}`);
+        printHost.webContents.on('did-finish-load', async () => {
+          if (!printHost) return;
+
+          try {
+            await printHost.webContents.executeJavaScript(`
+              (async () => {
+                if (document.fonts) await document.fonts.ready;
+                return true;
+              })()
+            `);
+          } catch {}
+
+          if (!printHost) return;
+
+          printHost.webContents.print(
             {
               silent: true,
               printBackground: true,
-              deviceName: targetPrinter ? targetPrinter.name : printerName,
+              deviceName: targetDeviceName,
               margins: { marginType: 'none' },
               copies: 1,
               pageSize: {
@@ -218,16 +299,22 @@ export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
               },
             },
             (success, reason) => {
-              if (printWindow) {
-                printWindow.destroy();
-                printWindow = null;
+              if (printHost) {
+                try {
+                  printHost.destroy();
+                } catch {}
+                printHost = null;
               }
+              const isCancelled = reason === 'Print job canceled' || reason === 'cancelled';
               resolve({
                 success,
+                cancelled: isCancelled,
                 message: success
-                  ? `Test print label sent to "${printerName}" successfully.`
+                  ? `Test print label sent to "${targetDeviceName}" successfully.`
+                  : isCancelled
+                  ? 'Test print canceled by user.'
                   : `Test print failed: ${reason}`,
-                error: success ? undefined : reason,
+                error: success ? undefined : isCancelled ? 'PRINT_CANCELLED' : reason,
               });
             }
           );
@@ -278,5 +365,60 @@ export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
       });
     }
     return { success: false, message: 'Platform not supported or printer not specified.' };
+  });
+
+  // 9. Generate Vector PDF via Chromium Engine (printToPDF)
+  ipcMain.handle('printers:generate-pdf', async (_event, payload: {
+    htmlContent: string;
+    widthMm: number;
+    heightMm: number;
+    landscape?: boolean;
+  }) => {
+    let printHost: BrowserWindow | null = new BrowserWindow({
+      show: false,
+      width: 800,
+      height: 600,
+      skipTaskbar: true,
+      webPreferences: { nodeIntegration: false, contextIsolation: true },
+    });
+
+    try {
+      await printHost.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(payload.htmlContent)}`);
+      try {
+        await printHost.webContents.executeJavaScript(`
+          (async () => {
+            if (document.fonts) await document.fonts.ready;
+            return true;
+          })()
+        `);
+      } catch {}
+
+      const pdfBuffer = await printHost.webContents.printToPDF({
+        printBackground: true,
+        margins: { marginType: 'none' },
+        pageSize: {
+          width: Math.round((payload.widthMm || 50) * 1000), // in microns
+          height: Math.round((payload.heightMm || 25) * 1000),
+        },
+        landscape: Boolean(payload.landscape),
+      });
+
+      return {
+        success: true,
+        base64Data: pdfBuffer.toString('base64'),
+        sizeBytes: pdfBuffer.length,
+      };
+    } catch (err: any) {
+      console.error('[PrinterIPC] generate-pdf failed:', err);
+      return {
+        success: false,
+        error: err?.message || 'Chromium PDF generation failed',
+      };
+    } finally {
+      if (printHost && !printHost.isDestroyed()) {
+        printHost.destroy();
+        printHost = null;
+      }
+    }
   });
 }

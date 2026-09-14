@@ -61,12 +61,16 @@ export interface PrinterModel {
   id: string;
   name: string;
   systemName: string;
+  deviceName?: string;
   displayName?: string;
   manufacturer?: string;
   model?: string;
   driverName?: string;
   port?: string;
   portName?: string;
+  location?: string;
+  comment?: string;
+  isInteractive?: boolean;
   connectionType?: ConnectionType;
   isDefault: boolean;
   status: PrinterStatus;

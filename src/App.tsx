@@ -78,8 +78,11 @@ import { RecordBrowserModal } from './components/dialogs/RecordBrowserModal';
 import { NewDocumentWizardModal } from './components/wizard/NewDocumentWizardModal';
 import { PrinterManagerModal } from './components/dialogs/PrinterManagerModal';
 import { WelcomeModal } from './components/dialogs/WelcomeModal';
+import { BarTenderImportModal } from './components/dialogs/BarTenderImportModal';
+import { detectDocumentFormat } from './services/documentFormatDetector';
 
 import { exportLabelsToPDF } from './services/pdfExportService';
+import { promptSavePdfFile } from './services/fileSavePromptService';
 import { generateZPL } from './services/zplEngine';
 import { EnterprisePrintSpooler } from './services/printSpoolerService';
 import { calculateGS1CheckDigit } from './services/gs1Engine';
@@ -190,6 +193,11 @@ export default function App() {
     isOpen: boolean;
     templatePrinterName: string;
   } | null>(null);
+  const [barTenderModal, setBarTenderModal] = useState<{
+    isOpen: boolean;
+    filePath?: string;
+    fileName?: string;
+  }>({ isOpen: false });
 
   // Derive PrinterDefinition list from live Windows printers (no mock printers)
   const printers: PrinterDefinition[] = useMemo(() => {
@@ -199,8 +207,8 @@ export default function App() {
       model: p.model || p.name,
       brand: (p.manufacturer?.includes('Zebra') ? 'Zebra' : p.manufacturer?.includes('TSC') ? 'TSC' : 'Desktop PDF') as any,
       dpi: ((p.dpi === 203 || p.dpi === 300 || p.dpi === 600 ? p.dpi : 300) || 300) as DpiOption,
-      ipAddress: p.portName || p.port || 'LOCAL',
-      port: 9100,
+      ipAddress: p.portName || (typeof p.port === 'string' ? p.port : 'LOCAL'),
+      port: typeof p.port === 'number' ? p.port : 0,
       status: (p.status === 'READY' ? 'online' : p.status === 'OFFLINE' ? 'offline' : 'online') as any,
       protocol: (p.preferredRenderer === 'ZPL' ? 'zpl' : p.preferredRenderer === 'TSPL' ? 'tspl' : 'pdf') as any,
       location: p.driverName ? `Windows Driver: ${p.driverName}` : 'Local System',
@@ -1645,13 +1653,19 @@ export default function App() {
     try {
       const record = currentTemplate.sampleRecords[viewport.previewRecordIndex] || {};
       const blob = await exportLabelsToPDF(currentTemplate, [record], 1);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${currentTemplate.name.replace(/\s+/g, '_')}_label.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast('Exported Vector PDF successfully', 'success');
+      const saveRes = await promptSavePdfFile({
+        data: blob,
+        defaultFileName: `${currentTemplate.name.replace(/\s+/g, '_')}_label.pdf`,
+      });
+      if (saveRes.status === 'cancelled') {
+        showToast('PDF Export cancelled', 'info');
+        return;
+      }
+      if (saveRes.status === 'failed') {
+        showToast(`PDF Export failed: ${saveRes.error}`, 'error');
+        return;
+      }
+      showToast(`Exported PDF successfully to ${saveRes.fileName || 'chosen destination'}`, 'success');
       logAction('PRINT_JOB_DISPATCH', `Exported PDF for "${currentTemplate.name}"`);
     } catch (err: any) {
       showToast(`PDF Export failed: ${err.message}`, 'error');
@@ -2214,15 +2228,19 @@ export default function App() {
       if (!fileContent) {
         // Read file from disk via Electron
         const readRes = await readDocumentFromDisk(filePath);
-        if (!readRes.success || !readRes.content) {
-          showToast(`Failed to open document: ${readRes.error}`, 'error');
+        if (!readRes.success || (!readRes.content && !readRes.data)) {
+          showToast(`Failed to open document: ${readRes.error || 'File read error'}`, 'error');
           return;
         }
-        fileContent = readRes.content;
+        fileContent = readRes.content || readRes.data;
       }
 
-      // Deserialize .bfl or JSON into BarcodeFlow document
-      const docFile = deserializeBarcodeFlowDocument(fileContent, filePath);
+      // Deserialize .bfl, .btw, or JSON into BarcodeFlow document
+      const docFile = deserializeBarcodeFlowDocument(
+        fileContent,
+        filePath.split(/[\\/]/).pop() || 'Opened Document',
+        filePath
+      );
       const loadedTemplate = docFile.template || INITIAL_TEMPLATES[0];
 
       // Reconnect and refresh live Excel data source if configured
@@ -2330,12 +2348,16 @@ export default function App() {
         }
 
         const readRes = await readDocumentFromDisk(filePath);
-        if (!readRes.success || !readRes.content) {
-          showToast(`Failed to open recent document: ${readRes.error}`, 'error');
+        if (!readRes.success || (!readRes.content && !readRes.data)) {
+          showToast(`Failed to open recent document: ${readRes.error || 'File read error'}`, 'error');
           return;
         }
 
-        const docFile = deserializeBarcodeFlowDocument(readRes.content, filePath);
+        const docFile = deserializeBarcodeFlowDocument(
+          readRes.content || readRes.data,
+          filePath.split(/[\\/]/).pop() || 'Recent Document',
+          filePath
+        );
         const loadedTemplate = docFile.template || INITIAL_TEMPLATES[0];
 
         // Reconnect and refresh live Excel data source if configured
@@ -4381,33 +4403,11 @@ export default function App() {
         onJobSubmitted={async (job) => {
           setPrintJobs((prev) => [job, ...prev]);
 
-          // Automatically save current template to My Drafts with 'Printed' tag so it remains easily editable
-          const updatedTags = Array.from(new Set([...(currentTemplate.tags || []), 'Printed', 'Draft']));
-          const printedTemplate: LabelTemplate = {
-            ...currentTemplate,
-            tags: updatedTags,
-            updatedAt: new Date().toISOString(),
-          };
-
-          setTemplates((prev) => {
-            const exists = prev.some((t) => t.id === printedTemplate.id);
-            if (exists) {
-              return prev.map((t) => (t.id === printedTemplate.id ? printedTemplate : t));
-            }
-            return [printedTemplate, ...prev];
-          });
-
           logAction(
             'PRINT_JOB_DISPATCH',
-            `Dispatched job #${job.id} (${job.copies} copies) to ${job.printerName} & saved to My Drafts with [Printed] tag`
+            `Print job #${job.id} (${job.copies} copies) submitted to ${job.printerName}`
           );
-          showToast(`Dispatched to ${job.printerName} & saved to My Drafts with [Printed] tag via API!`, 'success');
-
-          try {
-            await apiService.templates.save(printedTemplate);
-          } catch (err) {
-            console.warn('API error saving printed template tag:', err);
-          }
+          showToast(`Print job submitted to ${job.printerName}`, 'success');
         }}
       />
 
@@ -5438,6 +5438,26 @@ export default function App() {
         onRefreshRecent={() => setRecentDocuments(getRecentDocuments())}
         showWelcomeOnStartup={showWelcomeOnStartup}
         onToggleShowWelcomeOnStartup={handleToggleShowWelcomeOnStartup}
+      />
+
+      {/* BarTender .BTW Import Guidance Modal */}
+      <BarTenderImportModal
+        isOpen={barTenderModal.isOpen}
+        onClose={() => setBarTenderModal({ isOpen: false })}
+        filePath={barTenderModal.filePath}
+        fileName={barTenderModal.fileName}
+        onOpenCsv={() => {
+          setBarTenderModal({ isOpen: false });
+          setIsExcelWizardOpen(true);
+        }}
+        onOpenExcel={() => {
+          setBarTenderModal({ isOpen: false });
+          setIsExcelWizardOpen(true);
+        }}
+        onNewTemplate={() => {
+          setBarTenderModal({ isOpen: false });
+          setIsNewDocWizardOpen(true);
+        }}
       />
     </div>
   );

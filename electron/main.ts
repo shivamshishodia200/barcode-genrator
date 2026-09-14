@@ -4,6 +4,7 @@ import fs from 'fs';
 import { fork, ChildProcess } from 'child_process';
 import { registerPrinterIpc } from './printer/printerIPC';
 import { registerDatabaseIpc } from './database/databaseIPC';
+import { parseBarTenderDocument } from '../src/services/barTenderParser';
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcess | null = null;
@@ -1065,6 +1066,77 @@ function registerDocumentIpc() {
     }
   });
 
+  // 2b. Show Native Windows Save As PDF Dialog
+  ipcMain.handle('document:show-save-pdf-dialog', async (_event, defaultFileName?: string, defaultDir?: string) => {
+    if (!mainWindow) return { canceled: true };
+    const defaultName = (defaultFileName || 'Document1').replace(/[\/\\:*?"<>|]/g, '_');
+    const safeName = defaultName.endsWith('.pdf') ? defaultName : `${defaultName}.pdf`;
+    let baseDir = app.getPath('desktop');
+    if (!fs.existsSync(baseDir)) {
+      baseDir = app.getPath('documents');
+    }
+    const defaultPath = defaultDir && fs.existsSync(defaultDir)
+      ? path.join(defaultDir, safeName)
+      : path.join(baseDir, safeName);
+
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save As PDF - BarcodeFlow Enterprise',
+      defaultPath,
+      filters: [
+        { name: 'PDF Document (*.pdf)', extensions: ['pdf'] },
+        { name: 'All Files (*.*)', extensions: ['*'] }
+      ]
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { canceled: true };
+    }
+
+    const resolvedPath = path.normalize(path.resolve(result.filePath));
+    return {
+      canceled: false,
+      filePath: resolvedPath,
+      fileName: path.basename(resolvedPath),
+    };
+  });
+
+  // 2c. Save Binary File (for PDF, PRN, etc.)
+  ipcMain.handle('document:save-binary-file', async (_event, { filePath, base64Data }: { filePath: string; base64Data: string }) => {
+    if (!filePath) {
+      return { success: false, error: 'File path cannot be empty' };
+    }
+    const resolvedPath = path.normalize(path.resolve(filePath));
+    const targetDir = path.dirname(resolvedPath);
+    if (!fs.existsSync(targetDir)) {
+      try {
+        fs.mkdirSync(targetDir, { recursive: true });
+      } catch (err: any) {
+        return { success: false, error: `Failed to create directory: ${err.message}` };
+      }
+    }
+
+    const tempPath = `${resolvedPath}.tmp-${Date.now()}`;
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    try {
+      await fs.promises.writeFile(tempPath, buffer);
+      await fs.promises.rename(tempPath, resolvedPath);
+      const stat = await fs.promises.stat(resolvedPath);
+      return {
+        success: true,
+        filePath: resolvedPath,
+        fileName: path.basename(resolvedPath),
+        sizeBytes: stat.size,
+        lastModified: stat.mtime.toISOString(),
+      };
+    } catch (err: any) {
+      try {
+        if (fs.existsSync(tempPath)) await fs.promises.unlink(tempPath);
+      } catch { }
+      return { success: false, error: err.message || 'Binary write failed' };
+    }
+  });
+
   // 3. Show Native Windows Open Dialog
   ipcMain.handle('document:show-open-dialog', async (_event, defaultDir?: string) => {
     if (!mainWindow) return { canceled: true };
@@ -1074,7 +1146,7 @@ function registerDocumentIpc() {
       defaultPath,
       properties: ['openFile'],
       filters: [
-        { name: 'BarcodeFlow & BarTender Documents (*.bfl, *.btw, *.json)', extensions: ['bfl', 'btw', 'json'] },
+        { name: 'All Supported Documents (*.bfl, *.btw, *.json)', extensions: ['bfl', 'btw', 'json'] },
         { name: 'BarcodeFlow Document (*.bfl)', extensions: ['bfl'] },
         { name: 'BarTender Document (*.btw)', extensions: ['btw'] },
         { name: 'JSON Document (*.json)', extensions: ['json'] },
@@ -1094,7 +1166,28 @@ function registerDocumentIpc() {
     };
   });
 
-  // 4. Read Document File
+  // 3b. Show Native Windows Folder Dialog (Select Directory)
+  ipcMain.handle('document:show-directory-dialog', async (_event, defaultDir?: string) => {
+    if (!mainWindow) return { canceled: true };
+    const defaultPath = defaultDir && fs.existsSync(defaultDir) ? defaultDir : app.getPath('documents');
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Destination Folder - BarcodeFlow',
+      defaultPath,
+      properties: ['openDirectory', 'createDirectory'],
+    });
+
+    if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+      return { canceled: true };
+    }
+
+    const resolvedPath = path.normalize(path.resolve(result.filePaths[0]));
+    return {
+      canceled: false,
+      folderPath: resolvedPath,
+    };
+  });
+
+  // 4. Read Document File (Format-Aware & Safe)
   ipcMain.handle('document:read-file', async (_event, filePath: string) => {
     if (!filePath) {
       return { success: false, error: 'File path cannot be empty' };
@@ -1105,17 +1198,107 @@ function registerDocumentIpc() {
     }
 
     try {
-      const content = await fs.promises.readFile(resolvedPath, 'utf-8');
-      const parsed = JSON.parse(content);
       const stats = await fs.promises.stat(resolvedPath);
-      return {
-        success: true,
-        document: parsed,
-        filePath: resolvedPath,
-        fileName: path.basename(resolvedPath),
-        sizeBytes: stats.size,
-        lastModified: stats.mtime.toISOString(),
-      };
+      const ext = path.extname(resolvedPath).toLowerCase();
+
+      // Case 1: BarTender .btw file (Binary / Compound OLE)
+      if (ext === '.btw') {
+        console.log(`[DocumentService] Detected BarTender .btw document: ${resolvedPath} (${stats.size} bytes). Parsing template layout.`);
+        const buf = await fs.promises.readFile(resolvedPath);
+        const parsedDoc = parseBarTenderDocument(buf, path.basename(resolvedPath));
+        return {
+          success: true,
+          format: 'BARTENDER_BTW',
+          document: parsedDoc,
+          filePath: resolvedPath,
+          fileName: path.basename(resolvedPath),
+          sizeBytes: stats.size,
+          lastModified: stats.mtime.toISOString(),
+          isBinary: true,
+        };
+      }
+
+      // Read buffer header to detect magic signatures
+      const fd = await fs.promises.open(resolvedPath, 'r');
+      const headerBuf = Buffer.alloc(128);
+      await fd.read(headerBuf, 0, 128, 0);
+      await fd.close();
+
+      // Check OLE compound document signature (BarTender binary header: D0 CF 11 E0)
+      if (
+        headerBuf[0] === 0xd0 &&
+        headerBuf[1] === 0xcf &&
+        headerBuf[2] === 0x11 &&
+        headerBuf[3] === 0xe0
+      ) {
+        console.log(`[DocumentService] Detected OLE Compound / BarTender binary header in: ${resolvedPath}. Parsing template layout.`);
+        const buf = await fs.promises.readFile(resolvedPath);
+        const parsedDoc = parseBarTenderDocument(buf, path.basename(resolvedPath));
+        return {
+          success: true,
+          format: 'BARTENDER_BTW',
+          document: parsedDoc,
+          filePath: resolvedPath,
+          fileName: path.basename(resolvedPath),
+          sizeBytes: stats.size,
+          lastModified: stats.mtime.toISOString(),
+          isBinary: true,
+        };
+      }
+
+      // Read buffer header to detect BarTender text signature
+      const headerStr = headerBuf.toString('latin1');
+      if (headerStr.includes('Bar Tender') || headerStr.includes('BarTender') || headerStr.includes('Seagull')) {
+        console.log(`[DocumentService] Detected BarTender signature in: ${resolvedPath}. Parsing template layout.`);
+        const buf = await fs.promises.readFile(resolvedPath);
+        const parsedDoc = parseBarTenderDocument(buf, path.basename(resolvedPath));
+        return {
+          success: true,
+          format: 'BARTENDER_BTW',
+          document: parsedDoc,
+          filePath: resolvedPath,
+          fileName: path.basename(resolvedPath),
+          sizeBytes: stats.size,
+          lastModified: stats.mtime.toISOString(),
+          isBinary: true,
+        };
+      }
+
+      // Case 2: BarcodeFlow Native (.bfl) or JSON
+      const content = await fs.promises.readFile(resolvedPath, 'utf-8');
+      try {
+        const parsed = JSON.parse(content);
+        return {
+          success: true,
+          format: ext === '.bfl' || parsed.format === 'BarcodeFlowDocument' ? 'BARCODEFLOW_NATIVE' : 'JSON',
+          document: parsed,
+          filePath: resolvedPath,
+          fileName: path.basename(resolvedPath),
+          sizeBytes: stats.size,
+          lastModified: stats.mtime.toISOString(),
+          isBinary: false,
+        };
+      } catch {
+        // If JSON.parse fails, verify if content is a BarTender file before failing
+        if (content.includes('Bar Tender') || content.includes('BarTender') || content.includes('Seagull')) {
+          console.log(`[DocumentService] Recovered BarTender document from non-JSON file: ${resolvedPath}`);
+          const parsedDoc = parseBarTenderDocument(content, path.basename(resolvedPath));
+          return {
+            success: true,
+            format: 'BARTENDER_BTW',
+            document: parsedDoc,
+            filePath: resolvedPath,
+            fileName: path.basename(resolvedPath),
+            sizeBytes: stats.size,
+            lastModified: stats.mtime.toISOString(),
+            isBinary: true,
+          };
+        }
+        return {
+          success: false,
+          error: 'BarcodeFlow document is invalid or corrupted.',
+        };
+      }
     } catch (err: any) {
       return { success: false, error: `Failed to read document: ${err.message}` };
     }
@@ -1146,7 +1329,28 @@ function registerDocumentIpc() {
     }
   });
 
-  // 6. Native App Exit
+  // 6b. Open Document / PDF File in Windows Default Application (e.g. WPS Office / Adobe / Edge)
+  ipcMain.handle('document:open-file', async (_event, filePath: string) => {
+    if (!filePath) return false;
+    try {
+      const resolvedPath = path.normalize(path.resolve(filePath));
+      if (fs.existsSync(resolvedPath)) {
+        console.log(`[DocumentService] Auto-opening file in system default viewer: "${resolvedPath}"`);
+        const errorMsg = await shell.openPath(resolvedPath);
+        if (errorMsg) {
+          console.warn(`[DocumentService] shell.openPath warning: ${errorMsg}`);
+          return false;
+        }
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      console.error(`[DocumentService] Failed to open file: ${err?.message}`);
+      return false;
+    }
+  });
+
+  // 7. Native App Exit
   ipcMain.handle('app:exit', async () => {
     app.quit();
     return true;
@@ -1172,6 +1376,7 @@ function createWindow() {
   });
 
   const distIndex = path.join(__dirname, '../dist/index.html');
+  console.log(`[Electron Main] Loading frontend. distIndex exists: ${fs.existsSync(distIndex)} at ${distIndex}`);
   if (fs.existsSync(distIndex)) {
     mainWindow.loadFile(distIndex);
   } else {
@@ -1181,8 +1386,21 @@ function createWindow() {
   }
 
   mainWindow.once('ready-to-show', () => {
+    console.log('[Electron Main] Window ready-to-show event fired');
     mainWindow?.show();
     mainWindow?.maximize();
+  });
+
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isVisible()) {
+      console.log('[Electron Main] Fallback show timer triggered');
+      mainWindow.show();
+      mainWindow.maximize();
+    }
+  }, 2500);
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[Electron Main] Failed to load ${validatedURL}: ${errorCode} - ${errorDescription}`);
   });
 
   mainWindow.on('closed', () => {

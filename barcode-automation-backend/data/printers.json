@@ -18,6 +18,23 @@
   },
   {
     "id": "prn-os-2",
+    "name": "Nitro PDF Creator",
+    "model": "Nitro PDF Driver",
+    "brand": "Desktop PDF",
+    "dpi": 300,
+    "status": "online",
+    "protocol": "pdf",
+    "location": "Local Workstation / USB Spooler",
+    "mediaWidth": 210,
+    "mediaHeight": 297,
+    "ipAddress": "Nitro PDF Port:",
+    "port": 9100,
+    "isDefault": false,
+    "driverName": "Nitro PDF Driver",
+    "isThermal": false
+  },
+  {
+    "id": "prn-os-3",
     "name": "Microsoft Print to PDF",
     "model": "Microsoft Print To PDF",
     "brand": "Desktop PDF",
@@ -29,12 +46,12 @@
     "mediaHeight": 297,
     "ipAddress": "PORTPROMPT:",
     "port": 9100,
-    "isDefault": true,
+    "isDefault": false,
     "driverName": "Microsoft Print To PDF",
     "isThermal": false
   },
   {
-    "id": "prn-os-3",
+    "id": "prn-os-4",
     "name": "Export to WPS PDF",
     "model": "Kingsoft Virtual Printer Driver",
     "brand": "Desktop PDF",
@@ -46,7 +63,7 @@
     "mediaHeight": 297,
     "ipAddress": "Kingsoft Virtual Printer Port",
     "port": 9100,
-    "isDefault": false,
+    "isDefault": true,
     "driverName": "Kingsoft Virtual Printer Driver",
     "isThermal": false
   }

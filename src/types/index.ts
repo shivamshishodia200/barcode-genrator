@@ -1193,11 +1193,17 @@ export interface BarcodeFlowAPI {
     list: () => Promise<any[]>;
     getDefault: () => Promise<any | null>;
     getStatus: (printerName: string) => Promise<any>;
-    printDriver: (req: any) => Promise<{ success: boolean; message: string; error?: string }>;
+    printDriver: (req: any) => Promise<{ success: boolean; message: string; error?: string; cancelled?: boolean }>;
     printRaw: (req: any) => Promise<{ success: boolean; bytesWritten: number; message: string; error?: string }>;
     testPrint: (req: any) => Promise<{ success: boolean; message: string; error?: string }>;
     openProperties?: (printerName: string) => Promise<{ success: boolean; error?: string }>;
     cancelQueuedJobs?: (printerName: string) => Promise<{ success: boolean; message: string; error?: string }>;
+    generatePdf?: (req: {
+      htmlContent: string;
+      widthMm: number;
+      heightMm: number;
+      landscape?: boolean;
+    }) => Promise<{ success: boolean; base64Data?: string; sizeBytes?: number; error?: string }>;
   };
   database?: {
     detectDependencies: (providerType: string) => Promise<any>;
