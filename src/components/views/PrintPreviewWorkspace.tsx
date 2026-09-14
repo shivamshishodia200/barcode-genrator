@@ -376,105 +376,84 @@ export const PrintPreviewWorkspace: React.FC<PrintPreviewWorkspaceProps> = ({
         style={{ backgroundColor: '#9fbddb' }}
       >
         {viewMode === 'single' ? (
-          // Single Page Physical Sheet View with Real Dimension Metrics
+          // Single Page Physical Sheet View (Clean BarTender Style)
           currentPage && (
-            <div className="flex flex-col items-center gap-2">
-              {/* Top Dimension Header */}
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-slate-800 bg-white/95 border border-slate-300 rounded px-2.5 py-0.5 shadow-2xs">
-                  ← Width: {currentPage.pageWidthMm} mm ({((currentPage.pageWidthMm / 25.4)).toFixed(2)} in) →
-                </span>
-                {Math.abs(zoomScale - 1.0) < 0.02 && (
-                  <span className="text-[10.5px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded px-2 py-0.5 shadow-2xs">
-                    ✓ 1:1 Actual Physical Scale
-                  </span>
-                )}
-              </div>
+            <div
+              className="bg-white relative transition-all origin-center shrink-0 border border-[#7d9ebc]"
+              style={{
+                width: `${currentPage.pageWidthMm * MM_TO_PX * zoomScale}px`,
+                height: `${currentPage.pageHeightMm * MM_TO_PX * zoomScale}px`,
+                boxShadow: '0 10px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0,0,0,0.15)',
+              }}
+            >
+              {/* Margin Boundary Guides (Light dashed sky-blue border) */}
+              <div
+                className="absolute border border-dashed border-sky-300 pointer-events-none"
+                style={{
+                  top: `${(currentPage.margins.top || 0) * MM_TO_PX * zoomScale}px`,
+                  left: `${(currentPage.margins.left || 0) * MM_TO_PX * zoomScale}px`,
+                  right: `${(currentPage.margins.right || 0) * MM_TO_PX * zoomScale}px`,
+                  bottom: `${(currentPage.margins.bottom || 0) * MM_TO_PX * zoomScale}px`,
+                }}
+              />
 
-              <div className="flex items-center gap-2">
-                {/* Left Height Ruler / Indicator */}
-                <div className="text-[11px] font-bold text-slate-800 bg-white/95 border border-slate-300 rounded px-1.5 py-2 shadow-2xs [writing-mode:vertical-lr] rotate-180 flex items-center justify-center">
-                  ← Height: {currentPage.pageHeightMm} mm ({((currentPage.pageHeightMm / 25.4)).toFixed(2)} in) →
-                </div>
+              {/* Render all label items positioned on this page */}
+              {currentPage.items.map((item) => {
+                const itemLeftPx = item.xOffsetMm * MM_TO_PX * zoomScale;
+                const itemTopPx = item.yOffsetMm * MM_TO_PX * zoomScale;
+                const itemWidthPx = item.widthMm * MM_TO_PX * zoomScale;
+                const itemHeightPx = item.heightMm * MM_TO_PX * zoomScale;
 
-                <div
-                  className="bg-white relative transition-all origin-center shrink-0 border border-[#7d9ebc]"
-                  style={{
-                    width: `${currentPage.pageWidthMm * MM_TO_PX * zoomScale}px`,
-                    height: `${currentPage.pageHeightMm * MM_TO_PX * zoomScale}px`,
-                    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0,0,0,0.15)',
-                  }}
-                >
-                  {/* Margin Boundary Guides (Light dashed sky-blue border) */}
+                const shape = printPlan.pageSetup.shape;
+                const cornerRadiusPx = (printPlan.pageSetup.cornerRadius || 2.5) * MM_TO_PX * zoomScale;
+                const borderRadiusStyle =
+                  shape === 'ellipse' || shape === 'circle'
+                    ? '50%'
+                    : shape === 'rounded-rectangle'
+                    ? `${cornerRadiusPx}px`
+                    : '0px';
+
+                return (
                   <div
-                    className="absolute border border-dashed border-sky-300 pointer-events-none"
+                    key={item.itemIndex}
+                    className="absolute bg-white overflow-hidden border border-slate-700/80 shadow-2xs hover:border-blue-600 transition-colors"
                     style={{
-                      top: `${(currentPage.margins.top || 0) * MM_TO_PX * zoomScale}px`,
-                      left: `${(currentPage.margins.left || 0) * MM_TO_PX * zoomScale}px`,
-                      right: `${(currentPage.margins.right || 0) * MM_TO_PX * zoomScale}px`,
-                      bottom: `${(currentPage.margins.bottom || 0) * MM_TO_PX * zoomScale}px`,
+                      left: `${itemLeftPx}px`,
+                      top: `${itemTopPx}px`,
+                      width: `${itemWidthPx}px`,
+                      height: `${itemHeightPx}px`,
+                      borderRadius: borderRadiusStyle,
                     }}
-                  />
+                  >
+                    {/* Render Template Elements inside this Label Slot */}
+                    <div
+                      className="w-full h-full relative"
+                      style={{
+                        transform: `scale(${zoomScale})`,
+                        transformOrigin: 'top left',
+                        width: `${item.widthMm * MM_TO_PX}px`,
+                        height: `${item.heightMm * MM_TO_PX}px`,
+                      }}
+                    >
+                      {template.elements.map((el) => {
+                        const evaluatedVal = item.evaluatedValues[el.id] !== undefined
+                          ? item.evaluatedValues[el.id]
+                          : (el as any).value || (el as any).content || '';
 
-                  {/* Render all label items positioned on this page */}
-                  {currentPage.items.map((item) => {
-                    const itemLeftPx = item.xOffsetMm * MM_TO_PX * zoomScale;
-                    const itemTopPx = item.yOffsetMm * MM_TO_PX * zoomScale;
-                    const itemWidthPx = item.widthMm * MM_TO_PX * zoomScale;
-                    const itemHeightPx = item.heightMm * MM_TO_PX * zoomScale;
-
-                    const shape = printPlan.pageSetup.shape;
-                    const cornerRadiusPx = (printPlan.pageSetup.cornerRadius || 2.5) * MM_TO_PX * zoomScale;
-                    const borderRadiusStyle =
-                      shape === 'ellipse' || shape === 'circle'
-                        ? '50%'
-                        : shape === 'rounded-rectangle'
-                        ? `${cornerRadiusPx}px`
-                        : '0px';
-
-                    return (
-                      <div
-                        key={item.itemIndex}
-                        className="absolute bg-white overflow-hidden border border-slate-700/80 shadow-2xs hover:border-blue-600 transition-colors"
-                        style={{
-                          left: `${itemLeftPx}px`,
-                          top: `${itemTopPx}px`,
-                          width: `${itemWidthPx}px`,
-                          height: `${itemHeightPx}px`,
-                          borderRadius: borderRadiusStyle,
-                        }}
-                      >
-                        {/* Render Template Elements inside this Label Slot */}
-                        <div
-                          className="w-full h-full relative"
-                          style={{
-                            transform: `scale(${zoomScale})`,
-                            transformOrigin: 'top left',
-                            width: `${item.widthMm * MM_TO_PX}px`,
-                            height: `${item.heightMm * MM_TO_PX}px`,
-                          }}
-                        >
-                          {template.elements.map((el) => {
-                            const evaluatedVal = item.evaluatedValues[el.id] !== undefined
-                              ? item.evaluatedValues[el.id]
-                              : (el as any).value || (el as any).content || '';
-
-                            return (
-                              <PreviewElementSlot
-                                key={el.id}
-                                element={el}
-                                evaluatedValue={evaluatedVal}
-                                record={item.record}
-                                zoomScale={zoomScale}
-                              />
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                        return (
+                          <PreviewElementSlot
+                            key={el.id}
+                            element={el}
+                            evaluatedValue={evaluatedVal}
+                            record={item.record}
+                            zoomScale={zoomScale}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )
         ) : (
