@@ -79,6 +79,8 @@ export function parseBarTenderDocument(
   let previewDataUrl: string | null = null;
   let previewWidthPx = 800;
   let previewHeightPx = 600;
+  let physWidthMm: number | null = null;
+  let physHeightMm: number | null = null;
 
   // PNG magic bytes: 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
   const pngMagic = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -129,6 +131,29 @@ export function parseBarTenderDocument(
         }
       }
 
+      // Check for PNG pHYs (Physical pixel dimensions) chunk
+      for (let p = 8; p < pngBytes.length - 13; p++) {
+        if (
+          pngBytes[p] === 0x70 &&
+          pngBytes[p + 1] === 0x48 &&
+          pngBytes[p + 2] === 0x59 &&
+          pngBytes[p + 3] === 0x73
+        ) {
+          const ppuX = ((pngBytes[p + 4] << 24) | (pngBytes[p + 5] << 16) | (pngBytes[p + 6] << 8) | pngBytes[p + 7]) >>> 0;
+          const ppuY = ((pngBytes[p + 8] << 24) | (pngBytes[p + 9] << 16) | (pngBytes[p + 10] << 8) | pngBytes[p + 11]) >>> 0;
+          const unit = pngBytes[p + 12]; // 1 = meters
+          if (unit === 1 && ppuX > 1000 && ppuY > 1000 && previewWidthPx > 0 && previewHeightPx > 0) {
+            const calcW = Math.round(((previewWidthPx / ppuX) * 1000) * 10) / 10;
+            const calcH = Math.round(((previewHeightPx / ppuY) * 1000) * 10) / 10;
+            if (calcW >= 15 && calcW <= 350 && calcH >= 10 && calcH <= 350) {
+              physWidthMm = calcW;
+              physHeightMm = calcH;
+            }
+          }
+          break;
+        }
+      }
+
       // Convert to base64
       let binaryStr = '';
       const chunkLen = 8192;
@@ -163,6 +188,9 @@ export function parseBarTenderDocument(
         heightMm = Math.round(d2);
       }
     }
+  } else if (physWidthMm && physHeightMm) {
+    widthMm = physWidthMm;
+    heightMm = physHeightMm;
   } else if (previewWidthPx > 0 && previewHeightPx > 0) {
     const aspectRatio = previewWidthPx / previewHeightPx;
     if (Math.abs(aspectRatio - 1) > 0.05) {

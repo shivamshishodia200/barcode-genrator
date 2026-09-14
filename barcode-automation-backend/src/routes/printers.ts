@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { StorageService } from '../services/storageService';
 import { AuditService } from '../services/auditService';
 import { NetworkPrintService } from '../services/networkPrintService';
+import { INITIAL_PRINTERS } from '../../../src/services/mockDataService';
 
 export const printersRouter = Router();
 const storage = StorageService.getInstance();
@@ -38,7 +39,7 @@ printersRouter.get('/', async (req: Request, res: Response) => {
   }
 
   const raw = storage.read<any>('printers', []);
-  const filtered = raw.filter(
+  let filtered = raw.filter(
     (p: any) =>
       !p.isVirtual &&
       !p.id?.includes('citizen') &&
@@ -47,13 +48,16 @@ printersRouter.get('/', async (req: Request, res: Response) => {
       !p.id?.includes('tsc') &&
       !p.id?.includes('virtual')
   );
+  if (filtered.length === 0) {
+    filtered = INITIAL_PRINTERS;
+  }
   storage.write('printers', filtered);
   res.json(filtered);
 });
 
 // GET /api/printers/default
 printersRouter.get('/default', (req: Request, res: Response) => {
-  const printers = storage.read<any>('printers', []).filter(
+  let printers = storage.read<any>('printers', []).filter(
     (p: any) =>
       !p.isVirtual &&
       !p.id?.includes('citizen') &&
@@ -62,7 +66,10 @@ printersRouter.get('/default', (req: Request, res: Response) => {
       !p.id?.includes('tsc') &&
       !p.id?.includes('virtual')
   );
-  const def = printers.find((p: any) => p.isDefault || p.status === 'online') || printers[0];
+  if (printers.length === 0) {
+    printers = INITIAL_PRINTERS;
+  }
+  const def = printers.find((p: any) => p.isDefault) || printers.find((p: any) => p.status === 'online') || printers[0];
   res.json(def || null);
 });
 

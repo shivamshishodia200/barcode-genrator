@@ -50,7 +50,7 @@ export class StorageService {
       approvals: [],
       approvalComments: [],
       viewerLogs: [],
-      printers: [],
+      printers: INITIAL_PRINTERS,
       printJobs: INITIAL_PRINT_JOBS,
       auditLogs: INITIAL_AUDIT_LOGS,
       users: INITIAL_USERS,

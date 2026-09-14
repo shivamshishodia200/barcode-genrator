@@ -19,7 +19,7 @@ import {
   OpenDocument,
 } from './types';
 import { INITIAL_TEMPLATES, getUserPersonalizedTemplates } from './services/initialTemplates';
-import { INITIAL_PRINT_JOBS, INITIAL_AUDIT_LOGS, INITIAL_USERS, INITIAL_BATCH_JOBS } from './services/mockDataService';
+import { INITIAL_PRINTERS, INITIAL_PRINT_JOBS, INITIAL_AUDIT_LOGS, INITIAL_USERS, INITIAL_BATCH_JOBS } from './services/mockDataService';
 import { PrinterService, useCentralPrinterState } from './printer/printerService';
 import { PrinterModel } from './printer/types';
 import { advanceTemplateSerialState } from './services/serializationEngine';
@@ -199,9 +199,10 @@ export default function App() {
     fileName?: string;
   }>({ isOpen: false });
 
-  // Derive PrinterDefinition list from live Windows printers (no mock printers)
+  // Derive PrinterDefinition list from live Windows printers (with INITIAL_PRINTERS instant fallback)
   const printers: PrinterDefinition[] = useMemo(() => {
-    const livePrinters: PrinterDefinition[] = availablePrinters.map((p) => ({
+    const sourceList = availablePrinters.length > 0 ? availablePrinters : (INITIAL_PRINTERS as any[]);
+    const livePrinters: PrinterDefinition[] = sourceList.map((p) => ({
       id: p.id,
       name: p.name,
       model: p.model || p.name,
