@@ -581,7 +581,7 @@ const PreviewElementSlot: React.FC<{
         barcodeCanvasRef.current,
         {
           ...(element as BarcodeElement),
-          value: evaluatedValue || elAny.value || '12345678',
+          value: evaluatedValue || elAny.value || elAny.dataSources?.[0]?.value || '00001',
         },
         2.5,
         { record }

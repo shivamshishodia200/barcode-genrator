@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   LabelTemplate,
   LabelElement,
+  BarcodeElement,
   TextElement,
   ViewportState,
   PrinterDefinition,
@@ -682,9 +683,95 @@ export default function App() {
         if (el.id !== id) return el;
         const merged = { ...el, ...updates } as LabelElement;
 
+        if (merged.type === 'barcode') {
+          const barcodeEl = merged as BarcodeElement;
+          const barcodeUpdates = updates as Partial<BarcodeElement>;
+
+          // Case 1: Direct value update without explicit dataSources update
+          if (barcodeUpdates.value !== undefined && barcodeUpdates.dataSources === undefined) {
+            if (barcodeEl.dataSources && barcodeEl.dataSources.length > 0) {
+              barcodeEl.dataSources = barcodeEl.dataSources.map((ds, idx) =>
+                idx === 0
+                  ? {
+                      ...ds,
+                      value: barcodeUpdates.value!,
+                      serialization: ds.serialization
+                        ? { ...ds.serialization, currentValue: barcodeUpdates.value! }
+                        : undefined,
+                    }
+                  : ds
+              );
+            } else {
+              barcodeEl.dataSources = [
+                {
+                  id: `ds-${Date.now()}`,
+                  name: 'Primary Data Source',
+                  type: 'embedded',
+                  value: barcodeUpdates.value,
+                  enabled: true,
+                },
+              ];
+            }
+            barcodeEl.barcodeValue = barcodeUpdates.value;
+            barcodeEl.content = barcodeUpdates.value;
+          }
+
+          // Case 2: Data sources explicitly updated
+          if (barcodeUpdates.dataSources !== undefined) {
+            const compiled =
+              evaluateElementData(barcodeEl, {
+                record: activeRecord,
+                datasets,
+                variables: currentTemplate.variables,
+              }) ||
+              barcodeUpdates.dataSources[0]?.value ||
+              barcodeEl.value;
+
+            barcodeEl.value = compiled;
+            barcodeEl.barcodeValue = compiled;
+            barcodeEl.content = compiled;
+          }
+        }
+
         if (merged.type === 'text') {
           const textEl = merged as TextElement;
           const textUpdates = updates as Partial<TextElement>;
+
+          // Case 1: Direct text update without explicit dataSources update
+          if (textUpdates.text !== undefined && textUpdates.dataSources === undefined) {
+            if (textEl.dataSources && textEl.dataSources.length > 0) {
+              textEl.dataSources = textEl.dataSources.map((ds, idx) =>
+                idx === 0
+                  ? {
+                      ...ds,
+                      value: textUpdates.text!,
+                      serialization: ds.serialization
+                        ? { ...ds.serialization, currentValue: textUpdates.text! }
+                        : undefined,
+                    }
+                  : ds
+              );
+            }
+            textEl.value = textUpdates.text;
+            textEl.content = textUpdates.text;
+          }
+
+          // Case 2: Data sources explicitly updated
+          if (textUpdates.dataSources !== undefined) {
+            const compiled =
+              evaluateElementData(textEl, {
+                record: activeRecord,
+                datasets,
+                variables: currentTemplate.variables,
+              }) ||
+              textUpdates.dataSources[0]?.value ||
+              textEl.text;
+
+            textEl.text = compiled;
+            textEl.value = compiled;
+            textEl.content = compiled;
+          }
+
           // If updates include explicit width or height without explicit autoSize setting,
           // then manual resize takes effect and Auto Size is turned off.
           if (
@@ -742,9 +829,91 @@ export default function App() {
         const updates = updateMap.get(el.id)!;
         const merged = { ...el, ...updates } as LabelElement;
 
+        if (merged.type === 'barcode') {
+          const barcodeEl = merged as BarcodeElement;
+          const barcodeUpdates = updates as Partial<BarcodeElement>;
+
+          if (barcodeUpdates.value !== undefined && barcodeUpdates.dataSources === undefined) {
+            if (barcodeEl.dataSources && barcodeEl.dataSources.length > 0) {
+              barcodeEl.dataSources = barcodeEl.dataSources.map((ds, idx) =>
+                idx === 0
+                  ? {
+                      ...ds,
+                      value: barcodeUpdates.value!,
+                      serialization: ds.serialization
+                        ? { ...ds.serialization, currentValue: barcodeUpdates.value! }
+                        : undefined,
+                    }
+                  : ds
+              );
+            } else {
+              barcodeEl.dataSources = [
+                {
+                  id: `ds-${Date.now()}`,
+                  name: 'Primary Data Source',
+                  type: 'embedded',
+                  value: barcodeUpdates.value,
+                  enabled: true,
+                },
+              ];
+            }
+            barcodeEl.barcodeValue = barcodeUpdates.value;
+            barcodeEl.content = barcodeUpdates.value;
+          }
+
+          if (barcodeUpdates.dataSources !== undefined) {
+            const compiled =
+              evaluateElementData(barcodeEl, {
+                record: activeRecord,
+                datasets,
+                variables: currentTemplate.variables,
+              }) ||
+              barcodeUpdates.dataSources[0]?.value ||
+              barcodeEl.value;
+
+            barcodeEl.value = compiled;
+            barcodeEl.barcodeValue = compiled;
+            barcodeEl.content = compiled;
+          }
+        }
+
         if (merged.type === 'text') {
           const textEl = merged as TextElement;
           const textUpdates = updates as Partial<TextElement>;
+
+          if (textUpdates.text !== undefined && textUpdates.dataSources === undefined) {
+            if (textEl.dataSources && textEl.dataSources.length > 0) {
+              textEl.dataSources = textEl.dataSources.map((ds, idx) =>
+                idx === 0
+                  ? {
+                      ...ds,
+                      value: textUpdates.text!,
+                      serialization: ds.serialization
+                        ? { ...ds.serialization, currentValue: textUpdates.text! }
+                        : undefined,
+                    }
+                  : ds
+              );
+            }
+            textEl.value = textUpdates.text;
+            textEl.content = textUpdates.text;
+          }
+
+          if (textUpdates.dataSources !== undefined) {
+            const compiled =
+              evaluateElementData(textEl, {
+                record: activeRecord,
+                datasets,
+                variables: currentTemplate.variables,
+              }) ||
+              textUpdates.dataSources[0]?.value ||
+              textEl.text;
+
+            textEl.text = compiled;
+            textEl.value = compiled;
+            textEl.content = compiled;
+          }
+
           if (
             (textUpdates.width !== undefined || textUpdates.height !== undefined) &&
             textUpdates.autoSize === undefined &&
@@ -954,12 +1123,24 @@ export default function App() {
     const spawnX = Math.min(Math.max(4, 8 + stagger), Math.max(4, labelW - elW - 4));
     const spawnY = Math.min(Math.max(4, 12 + stagger), Math.max(4, labelH - elH - 4));
 
+    const initialVal = symbology === 'ean13' ? '4006381333931' : '10850006531238';
     const newEl: LabelElement = {
       id: `el-bar-${Date.now()}`,
       name: `1D Barcode (${symbology.toUpperCase()})`,
       type: 'barcode',
       symbology,
-      value: symbology === 'ean13' ? '4006381333931' : '10850006531238',
+      value: initialVal,
+      barcodeValue: initialVal,
+      content: initialVal,
+      dataSources: [
+        {
+          id: `ds-${Date.now()}`,
+          name: 'Primary Data Source',
+          type: 'embedded',
+          value: initialVal,
+          enabled: true,
+        },
+      ],
       includeText: true,
       textPosition: 'below',
       barWidth: 1.5,
@@ -993,12 +1174,24 @@ export default function App() {
     const spawnX = Math.min(Math.max(4, 8 + stagger), Math.max(4, labelW - side - 4));
     const spawnY = Math.min(Math.max(4, 8 + stagger), Math.max(4, labelH - side - 4));
 
+    const initialQrVal = 'https://enterprise-label.internal/track/008500065123456789';
     const newEl: LabelElement = {
       id: `el-qr-${Date.now()}`,
       name: 'QR Code 2D',
       type: 'barcode',
       symbology: 'qr',
-      value: 'https://enterprise-label.internal/track/008500065123456789',
+      value: initialQrVal,
+      barcodeValue: initialQrVal,
+      content: initialQrVal,
+      dataSources: [
+        {
+          id: `ds-${Date.now()}`,
+          name: 'Primary Data Source',
+          type: 'embedded',
+          value: initialQrVal,
+          enabled: true,
+        },
+      ],
       includeText: false,
       textPosition: 'none',
       barWidth: 2,
@@ -3781,9 +3974,14 @@ export default function App() {
                     }
                   }}
                   onInsertElement={(elPartial) => {
+                    const defaultVal =
+                      (elPartial as any).value ||
+                      (elPartial as any).text ||
+                      (elPartial.type === 'barcode' ? '10850006531238' : 'Sample Text');
+
                     const newEl: LabelElement = {
                       id: `el-${Date.now()}`,
-                      name: `Element ${currentTemplate.elements.length + 1}`,
+                      name: elPartial.name || `Element ${currentTemplate.elements.length + 1}`,
                       type: 'text',
                       x: 10,
                       y: 10,
@@ -3794,6 +3992,15 @@ export default function App() {
                       locked: false,
                       visible: true,
                       zIndex: currentTemplate.elements.length + 1,
+                      dataSources: elPartial.dataSources || [
+                        {
+                          id: `ds-${Date.now()}`,
+                          name: 'Primary Data Source',
+                          type: 'embedded',
+                          value: defaultVal,
+                          enabled: true,
+                        },
+                      ],
                       ...elPartial,
                     } as LabelElement;
                     updateElements([...currentTemplate.elements, newEl]);

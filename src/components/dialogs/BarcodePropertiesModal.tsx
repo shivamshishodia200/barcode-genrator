@@ -334,10 +334,19 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
   };
 
   const getFullCurrentDraft = (): Partial<BarcodeElement> => {
+    const primaryDs = dataSources[0];
+    const simulatedElement = { ...element, dataSources };
+    const compiled =
+      evaluateElementData(simulatedElement as any, { record: currentRecord, datasets }) ||
+      primaryDs?.value ||
+      value;
+
     return {
       name,
       symbology,
-      value,
+      value: compiled,
+      barcodeValue: compiled,
+      content: compiled,
       dataSources,
       width: posWidth,
       height: posHeight,
@@ -413,8 +422,9 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
     setDataSources(newSources);
     const simulatedElement = { ...element, dataSources: newSources };
     const compiled = evaluateElementData(simulatedElement as any, { record: currentRecord, datasets });
-    setValue(compiled);
     const primaryDs = newSources[0];
+    const finalVal = compiled || primaryDs?.value || value;
+    setValue(finalVal);
     const dataBinding = primaryDs?.field
       ? `{{${primaryDs.field}}}`
       : primaryDs?.value && primaryDs.value.includes('{')
@@ -423,7 +433,9 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
 
     applyChange({
       dataSources: newSources,
-      value: compiled || (primaryDs?.field && currentRecord ? String(currentRecord[primaryDs.field] ?? '') : element.value),
+      value: finalVal,
+      barcodeValue: finalVal,
+      content: finalVal,
       ...(dataBinding ? { dataBinding } : {}),
       ...(primaryDs?.field ? { databaseField: primaryDs.field } : {}),
     });

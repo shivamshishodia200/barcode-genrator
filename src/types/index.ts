@@ -543,6 +543,9 @@ export interface BaseElement extends PositionAndSize {
   referencePoint?: ReferencePoint;
   dataSources?: DataSourceItem[];
   dataBinding?: any;
+  value?: string;
+  barcodeValue?: string;
+  content?: string;
   transforms?: TransformRule[];
   events?: ObjectEventHook[];
   shadow?: {

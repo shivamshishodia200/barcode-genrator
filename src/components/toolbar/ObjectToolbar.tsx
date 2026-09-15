@@ -1080,10 +1080,38 @@ export const ObjectToolbar: React.FC<ObjectToolbarProps> = (props) => {
               <span className="text-[10px] text-slate-500 font-semibold">Data:</span>
               <input
                 type="text"
-                value={selectedBarcodeEl.value}
+                value={selectedBarcodeEl.value || ''}
                 onChange={(e) => {
                   if (props.onUpdateSelectedElement) {
-                    props.onUpdateSelectedElement({ value: e.target.value });
+                    const newVal = e.target.value;
+                    const updatedDs =
+                      selectedBarcodeEl.dataSources && selectedBarcodeEl.dataSources.length > 0
+                        ? selectedBarcodeEl.dataSources.map((ds, idx) =>
+                            idx === 0
+                              ? {
+                                  ...ds,
+                                  value: newVal,
+                                  serialization: ds.serialization
+                                    ? { ...ds.serialization, currentValue: newVal }
+                                    : undefined,
+                                }
+                              : ds
+                          )
+                        : [
+                            {
+                              id: `ds-${Date.now()}`,
+                              name: 'Primary Data Source',
+                              type: 'embedded' as const,
+                              value: newVal,
+                              enabled: true,
+                            },
+                          ];
+                    props.onUpdateSelectedElement({
+                      value: newVal,
+                      barcodeValue: newVal,
+                      content: newVal,
+                      dataSources: updatedDs,
+                    });
                   }
                 }}
                 className="w-22 text-[11px] font-mono text-slate-900 outline-none bg-transparent"
