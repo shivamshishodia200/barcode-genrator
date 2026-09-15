@@ -4,12 +4,13 @@
   "directories": {
     "output": "dist-electron-build"
   },
+  "compression": "maximum",
   "files": [
     "dist/**/*",
     "dist-electron/**/*",
-    "barcode-automation-backend/dist/**/*",
     "barcode-automation-backend/data/**/*",
-    "barcode-automation-backend/src/**/*",
+    "!barcode-automation-backend/downloads/**/*",
+    "!barcode-automation-backend/src/**/*",
     "!**/node_modules/*/{CHANGELOG.md,README.md,README,test,tests,example,examples}",
     "!**/*.ts",
     "!**/*.map",

@@ -86,24 +86,41 @@ export class InstallerService {
   public findInstaller(version: string = '2.5.0'): { filePath: string; fileName: string; size: number } | null {
     this.ensureInstallerBinaries();
 
-    const candidates = [
-      path.resolve(process.cwd(), 'dist-electron-build', 'BarcodeFlow_Setup.exe'),
-      path.resolve(process.cwd(), 'dist-electron-build', 'BarcodeFlow_Setup_Dev_Unsigned.exe'),
-      path.join(this.downloadsDir, `BarcodeFlow_Setup_v${version}.exe`),
-      path.join(this.downloadsDir, 'BarcodeFlow_Setup.exe'),
-      path.resolve(process.cwd(), 'dist-electron-build', `BarcodeFlow_Setup_v${version}.exe`),
-      path.resolve(process.cwd(), 'bin', `BarcodeFlow_Setup_v${version}.exe`),
+    const cleanVersion = (version || '2.5.0').replace(/^v/, '');
+    const rootDir = process.cwd();
+
+    const candidateDirs = [
+      this.downloadsDir,
+      path.resolve(rootDir, 'barcode-automation-backend', 'downloads'),
+      path.resolve(rootDir, 'downloads'),
+      path.resolve(rootDir, 'bin'),
+      path.resolve(rootDir, 'dist-electron-build'),
+      path.resolve(__dirname, '..', '..', 'downloads'),
+      path.resolve(__dirname, '..', '..', 'barcode-automation-backend', 'downloads'),
+      path.resolve(__dirname, '..', 'downloads'),
+      path.resolve(__dirname, '..', '..', 'bin'),
+      path.resolve(__dirname, '..', 'bin'),
     ];
 
-    for (const cand of candidates) {
-      if (fs.existsSync(cand)) {
-        const stat = fs.statSync(cand);
-        if (stat.size > 50000) { // Ensure not a truncated placeholder
-          return {
-            filePath: cand,
-            fileName: `BarcodeFlow_Setup_v${version}.exe`,
-            size: stat.size,
-          };
+    const fileNames = [
+      `BarcodeFlow_Setup_v${cleanVersion}.exe`,
+      `BarcodeFlow_Setup.exe`,
+      `BarcodeFlow_Setup_v2.5.0.exe`,
+      `BarcodeFlow_Setup_Dev_Unsigned.exe`,
+    ];
+
+    for (const dir of candidateDirs) {
+      for (const name of fileNames) {
+        const fullPath = path.join(dir, name);
+        if (fs.existsSync(fullPath)) {
+          const stat = fs.statSync(fullPath);
+          if (stat.size > 1000) { // Valid non-empty binary
+            return {
+              filePath: fullPath,
+              fileName: `BarcodeFlow_Setup_v${cleanVersion}.exe`,
+              size: stat.size,
+            };
+          }
         }
       }
     }

@@ -1,5 +1,38 @@
 [
   {
+    "id": "aud-1789456178692-251",
+    "timestamp": "2026-09-15T07:09:38.693Z",
+    "user": "Authenticated User",
+    "userRole": "Operator",
+    "action": "DESKTOP_APP_DOWNLOAD",
+    "details": "User initiated direct download for BarcodeFlow Desktop Installer v2.5.0",
+    "ipAddress": "127.0.0.1",
+    "previousHash": "914640e2df806636f913e08c30b1952e1f3cb161e35b3a73c7416a0931faf5a9",
+    "recordHash": "6d5aaf61dfa28457cc84278d89b5c9cd9dacaf4fe380fbdfe3c7e5a64476cc7f"
+  },
+  {
+    "id": "aud-1789454630916-569",
+    "timestamp": "2026-09-15T06:43:50.918Z",
+    "user": "Authenticated User",
+    "userRole": "Operator",
+    "action": "DESKTOP_APP_DOWNLOAD",
+    "details": "User initiated direct download for BarcodeFlow Desktop Installer v2.5.0",
+    "ipAddress": "127.0.0.1",
+    "previousHash": "744307676e3293d246ab93cf4620b4f7add92132b33956c8247e0543cba2a977",
+    "recordHash": "914640e2df806636f913e08c30b1952e1f3cb161e35b3a73c7416a0931faf5a9"
+  },
+  {
+    "id": "aud-1789454252650-806",
+    "timestamp": "2026-09-15T06:37:32.652Z",
+    "user": "Authenticated User",
+    "userRole": "Operator",
+    "action": "DESKTOP_APP_DOWNLOAD",
+    "details": "User initiated direct download for BarcodeFlow Desktop Installer v2.5.0",
+    "ipAddress": "127.0.0.1",
+    "previousHash": "9db2d6594605524429cc38aa7996d9255e5d23e25b8b771bf14ab323b9b32393",
+    "recordHash": "744307676e3293d246ab93cf4620b4f7add92132b33956c8247e0543cba2a977"
+  },
+  {
     "id": "aud-1789397942393-270",
     "timestamp": "2026-09-14T14:59:02.393Z",
     "user": "Authenticated User",
