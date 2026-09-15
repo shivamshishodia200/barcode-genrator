@@ -82,21 +82,28 @@ export const SoftwareDownloadView: React.FC<SoftwareDownloadViewProps> = ({
       setDownloadedBytesText('Initiating secure handshake...');
 
       const targetVersion = latestRelease?.version || '2.5.0';
-      const downloadUrl = `/api/software/download?v=${targetVersion}&t=${Date.now()}`;
+      const candidateUrls = [
+        `/BarcodeFlow_Setup_v${targetVersion}.exe`,
+        `/BarcodeFlow_Setup.exe`,
+        `/api/software/download?v=${targetVersion}&t=${Date.now()}`
+      ];
 
-      const response = await fetch(downloadUrl, { cache: 'no-store' });
-
-      // Verify server response before proceeding
-      if (!response.ok) {
-        let errorMsg = `Server error (HTTP ${response.status})`;
+      let response: Response | null = null;
+      for (const url of candidateUrls) {
         try {
-          const errData = await response.json();
-          if (errData && errData.message) {
-            errorMsg = errData.message;
+          const res = await fetch(url, { cache: 'no-store' });
+          if (res.ok) {
+            response = res;
+            break;
           }
         } catch {
-          errorMsg = `Installer binary file not available (HTTP ${response.status}). Please restart server or contact Administrator.`;
+          // Continue to next candidate
         }
+      }
+
+      // Verify server response before proceeding
+      if (!response || !response.ok) {
+        const errorMsg = 'Installer executable is currently being synchronized. Please try again in a few moments.';
         setDownloadStatus('error');
         setDownloadError(errorMsg);
         setDownloadProgress(0);

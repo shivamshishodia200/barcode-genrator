@@ -1,0 +1,23 @@
+{
+  "success": true,
+  "data": {
+    "version": "2.5.0",
+    "buildNumber": 25010,
+    "releaseName": "BarcodeFlow Enterprise Suite v2.5 (BarTender Parity)",
+    "releaseNotes": [
+      "Industrial 3-Step Workflow: Designer -> Approver 1 (e-Sign) -> Production Print Station",
+      "Air-Gapped Hardware GUID binding and 21 CFR Part 11 Audit Trail",
+      "Dual Thermal Generation: Native ZPL II & EPL2 with speed/darkness calibration",
+      "Live Local Printer Detection via Windows spooler and PowerShell scanner",
+      "Dataset Manager: Drag & Drop Excel (.xlsx) & CSV import with dynamic variable binding",
+      "Offline Local Storage & 100% Zero-Latency Desktop Runtime"
+    ],
+    "downloadURL": "/BarcodeFlow_Setup_v2.5.0.exe",
+    "fileSize": "9.7 KB",
+    "releaseDate": "2026-08-22",
+    "status": "active",
+    "channel": "stable"
+  },
+  "isLatest": true,
+  "updateAvailable": false
+}

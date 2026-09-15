@@ -1128,7 +1128,7 @@ export const MenuBar: React.FC<MenuBarProps> = (props) => {
 
                   {/* Download Desktop App (.exe) Option */}
                   <a
-                    href="/api/software/download?v=2.5.0"
+                    href="/BarcodeFlow_Setup_v2.5.0.exe"
                     download="BarcodeFlow_Setup_v2.5.0.exe"
                     onClick={() => setOpenMenu(null)}
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-blue-50 text-slate-800 hover:text-blue-950 transition-colors group cursor-pointer"
