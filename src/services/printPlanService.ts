@@ -46,11 +46,15 @@ export interface PrintPlanOptions {
   effectiveDpi?: number | null;
   jobTitle?: string;
   isTestPrint?: boolean;
+  jobId?: string;
+  reservationId?: string;
 }
 
 export interface PrintPlan {
   documentId: string;
   documentName: string;
+  jobId?: string;
+  reservationId?: string;
   printer: PrinterModel;
   effectiveDpi: number | null;
   pageSetup: {
@@ -82,6 +86,8 @@ export interface PrintPlan {
   pages: PrintPlanPage[];
   timestamp: string;
   isTestPrint: boolean;
+  documentSnapshot?: LabelTemplate;
+  printerSnapshot?: PrinterModel;
 }
 
 export const STANDARD_PAGE_SIZES: Record<string, { width: number; height: number; name: string }> = {
@@ -232,11 +238,49 @@ export function createPrintPlan(
     }
   }
 
-  // 7. Generate PrintPlanItems and PrintPlanPages
+  // 7. Generate PrintPlanItems and PrintPlanPages (High-Performance Single-Pass)
   const items: PrintPlanItem[] = [];
   const pages: PrintPlanPage[] = [];
 
   let currentGlobalSlot = startingSlotOffset;
+  const totalPages = expandedItems.length === 0 ? 1 : Math.max(1, Math.ceil((startingSlotOffset + expandedItems.length) / slotsPerPage));
+
+  // Pre-allocate page structures
+  for (let p = 0; p < totalPages; p++) {
+    pages.push({
+      pageIndex: p,
+      pageNumber: p + 1,
+      items: [],
+      pageWidthMm: pageWidth,
+      pageHeightMm: pageHeight,
+      pageSizeName,
+      orientation,
+      margins,
+      rows,
+      cols,
+      gapHorizontal: hGap,
+      gapVertical: vGap,
+    });
+  }
+
+  // Pre-allocated evaluation context
+  const baseJobId = options.jobId || `JOB-${Date.now()}`;
+  const evalCtx: EvaluationContext = {
+    record: sourceRecords[0] || {},
+    connectedDataset: template.databaseConnection,
+    variables: template.variables,
+    namedDataSources: template.namedDataSources,
+    elements: template.elements,
+    currentRecordIndex: 0,
+    totalRecords: sourceRecords.length,
+    printerName: printer.name,
+    jobId: baseJobId,
+    pageNumber: 1,
+    copyNumber: 1,
+    printIndex: 0,
+  };
+
+  const numElements = template.elements.length;
 
   expandedItems.forEach((expItem, globalIdx) => {
     const pageIndex = Math.floor(currentGlobalSlot / slotsPerPage);
@@ -246,26 +290,18 @@ export function createPrintPlan(
     const xOffsetMm = marginLeft + col * (labelWidth + hGap);
     const yOffsetMm = marginTop + row * (labelHeight + vGap);
 
-    // Evaluate all template elements for this specific item and print index
-    const evaluatedValues: Record<string, string> = {};
-    const evalCtx: EvaluationContext = {
-      record: expItem.record,
-      connectedDataset: template.databaseConnection,
-      variables: template.variables,
-      namedDataSources: template.namedDataSources,
-      elements: template.elements,
-      currentRecordIndex: expItem.recordIndex,
-      totalRecords: sourceRecords.length,
-      printerName: printer.name,
-      jobId: `JOB-${Date.now()}`,
-      pageNumber: pageIndex + 1,
-      copyNumber: expItem.copyIndex,
-      printIndex: globalIdx,
-    };
+    evalCtx.record = expItem.record;
+    evalCtx.currentRecordIndex = expItem.recordIndex;
+    evalCtx.pageNumber = pageIndex + 1;
+    evalCtx.copyNumber = expItem.copyIndex;
+    evalCtx.printIndex = globalIdx;
 
-    template.elements.forEach((el) => {
+    // Evaluate template elements
+    const evaluatedValues: Record<string, string> = {};
+    for (let e = 0; e < numElements; e++) {
+      const el = template.elements[e];
       evaluatedValues[el.id] = evaluateElementData(el, evalCtx);
-    });
+    }
 
     const planItem: PrintPlanItem = {
       itemIndex: globalIdx,
@@ -285,29 +321,11 @@ export function createPrintPlan(
     };
 
     items.push(planItem);
+    if (pages[pageIndex]) {
+      pages[pageIndex].items.push(planItem);
+    }
     currentGlobalSlot++;
   });
-
-  const totalPages = items.length === 0 ? 1 : Math.max(1, Math.ceil(currentGlobalSlot / slotsPerPage));
-
-  // Assemble page structures
-  for (let p = 0; p < totalPages; p++) {
-    const pageItems = items.filter((it) => it.pageIndex === p);
-    pages.push({
-      pageIndex: p,
-      pageNumber: p + 1,
-      items: pageItems,
-      pageWidthMm: pageWidth,
-      pageHeightMm: pageHeight,
-      pageSizeName,
-      orientation,
-      margins,
-      rows,
-      cols,
-      gapHorizontal: hGap,
-      gapVertical: vGap,
-    });
-  }
 
   const rawShape = template.shape || template.dimensions.shape || 'rectangle';
   const shape: 'rectangle' | 'rounded-rectangle' | 'ellipse' | 'circle' =
@@ -322,6 +340,8 @@ export function createPrintPlan(
   return {
     documentId: template.id,
     documentName: template.name || 'Document1.btw',
+    jobId: options.jobId,
+    reservationId: options.reservationId,
     printer,
     effectiveDpi,
     pageSetup: {
@@ -345,5 +365,7 @@ export function createPrintPlan(
     pages,
     timestamp: new Date().toISOString(),
     isTestPrint,
+    documentSnapshot: JSON.parse(JSON.stringify(template)),
+    printerSnapshot: JSON.parse(JSON.stringify(printer)),
   };
 }

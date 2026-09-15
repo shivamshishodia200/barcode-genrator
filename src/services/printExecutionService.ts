@@ -1,4 +1,4 @@
-import { LabelTemplate } from '../types';
+import { LabelTemplate, PrintCommitPolicy, PrintJobBatch, PrintJobItem } from '../types';
 import { PrinterModel, SupportedRenderer } from '../printer/types';
 import { createPrintPlan, PrintPlan } from './printPlanService';
 import { generateWindowsDriverHtml } from '../printing/renderers/windowsDriverRenderer';
@@ -9,6 +9,8 @@ import { renderCPCL } from '../printing/renderers/cpclRenderer';
 import { renderSBPL } from '../printing/renderers/sbplRenderer';
 import { exportLabelsToPDF } from './pdfExportService';
 import { promptSavePdfFile } from './fileSavePromptService';
+import { getTelemetryProvider } from './telemetry/printerTelemetry';
+import { AtomicSerialReservationService } from './serializationEngine';
 
 export interface PrintExecutionOptions {
   document: LabelTemplate;
@@ -32,20 +34,34 @@ export interface PrintExecutionOptions {
   cancelQueuedJobsBeforePrint?: boolean;
   startingSlot?: number;
   printToFile?: boolean;
+  commitPolicy?: PrintCommitPolicy;
+  thermalBatchSize?: number;
+  jobId?: string;
+  reservationId?: string;
+  reprintRemainingOptions?: {
+    startIndex: number;
+    originalPlanItems?: any[];
+  };
 }
 
 export interface PrintExecutionResult {
-  status: 'submitted' | 'completed' | 'cancelled' | 'failed';
+  status: 'submitted' | 'completed' | 'cancelled' | 'failed' | 'PARTIAL';
   printerName: string;
   deviceName: string;
   jobId?: string;
+  reservationId?: string;
   error?: string;
   outputType: 'windows-spooler' | 'interactive-driver' | 'raw-spooler' | 'pdf-fallback' | 'file-download';
   bytesWritten?: number;
   pagesPrinted?: number;
+  confirmedCount?: number;
+  remainingCount?: number;
   filePath?: string;
   durationMs: number;
   timestamp: string;
+  batches?: PrintJobBatch[];
+  items?: PrintJobItem[];
+  commitPolicy?: PrintCommitPolicy;
 }
 
 /**
@@ -173,41 +189,117 @@ export class PrintExecutionService {
 
     // 6. Native RAW Printing Pipeline (ZPL, TSPL, EPL, CPCL, SBPL)
     const isRawFormat = ['ZPL', 'TSPL', 'EPL', 'CPCL', 'SBPL'].includes(targetRenderer);
+    const telemetry = getTelemetryProvider(printer, targetRenderer.toLowerCase());
+    const effectivePolicy: PrintCommitPolicy = options.commitPolicy || telemetry.getCommitPolicy(printer, targetRenderer.toLowerCase());
+
     if (isRawFormat) {
-      let rawPayload = '';
-      if (targetRenderer === 'ZPL') {
-        rawPayload = renderZPL(document, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi, darkness, speed });
-      } else if (targetRenderer === 'TSPL') {
-        rawPayload = renderTSPL(document, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi, density: darkness, speed });
-      } else if (targetRenderer === 'EPL') {
-        rawPayload = renderEPL(document, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi, density: darkness, speed });
-      } else if (targetRenderer === 'CPCL') {
-        rawPayload = renderCPCL(document, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi, darkness, speed });
-      } else if (targetRenderer === 'SBPL') {
-        rawPayload = renderSBPL(document, dispatchedRecords as any, { copies: 1, dpi: effectiveDpi, darkness, speed });
+      const batchSize = Math.max(1, options.thermalBatchSize || 10);
+      const totalItems = plan.items.length;
+      const batches: PrintJobBatch[] = [];
+      const items: PrintJobItem[] = plan.items.map((it, idx) => ({
+        itemIndex: idx,
+        recordIndex: it.recordIndex,
+        copyIndex: it.copyIndex,
+        serialValue: Object.values(it.evaluatedValues)[0] || '',
+        status: 'pending',
+      }));
+
+      // Split into batches if batchSize < totalItems
+      const needsBatching = totalItems > batchSize && effectivePolicy === 'PER_BATCH';
+      const numBatches = needsBatching ? Math.ceil(totalItems / batchSize) : 1;
+
+      for (let b = 0; b < numBatches; b++) {
+        const sIdx = b * batchSize;
+        const eIdx = Math.min(totalItems, (b + 1) * batchSize);
+        const batchRecords = dispatchedRecords.slice(sIdx, eIdx);
+        
+        let batchPayload = '';
+        if (targetRenderer === 'ZPL') {
+          batchPayload = renderZPL(document, batchRecords as any, { copies: 1, dpi: effectiveDpi, darkness, speed });
+        } else if (targetRenderer === 'TSPL') {
+          batchPayload = renderTSPL(document, batchRecords as any, { copies: 1, dpi: effectiveDpi, density: darkness, speed });
+        } else if (targetRenderer === 'EPL') {
+          batchPayload = renderEPL(document, batchRecords as any, { copies: 1, dpi: effectiveDpi, density: darkness, speed });
+        } else if (targetRenderer === 'CPCL') {
+          batchPayload = renderCPCL(document, batchRecords as any, { copies: 1, dpi: effectiveDpi, darkness, speed });
+        } else if (targetRenderer === 'SBPL') {
+          batchPayload = renderSBPL(document, batchRecords as any, { copies: 1, dpi: effectiveDpi, darkness, speed });
+        }
+
+        batches.push({
+          batchIndex: b + 1,
+          startIndex: sIdx,
+          endIndex: eIdx - 1,
+          startSerial: items[sIdx]?.serialValue,
+          endSerial: items[eIdx - 1]?.serialValue,
+          count: eIdx - sIdx,
+          status: 'pending',
+          rawPayload: batchPayload,
+        });
       }
 
       if (typeof window !== 'undefined' && window.barcodeFlow?.printers?.printRaw) {
-        console.log(`[PrintExecutionService] Dispatched ${rawPayload.length} bytes via RAW spooler to "${deviceName}"`);
-        const rawRes = await window.barcodeFlow.printers.printRaw({
-          printerName: deviceName,
-          rawContent: rawPayload,
-          format: targetRenderer.toLowerCase(),
-          jobTitle,
-        });
+        let confirmedPrinted = 0;
+        let failedBatchIndex: number | null = null;
+        let batchError: string | undefined = undefined;
+
+        for (const batch of batches) {
+          batch.status = 'submitting';
+          batch.dispatchedAt = new Date().toISOString();
+          
+          try {
+            const rawRes = await window.barcodeFlow.printers.printRaw({
+              printerName: deviceName,
+              rawContent: batch.rawPayload || '',
+              format: targetRenderer.toLowerCase(),
+              jobTitle: `${jobTitle} (Batch ${batch.batchIndex}/${batches.length})`,
+            });
+
+            if (rawRes.success) {
+              batch.status = 'printed';
+              batch.completedAt = new Date().toISOString();
+              confirmedPrinted += batch.count;
+              for (let i = batch.startIndex; i <= batch.endIndex; i++) {
+                if (items[i]) items[i].status = 'printed';
+              }
+            } else {
+              batch.status = 'failed';
+              batchError = rawRes.error || 'Raw spooler write failure';
+              failedBatchIndex = batch.batchIndex;
+              for (let i = batch.startIndex; i <= batch.endIndex; i++) {
+                if (items[i]) items[i].status = 'failed';
+              }
+              break;
+            }
+          } catch (err: any) {
+            batch.status = 'failed';
+            batchError = err.message || 'Raw print exception';
+            failedBatchIndex = batch.batchIndex;
+            break;
+          }
+        }
 
         console.groupEnd();
+        const isPartial = failedBatchIndex !== null && confirmedPrinted > 0;
+        const isFailed = failedBatchIndex !== null && confirmedPrinted === 0;
+
         return {
-          status: rawRes.success ? 'submitted' : 'failed',
+          status: isPartial ? 'PARTIAL' : isFailed ? 'failed' : 'submitted',
           printerName: printer.name,
           deviceName,
-          jobId: `RAW-${Date.now()}`,
-          error: rawRes.error,
+          jobId: options.jobId || `RAW-${Date.now()}`,
+          reservationId: options.reservationId,
+          error: batchError,
           outputType: 'raw-spooler',
-          bytesWritten: rawRes.bytesWritten || rawPayload.length,
-          pagesPrinted: plan.totalPages,
+          bytesWritten: batches.reduce((acc, b) => acc + (b.rawPayload?.length || 0), 0),
+          pagesPrinted: confirmedPrinted,
+          confirmedCount: confirmedPrinted,
+          remainingCount: totalItems - confirmedPrinted,
           durationMs: Date.now() - startTime,
           timestamp: new Date().toISOString(),
+          batches,
+          items,
+          commitPolicy: effectivePolicy,
         };
       }
     }
@@ -224,14 +316,22 @@ export class PrintExecutionService {
     if (isVirtualOrInteractive) {
       console.log(`[PrintExecutionService] Target printer "${deviceName}" is an interactive/virtual driver. Invoking Save As PDF + Auto-Open.`);
       console.groupEnd();
-      return await this.saveAsPdfFallback(document, dispatchedRecords, 1);
+      const pdfRes = await this.saveAsPdfFallback(document, dispatchedRecords, 1);
+      return {
+        ...pdfRes,
+        jobId: options.jobId,
+        reservationId: options.reservationId,
+        confirmedCount: plan.totalLabels,
+        remainingCount: 0,
+        commitPolicy: 'WHOLE_JOB_ON_DISPATCH',
+      };
     }
 
     // Render clean printable HTML/SVG document containing ONLY label content (no UI, rulers, handles)
     const driverHtml = generateWindowsDriverHtml(document, dispatchedRecords, 1);
 
     if (typeof window !== 'undefined' && window.barcodeFlow?.printers?.printDriver) {
-      console.log(`[PrintExecutionService] Dispathing driver print job to Windows Spooler for "${deviceName}"...`);
+      console.log(`[PrintExecutionService] Dispatching driver print job to Windows Spooler for "${deviceName}"...`);
       const driverRes = await window.barcodeFlow.printers.printDriver({
         printerName: deviceName,
         htmlContent: driverHtml,
@@ -242,43 +342,21 @@ export class PrintExecutionService {
         jobTitle,
       });
 
-      console.log(`[PrintExecutionService] Windows print response:`, driverRes);
       console.groupEnd();
-
-      if (driverRes.cancelled || driverRes.error === 'PRINT_CANCELLED') {
-        return {
-          status: 'cancelled',
-          printerName: printer.name,
-          deviceName,
-          error: 'PRINT_CANCELLED',
-          outputType: printer.isInteractive ? 'interactive-driver' : 'windows-spooler',
-          pagesPrinted: 0,
-          durationMs: Date.now() - startTime,
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      if (!driverRes.success) {
-        return {
-          status: 'failed',
-          printerName: printer.name,
-          deviceName,
-          error: driverRes.error || driverRes.message || 'Windows print spooler rejected the job.',
-          outputType: printer.isInteractive ? 'interactive-driver' : 'windows-spooler',
-          durationMs: Date.now() - startTime,
-          timestamp: new Date().toISOString(),
-        };
-      }
-
       return {
-        status: 'submitted',
+        status: driverRes.success ? 'submitted' : (driverRes.cancelled ? 'cancelled' : 'failed'),
         printerName: printer.name,
         deviceName,
-        jobId: `SPOOL-${Date.now()}`,
+        jobId: options.jobId || `GDI-${Date.now()}`,
+        reservationId: options.reservationId,
+        error: driverRes.error,
         outputType: printer.isInteractive ? 'interactive-driver' : 'windows-spooler',
         pagesPrinted: plan.totalPages,
+        confirmedCount: driverRes.success ? plan.totalLabels : 0,
+        remainingCount: driverRes.success ? 0 : plan.totalLabels,
         durationMs: Date.now() - startTime,
         timestamp: new Date().toISOString(),
+        commitPolicy: effectivePolicy,
       };
     }
 

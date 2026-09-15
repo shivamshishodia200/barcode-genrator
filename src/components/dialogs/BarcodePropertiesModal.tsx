@@ -2821,6 +2821,9 @@ export const BarcodePropertiesModal: React.FC<BarcodePropertiesModalProps> = ({
           initialValue={activeDataSource.value || '000001'}
           prefix={activeDataSource.prefixSuffix?.prefix || activeDataSource.transformConfig?.prefixSuffix?.prefix || ''}
           suffix={activeDataSource.prefixSuffix?.suffix || activeDataSource.transformConfig?.prefixSuffix?.suffix || ''}
+          datasets={datasets}
+          currentRecord={currentRecord}
+          availableVariables={availableVariables}
           onApply={(config) => {
             updateActiveDataSource({
               serialization: config,

@@ -178,6 +178,105 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: '002_production_serialization_and_telemetry',
+    up: (db: DatabaseSync) => {
+      // Serialization Sources (with versioned optimistic locking)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS serialization_sources (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          current_committed_value TEXT NOT NULL,
+          version INTEGER NOT NULL DEFAULT 1,
+          definition_json TEXT NOT NULL,
+          last_committed_at TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_serial_sources_name ON serialization_sources(name);
+      `);
+
+      // Serialization Reservations (Atomic range reservation & tracking)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS serialization_reservations (
+          id TEXT PRIMARY KEY,
+          source_id TEXT NOT NULL,
+          document_id TEXT NOT NULL,
+          job_id TEXT NOT NULL,
+          start_value TEXT NOT NULL,
+          end_value TEXT NOT NULL,
+          count INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'RESERVED',
+          printed_count INTEGER NOT NULL DEFAULT 0,
+          remaining_count INTEGER NOT NULL DEFAULT 0,
+          client_request_id TEXT,
+          error TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_serial_res_source ON serialization_reservations(source_id);
+        CREATE INDEX IF NOT EXISTS idx_serial_res_job ON serialization_reservations(job_id);
+        CREATE INDEX IF NOT EXISTS idx_serial_res_status ON serialization_reservations(status);
+        CREATE INDEX IF NOT EXISTS idx_serial_res_req ON serialization_reservations(client_request_id);
+      `);
+
+      // Serialization Audit Journal
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS serialization_journal (
+          id TEXT PRIMARY KEY,
+          source_id TEXT NOT NULL,
+          old_value TEXT NOT NULL,
+          new_value TEXT NOT NULL,
+          job_id TEXT,
+          reservation_id TEXT,
+          timestamp TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'committed'
+        );
+        CREATE INDEX IF NOT EXISTS idx_serial_journal_source ON serialization_journal(source_id);
+        CREATE INDEX IF NOT EXISTS idx_serial_journal_time ON serialization_journal(timestamp);
+      `);
+
+      // Print Job Items (Item-level traceability)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS print_job_items (
+          id TEXT PRIMARY KEY,
+          job_id TEXT NOT NULL,
+          item_index INTEGER NOT NULL,
+          record_index INTEGER NOT NULL DEFAULT 0,
+          copy_index INTEGER NOT NULL DEFAULT 1,
+          serial_value TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          printed_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_job_items_job ON print_job_items(job_id);
+      `);
+
+      // Print Batches (Batch-level chunk tracking for thermal raw streams)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS print_batches (
+          id TEXT PRIMARY KEY,
+          job_id TEXT NOT NULL,
+          batch_index INTEGER NOT NULL,
+          start_index INTEGER NOT NULL,
+          end_index INTEGER NOT NULL,
+          start_serial TEXT,
+          end_serial TEXT,
+          count INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          dispatched_at TEXT,
+          completed_at TEXT,
+          raw_payload TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_batches_job ON print_batches(job_id);
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: DatabaseSync): void {

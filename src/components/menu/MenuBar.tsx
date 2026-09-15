@@ -62,6 +62,8 @@ interface MenuBarProps {
   onOpenDatabaseConnection?: () => void;
   onOpenWelcome?: () => void;
   onOpenPreferences?: () => void;
+  onOpenSerializationRecovery?: () => void;
+  orphanCount?: number;
   recentDocuments?: any[];
   onOpenRecentDocument?: (filePath: string) => void;
   onClearRecentDocuments?: () => void;
@@ -819,6 +821,13 @@ export const MenuBar: React.FC<MenuBarProps> = (props) => {
                   label="Spooler Queue & Hardware History..."
                   onClick={() => executeAction(() => props.setActiveView('queue'))}
                 />
+                {props.onOpenSerializationRecovery && (
+                  <MenuItem
+                    icon={<Sliders className="w-3.5 h-3.5 text-blue-600" />}
+                    label={props.orphanCount && props.orphanCount > 0 ? `Serialization Recovery Center (${props.orphanCount} pending)...` : 'Serialization Recovery Center...'}
+                    onClick={() => executeAction(props.onOpenSerializationRecovery!)}
+                  />
+                )}
                 {props.onPageSetup && (
                   <MenuItem
                     icon={<Settings className="w-3.5 h-3.5 text-slate-600" />}

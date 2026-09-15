@@ -1832,6 +1832,9 @@ export const TextPropertiesModal: React.FC<TextPropertiesModalProps> = ({
           initialValue={activeDataSource.value || '000001'}
           prefix={activeDataSource.prefixSuffix?.prefix || ''}
           suffix={activeDataSource.prefixSuffix?.suffix || ''}
+          datasets={datasets}
+          currentRecord={currentRecord}
+          availableVariables={availableVariables}
           onApply={(config) => updateActiveDs({ serialization: config })}
         />
       )}

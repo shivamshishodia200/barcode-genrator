@@ -1,4 +1,4 @@
-import { PrintJob, PrinterDefinition, LabelTemplate } from '../types';
+import { PrintJob, PrinterDefinition, LabelTemplate, PrintCommitPolicy, PrintJobBatch, PrintJobItem } from '../types';
 import { generatePrintStream } from './printerAdapters';
 import { apiService } from './apiService';
 
@@ -11,6 +11,17 @@ export interface DispatchPrintJobRequest {
   submittedBy?: string;
   darkness?: number;
   speed?: number;
+  reservationId?: string;
+  serialStart?: string;
+  serialEnd?: string;
+  commitPolicy?: PrintCommitPolicy;
+  batches?: PrintJobBatch[];
+  items?: PrintJobItem[];
+  confirmedCount?: number;
+  remainingCount?: number;
+  unknownCount?: number;
+  failedCount?: number;
+  clientRequestId?: string;
 }
 
 export class EnterprisePrintSpooler {
@@ -47,6 +58,16 @@ export class EnterprisePrintSpooler {
       submittedBy = 'Print Operator',
       darkness,
       speed,
+      reservationId,
+      serialStart,
+      serialEnd,
+      commitPolicy,
+      batches,
+      items,
+      confirmedCount,
+      unknownCount,
+      failedCount,
+      clientRequestId,
     } = req;
 
     // Generate real raw stream using polymorphic PrinterAdapters
@@ -61,8 +82,11 @@ export class EnterprisePrintSpooler {
       ? streamOutput
       : new TextDecoder().decode(streamOutput);
 
+    const totalLabels = Number(copies) * records.length;
+
     const newJob: PrintJob = {
       id: `PJ-${Math.floor(10000 + Math.random() * 90000)}`,
+      clientRequestId,
       templateId: template.id,
       templateName: template.name,
       printerId: printer.id,
@@ -77,10 +101,20 @@ export class EnterprisePrintSpooler {
       zplOutput: format === 'zpl' ? rawCode : undefined,
       rawOutput: rawCode,
       dataSnapshot: records.map((r) => ({ ...r })),
-      totalLabelsPrinted: Number(copies) * records.length,
+      totalLabelsPrinted: totalLabels,
       datasetName: template.databaseConnection?.name,
       excelFilePath: template.databaseConnection?.filePath,
       excelSheetName: template.databaseConnection?.sheetName,
+      reservationId,
+      serialStart,
+      serialEnd,
+      commitPolicy,
+      batches,
+      items,
+      confirmedCount: confirmedCount !== undefined ? confirmedCount : totalLabels,
+      unknownCount: unknownCount || 0,
+      failedCount: failedCount || 0,
+      templateSnapshot: JSON.parse(JSON.stringify(template)),
     };
 
     this.jobs.unshift(newJob);

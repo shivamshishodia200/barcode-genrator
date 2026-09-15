@@ -28,7 +28,7 @@ import { generateZPL, generateTSPL, generateEPL } from '../../services/zplEngine
 import { renderTSPL, renderZPL, renderCPCL, renderSBPL } from '../../printing/renderers';
 import { exportLabelsToPDF } from '../../services/pdfExportService';
 import { EnterprisePrintSpooler } from '../../services/printSpoolerService';
-import { advanceTemplateSerialState } from '../../services/serializationEngine';
+import { advanceTemplateSerialState, AtomicSerialReservationService, computeNextSerialValue } from '../../services/serializationEngine';
 import { evaluateElementData } from '../../services/dataSourceEngine';
 import {
   RecordSelectionModal,
@@ -727,6 +727,50 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
   const handleSaveAsPdfFallback = async () => {
     setPrintProgressState('PREPARING');
     setIsSubmitting(true);
+    setPrintErrorMessage(null);
+    setJobSuccess(null);
+
+    const calculatedTotalCount = totalLabelsCount;
+    const serialSourcesToReserve: Array<{
+      sourceId: string;
+      startValue: string;
+      config: any;
+    }> = [];
+
+    template.elements?.forEach((el: any) => {
+      (el.dataSources || []).forEach((ds: any) => {
+        const s = ds.serialization || ds.transformConfig?.serialization;
+        if (s && s.action && s.action !== 'none') {
+          const sourceId = ds.id || `${template.id}_${el.id}_${ds.name || 'serial'}`;
+          const startVal = s.currentValue || ds.value || '000001';
+          serialSourcesToReserve.push({
+            sourceId,
+            startValue: startVal,
+            config: s,
+          });
+        }
+      });
+    });
+
+    const reservations: any[] = [];
+    const jobId = `PJ-${Date.now()}`;
+
+    for (const src of serialSourcesToReserve) {
+      try {
+        const resv = await AtomicSerialReservationService.reserve(
+          template.id,
+          src.sourceId,
+          src.startValue,
+          src.config,
+          calculatedTotalCount,
+          { jobId }
+        );
+        reservations.push(resv);
+      } catch (err) {
+        console.warn('Reservation error:', err);
+      }
+    }
+
     try {
       const result = await PrintExecutionService.getInstance().saveAsPdfFallback(
         template,
@@ -736,6 +780,9 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
       );
 
       if (result.status === 'cancelled') {
+        for (const resv of reservations) {
+          await AtomicSerialReservationService.rollback(resv.id, 'PDF save canceled by user', resv.sourceId);
+        }
         setPrintProgressState('CANCELLED');
         setPrintErrorMessage('PDF save canceled by user.');
         setIsSubmitting(false);
@@ -743,17 +790,67 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
       }
 
       if (result.status === 'failed') {
+        for (const resv of reservations) {
+          await AtomicSerialReservationService.rollback(resv.id, result.error || 'Failed to save PDF', resv.sourceId);
+        }
         setPrintProgressState('FAILED');
         setPrintErrorMessage(result.error || 'Failed to generate and save PDF fallback.');
         setIsSubmitting(false);
         return;
       }
 
-      // Confirmed PDF output
+      // Confirmed PDF output: commit serial reservation
+      for (const resv of reservations) {
+        const nextVal = computeNextSerialValue(resv.startValue, resv.definition || resv.config, calculatedTotalCount);
+        await AtomicSerialReservationService.commit(
+          resv.id,
+          resv.sourceId,
+          nextVal,
+          calculatedTotalCount,
+          jobId,
+          'PDF Document Export Confirmed'
+        );
+      }
+
       if (onUpdateTemplate) {
-        const advancedTemplate = advanceTemplateSerialState(template, recordsToPrint.length * copies);
+        const advancedTemplate = advanceTemplateSerialState(template, calculatedTotalCount);
         onUpdateTemplate(advancedTemplate);
       }
+
+      // Spooler entry for PDF export
+      const primaryResv = reservations[0];
+      const spooler = EnterprisePrintSpooler.getInstance();
+      const dispatchedJob = spooler.dispatchJob({
+        template,
+        printer: {
+          id: selectedPrinter.id,
+          name: result.deviceName || selectedPrinter.name,
+          model: selectedPrinter.driverName || selectedPrinter.model || selectedPrinter.name,
+          brand: 'Desktop PDF' as any,
+          dpi: (selectedPrinter.dpi || 300) as any,
+          ipAddress: 'LOCAL',
+          port: 0,
+          status: 'online',
+          protocol: 'pdf' as any,
+          location: 'PDF Export',
+          mediaWidth: template.dimensions.width,
+          mediaHeight: template.dimensions.height,
+        },
+        copies,
+        records: recordsToPrint as any,
+        format: 'pdf',
+        submittedBy: 'Operator (BarcodeFlow Suite)',
+        reservationId: primaryResv?.id,
+        serialStart: primaryResv?.startValue,
+        serialEnd: primaryResv?.endValue,
+        confirmedCount: calculatedTotalCount,
+        unknownCount: 0,
+        failedCount: 0,
+      });
+
+      dispatchedJob.totalLabelsPrinted = calculatedTotalCount;
+      dispatchedJob.status = 'completed';
+      onJobSubmitted(dispatchedJob);
 
       setPrintProgressState('SUBMITTED');
       const fileName = result.filePath ? result.filePath.split(/[\\/]/).pop() : 'Document1.pdf';
@@ -765,6 +862,9 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         setPrintProgressState('IDLE');
       }, 1500);
     } catch (err: any) {
+      for (const resv of reservations) {
+        await AtomicSerialReservationService.rollback(resv.id, err.message || 'PDF fallback error', resv.sourceId);
+      }
       setPrintProgressState('FAILED');
       setPrintErrorMessage(err.message || 'PDF fallback error');
       setIsSubmitting(false);
@@ -813,9 +913,52 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
     setJobSuccess(null);
     setIsSubmitting(true);
 
+    const calculatedTotalCount = totalLabelsCount;
+    const serialSourcesToReserve: Array<{
+      sourceId: string;
+      startValue: string;
+      config: any;
+    }> = [];
+
+    template.elements?.forEach((el: any) => {
+      (el.dataSources || []).forEach((ds: any) => {
+        const s = ds.serialization || ds.transformConfig?.serialization;
+        if (s && s.action && s.action !== 'none') {
+          const sourceId = ds.id || `${template.id}_${el.id}_${ds.name || 'serial'}`;
+          const startVal = s.currentValue || ds.value || '000001';
+          serialSourcesToReserve.push({
+            sourceId,
+            startValue: startVal,
+            config: s,
+          });
+        }
+      });
+    });
+
+    const reservations: any[] = [];
+    const jobId = `PJ-${Date.now()}`;
+
+    for (const src of serialSourcesToReserve) {
+      try {
+        const resv = await AtomicSerialReservationService.reserve(
+          template.id,
+          src.sourceId,
+          src.startValue,
+          src.config,
+          calculatedTotalCount,
+          { jobId }
+        );
+        reservations.push(resv);
+      } catch (err) {
+        console.warn('Reservation error:', err);
+      }
+    }
+
     try {
       commitPrintMethodSettings(printMethodSettings);
       setPrintProgressState('RENDERING');
+
+      const primaryResv = reservations[0];
 
       const executionResult = await PrintExecutionService.getInstance().print({
         document: template,
@@ -846,9 +989,14 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         cancelQueuedJobsBeforePrint,
         startingSlot,
         printToFile,
+        jobId,
+        reservationId: primaryResv?.id,
       });
 
       if (executionResult.status === 'cancelled') {
+        for (const resv of reservations) {
+          await AtomicSerialReservationService.rollback(resv.id, 'Print job canceled by user', resv.sourceId);
+        }
         setIsSubmitting(false);
         setPrintProgressState('CANCELLED');
         setPrintErrorMessage('Print job canceled by user.');
@@ -856,6 +1004,13 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
       }
 
       if (executionResult.status === 'failed') {
+        for (const resv of reservations) {
+          await AtomicSerialReservationService.rollback(
+            resv.id,
+            executionResult.error || 'Print spooler rejected the job',
+            resv.sourceId
+          );
+        }
         setIsSubmitting(false);
         if (executionResult.error === 'PRINTER_UNAVAILABLE') {
           setIsOfflinePrinterModalOpen(true);
@@ -866,12 +1021,88 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         return;
       }
 
-      // 4. Confirmed Success: Advance serial sequence counters on template elements (Section 19)
-      if (onUpdateTemplate) {
-        const advancedTemplate = advanceTemplateSerialState(
+      if (executionResult.status === 'PARTIAL') {
+        const confirmed = executionResult.confirmedCount || 0;
+        const remaining = executionResult.remainingCount || (calculatedTotalCount - confirmed);
+
+        for (const resv of reservations) {
+          const confirmedVal = computeNextSerialValue(resv.startValue, resv.definition || resv.config, confirmed);
+          await AtomicSerialReservationService.markPartial(
+            resv.id,
+            resv.sourceId,
+            confirmedVal,
+            confirmed,
+            remaining,
+            executionResult.batches?.length || 0,
+            executionResult.error || 'Partial print job interrupted'
+          );
+        }
+
+        if (onUpdateTemplate && confirmed > 0) {
+          const advancedTemplate = advanceTemplateSerialState(template, confirmed);
+          onUpdateTemplate(advancedTemplate);
+        }
+
+        // Spooler entry for partial print
+        const spooler = EnterprisePrintSpooler.getInstance();
+        const dispatchedJob = spooler.dispatchJob({
           template,
-          executionResult.pagesPrinted || recordsToPrint.length * copies
+          printer: {
+            id: selectedPrinter.id,
+            name: executionResult.deviceName,
+            model: selectedPrinter.model || selectedPrinter.driverName || selectedPrinter.name,
+            brand: (selectedPrinter.manufacturer?.includes('Zebra') ? 'Zebra' : selectedPrinter.manufacturer?.includes('TSC') ? 'TSC' : 'Desktop Driver') as any,
+            dpi: (selectedPrinter.dpi || 300) as any,
+            ipAddress: selectedPrinter.portName || (typeof selectedPrinter.port === 'string' ? selectedPrinter.port : 'LOCAL'),
+            port: typeof selectedPrinter.port === 'number' ? selectedPrinter.port : 0,
+            status: 'online',
+            protocol: outputFormat as any,
+            location: selectedPrinter.location || 'Local Windows Spooler',
+            mediaWidth: template.dimensions.width,
+            mediaHeight: template.dimensions.height,
+          },
+          copies: 1,
+          records: recordsToPrint as any,
+          format: outputFormat,
+          submittedBy: 'Operator (BarcodeFlow Suite)',
+          darkness,
+          speed: printSpeed,
+          reservationId: primaryResv?.id,
+          serialStart: primaryResv?.startValue,
+          serialEnd: primaryResv?.endValue,
+          batches: executionResult.batches,
+          items: executionResult.items,
+          confirmedCount: confirmed,
+          remainingCount: remaining,
+          failedCount: remaining,
+        });
+
+        dispatchedJob.status = 'PARTIAL';
+        dispatchedJob.totalLabelsPrinted = confirmed;
+        onJobSubmitted(dispatchedJob);
+
+        setIsSubmitting(false);
+        setPrintProgressState('FAILED');
+        setPrintErrorMessage(`Partial Print: ${confirmed} printed, ${remaining} failed. (${executionResult.error})`);
+        return;
+      }
+
+      // 4. Confirmed Success: Commit serial reservations & Advance serial sequence counters
+      const printedCount = executionResult.pagesPrinted || calculatedTotalCount;
+      for (const resv of reservations) {
+        const finalVal = computeNextSerialValue(resv.startValue, resv.definition || resv.config, printedCount);
+        await AtomicSerialReservationService.commit(
+          resv.id,
+          resv.sourceId,
+          finalVal,
+          printedCount,
+          jobId,
+          `Confirmed print dispatch to ${executionResult.deviceName}`
         );
+      }
+
+      if (onUpdateTemplate) {
+        const advancedTemplate = advanceTemplateSerialState(template, printedCount);
         onUpdateTemplate(advancedTemplate);
       }
 
@@ -899,9 +1130,17 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         submittedBy: 'Operator (BarcodeFlow Suite)',
         darkness,
         speed: printSpeed,
+        reservationId: primaryResv?.id,
+        serialStart: primaryResv?.startValue,
+        serialEnd: primaryResv?.endValue,
+        batches: executionResult.batches,
+        items: executionResult.items,
+        confirmedCount: printedCount,
+        unknownCount: 0,
+        failedCount: 0,
       });
 
-      dispatchedJob.totalLabelsPrinted = executionResult.pagesPrinted || recordsToPrint.length * copies;
+      dispatchedJob.totalLabelsPrinted = printedCount;
       dispatchedJob.status = 'completed';
       onJobSubmitted(dispatchedJob);
 
@@ -923,6 +1162,9 @@ export const PrintCenterDialog: React.FC<PrintCenterDialogProps> = ({
         setIsSubmitting(false);
       }
     } catch (err: any) {
+      for (const resv of reservations) {
+        await AtomicSerialReservationService.rollback(resv.id, err.message || 'Print dispatch failed', resv.sourceId);
+      }
       setIsSubmitting(false);
       setPrintProgressState('FAILED');
       setPrintErrorMessage(err.message || 'Print dispatch failed.');

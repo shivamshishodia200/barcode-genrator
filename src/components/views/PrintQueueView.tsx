@@ -31,6 +31,7 @@ interface PrintQueueViewProps {
   onClearCompleted: () => void;
   onReprintWithSnapshot?: (job: PrintJob) => void;
   onReprintWithCurrentData?: (job: PrintJob) => void;
+  onReprintRemaining?: (job: PrintJob) => void;
 }
 
 export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
@@ -41,19 +42,23 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
   onClearCompleted,
   onReprintWithSnapshot,
   onReprintWithCurrentData,
+  onReprintRemaining,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [inspectingZplJob, setInspectingZplJob] = useState<PrintJob | null>(null);
   const [snapshotModalJob, setSnapshotModalJob] = useState<PrintJob | null>(null);
   const [reprintModalJob, setReprintModalJob] = useState<PrintJob | null>(null);
+  const [detailsModalJob, setDetailsModalJob] = useState<PrintJob | null>(null);
   const [reprintStatus, setReprintStatus] = useState<string | null>(null);
 
   const filteredJobs = printJobs.filter((job) => {
     const matchesSearch =
       job.templateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       job.printerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.submittedBy.toLowerCase().includes(searchTerm.toLowerCase());
+      job.submittedBy.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (job.serialStart && job.serialStart.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (job.serialEnd && job.serialEnd.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesStatus = statusFilter === 'ALL' || job.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -62,14 +67,25 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
   const getStatusBadge = (status: PrintJob['status']) => {
     switch (status) {
       case 'completed':
+      case 'COMPLETED':
         return 'bg-emerald-100 text-emerald-800 border-emerald-300';
       case 'printing':
+      case 'PRINTING':
+      case 'SPOOLING':
         return 'bg-blue-100 text-blue-800 border-blue-300 animate-pulse';
       case 'queued':
+      case 'RESERVED':
+      case 'CREATED':
         return 'bg-amber-100 text-amber-800 border-amber-300';
       case 'failed':
+      case 'FAILED':
         return 'bg-red-100 text-red-800 border-red-300';
+      case 'PARTIAL':
+        return 'bg-purple-100 text-purple-800 border-purple-300 font-bold';
       case 'paused':
+      case 'CANCELLED':
+        return 'bg-slate-100 text-slate-800 border-slate-300';
+      default:
         return 'bg-slate-100 text-slate-800 border-slate-300';
     }
   };
@@ -85,13 +101,13 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
           </div>
           <h1 className="text-xl font-bold text-slate-900">Live Thermal Print Spooler Monitor</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Monitor raw TCP 9100 sockets, Zebra ZPL / Eltron EPL queues, and serialized batch dispatches
+            Monitor raw TCP 9100 sockets, Zebra ZPL / TSPL queues, serialization reservations, and batch progress
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={onClearCompleted}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
           >
             Clear Completed Jobs
           </button>
@@ -104,7 +120,7 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search print jobs by template, printer, or user..."
+            placeholder="Search print jobs by template, printer, serial range, or user..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
@@ -118,10 +134,10 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
           >
             <option value="ALL">All Statuses ({printJobs.length})</option>
             <option value="printing">Printing</option>
-            <option value="queued">Queued</option>
             <option value="completed">Completed</option>
+            <option value="PARTIAL">Partial</option>
             <option value="failed">Failed</option>
-            <option value="paused">Paused</option>
+            <option value="queued">Queued</option>
           </select>
         </div>
       </div>
@@ -134,9 +150,10 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
               <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                 <th className="py-3 px-4">Job ID / Time</th>
                 <th className="py-3 px-4">Template</th>
-                <th className="py-3 px-4">Target Thermal Printer</th>
-                <th className="py-3 px-4">Quantity / Records</th>
-                <th className="py-3 px-4">Spool Status</th>
+                <th className="py-3 px-4">Printer & Protocol</th>
+                <th className="py-3 px-4 font-mono">Serial Range</th>
+                <th className="py-3 px-4">Quantity</th>
+                <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Progress</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -144,7 +161,7 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredJobs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
                     No print jobs matching filter criteria.
                   </td>
                 </tr>
@@ -165,8 +182,17 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
                       <div className="font-medium text-slate-700">{job.printerName}</div>
                       <div className="text-[10px] text-slate-400 uppercase font-mono">{job.format} stream</div>
                     </td>
+                    <td className="py-3 px-4 whitespace-nowrap font-mono">
+                      {job.serialStart ? (
+                        <div className="text-amber-900 font-bold text-[11px]">
+                          {job.serialStart} → {job.serialEnd}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[10.5px]">Static / None</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 whitespace-nowrap">
-                      <span className="font-bold text-slate-800">{job.copies * job.recordCount}</span>
+                      <span className="font-bold text-slate-800">{job.totalLabelsPrinted || job.copies * job.recordCount}</span>
                       <span className="text-slate-400 text-[10px] ml-1">
                         ({job.recordCount} rec × {job.copies} cp)
                       </span>
@@ -180,7 +206,7 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
                         {job.status}
                       </span>
                     </td>
-                    <td className="py-3 px-4 whitespace-nowrap w-36">
+                    <td className="py-3 px-4 whitespace-nowrap w-32">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                           <div
@@ -188,6 +214,8 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
                                 ? 'bg-emerald-500'
                                 : job.status === 'failed'
                                   ? 'bg-red-500'
+                                  : job.status === 'PARTIAL'
+                                  ? 'bg-purple-500'
                                   : 'bg-blue-500'
                               }`}
                             style={{ width: `${job.progressPercent}%` }}
@@ -197,6 +225,32 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
                       </div>
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap text-right space-x-1">
+                      {/* Job Details Modal */}
+                      <button
+                        onClick={() => setDetailsModalJob(job)}
+                        className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-md transition-colors cursor-pointer"
+                        title="View Full Job & Serialization Details"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-blue-600" />
+                      </button>
+
+                      {/* Reprint Remaining (if partial) */}
+                      {job.status === 'PARTIAL' && (
+                        <button
+                          onClick={() => {
+                            if (onReprintRemaining) {
+                              onReprintRemaining(job);
+                            } else {
+                              alert(`Reprint Remaining requested for Job ${job.id}`);
+                            }
+                          }}
+                          className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 rounded text-[10.5px] font-bold transition-colors cursor-pointer"
+                          title="Reprint remaining unprinted labels in this sequence"
+                        >
+                          Reprint Remaining
+                        </button>
+                      )}
+
                       {/* View Immutable Print Data Snapshot */}
                       {job.dataSnapshot && job.dataSnapshot.length > 0 && (
                         <button
@@ -448,6 +502,114 @@ export const PrintQueueView: React.FC<PrintQueueViewProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Full Job & Serialization Details Modal */}
+      {detailsModalJob && (
+        <Modal
+          isOpen={true}
+          onClose={() => setDetailsModalJob(null)}
+          title={`Job Details: ${detailsModalJob.id}`}
+          subtitle={`${detailsModalJob.templateName} • ${detailsModalJob.printerName} • Dispatched ${new Date(detailsModalJob.submittedAt).toLocaleString()}`}
+          maxWidth="4xl"
+          footer={
+            <div className="flex items-center justify-between w-full">
+              <div className="text-xs text-slate-500 font-mono">
+                Reservation: {detailsModalJob.reservationId || 'N/A'}
+              </div>
+              <button
+                onClick={() => setDetailsModalJob(null)}
+                className="px-4 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4 py-1">
+            {/* Info Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Status</span>
+                <span className="font-bold text-slate-800 text-[13px]">{detailsModalJob.status}</span>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Total Labels</span>
+                <span className="font-bold text-slate-800 text-[13px]">{detailsModalJob.totalLabelsPrinted || detailsModalJob.copies * detailsModalJob.recordCount}</span>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 font-mono">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Serial Range</span>
+                <span className="font-bold text-amber-900 text-[12px]">
+                  {detailsModalJob.serialStart ? `${detailsModalJob.serialStart} → ${detailsModalJob.serialEnd}` : 'Static'}
+                </span>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Commit Policy</span>
+                <span className="font-bold text-slate-800 text-[11px]">{detailsModalJob.commitPolicy || 'WHOLE_JOB_ON_DISPATCH'}</span>
+              </div>
+            </div>
+
+            {/* Error banner if failed */}
+            {detailsModalJob.errorMessage && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>{detailsModalJob.errorMessage}</span>
+              </div>
+            )}
+
+            {/* Batches Table if available */}
+            {detailsModalJob.batches && detailsModalJob.batches.length > 0 && (
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-bold text-slate-700">Dispatched Thermal Batches ({detailsModalJob.batches.length})</h4>
+                <div className="border border-slate-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                  <table className="w-full text-left text-[11px] border-collapse">
+                    <thead className="bg-slate-100 font-semibold text-slate-700 sticky top-0 border-b border-slate-200">
+                      <tr>
+                        <th className="p-2 border-r border-slate-200 text-center w-12">#</th>
+                        <th className="p-2 border-r border-slate-200">Indices</th>
+                        <th className="p-2 border-r border-slate-200 font-mono">Serial Range</th>
+                        <th className="p-2 border-r border-slate-200 text-center">Count</th>
+                        <th className="p-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {detailsModalJob.batches.map((b) => (
+                        <tr key={b.batchIndex} className="hover:bg-slate-50">
+                          <td className="p-2 border-r border-slate-200 text-center text-slate-400">{b.batchIndex}</td>
+                          <td className="p-2 border-r border-slate-200 text-slate-600">
+                            {b.startIndex + 1} - {b.endIndex + 1}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 text-amber-900 font-bold">
+                            {b.startSerial || 'N/A'} → {b.endSerial || 'N/A'}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 text-center">{b.count}</td>
+                          <td className="p-2">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${b.status === 'printed' ? 'bg-emerald-100 text-emerald-800' : b.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>
+                              {b.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Raw Print Stream Preview */}
+            {detailsModalJob.rawOutput && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-700">Raw Device Instruction Stream ({detailsModalJob.format.toUpperCase()})</h4>
+                  <span className="text-[10.5px] text-slate-400 font-mono">{detailsModalJob.rawOutput.length} characters</span>
+                </div>
+                <pre className="p-3 bg-slate-900 text-emerald-400 rounded-lg text-[11px] font-mono max-h-48 overflow-y-auto whitespace-pre-wrap leading-tight select-text">
+                  {detailsModalJob.rawOutput}
+                </pre>
+              </div>
+            )}
           </div>
         </Modal>
       )}

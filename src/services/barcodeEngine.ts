@@ -419,6 +419,21 @@ export function validateBarcodeValue(symbology: BarcodeSymbology, value: string)
 }
 
 /**
+ * Auto-formats or pads values for fixed-length numeric symbologies so BarTender behaves seamlessly
+ */
+export function formatValueForSymbology(symbology: BarcodeSymbology, rawValue: string): string {
+  if (!rawValue) return rawValue;
+  const s = rawValue.trim();
+
+  // Interleaved 2 of 5 requires an even number of digits. If odd, prepend leading '0'
+  if (symbology === 'interleaved2of5' && /^\d+$/.test(s) && s.length % 2 !== 0) {
+    return '0' + s;
+  }
+
+  return s;
+}
+
+/**
  * Renders barcode to HTML Canvas element with high DPI scaling and BarTender formatting
  */
 export async function renderBarcodeToCanvas(
@@ -428,7 +443,14 @@ export async function renderBarcodeToCanvas(
   ctxEval?: EvaluationContext
 ): Promise<void> {
   const meta = getSymbologyMetadata(element.symbology);
-  const evaluatedValue = evaluateElementData(element, ctxEval) || element.value || meta.defaultSample;
+  const rawEvaluated = evaluateElementData(element, ctxEval);
+  const evaluatedValue = (rawEvaluated !== undefined && rawEvaluated !== '') 
+    ? rawEvaluated 
+    : (element.value !== undefined && element.value !== '') 
+      ? element.value 
+      : meta.defaultSample;
+
+  const formattedText = formatValueForSymbology(element.symbology, evaluatedValue);
 
   try {
     const is2D = meta.is2D;
@@ -436,7 +458,7 @@ export async function renderBarcodeToCanvas(
     // bwip-js options
     const options: any = {
       bcid: meta.bwipBcId || 'code128',
-      text: evaluatedValue || '12345678',
+      text: formattedText || '12345678',
       scale: Math.max(1, Math.round(scale * (element.barWidth || 1.8))),
     };
 
@@ -450,7 +472,7 @@ export async function renderBarcodeToCanvas(
       if (element.autoSize || element.autoSizeText) {
         const minPt = Math.max(4, element.minFontSize || 6);
         const maxPt = Math.max(minPt, element.maxFontSize || 20);
-        const textLen = (evaluatedValue || '').length || 8;
+        const textLen = (formattedText || '').length || 8;
         const availableWidthPx = Math.max(20, element.width * scale * 0.85);
         // Estimate max point size that fits available width
         const charWidthRatio = 0.55;
@@ -462,7 +484,10 @@ export async function renderBarcodeToCanvas(
 
       const fontName = element.humanReadableFont || element.fontFamily;
       if (fontName) {
-        options.textfont = fontName;
+        const cleanFont = fontName.trim();
+        if (/^(ocr-a|ocr-b|courier|helvetica|times)$/i.test(cleanFont)) {
+          options.textfont = cleanFont;
+        }
       }
       const textCol = element.humanReadableColor || element.color || element.foregroundColor;
       if (textCol) {
@@ -476,7 +501,7 @@ export async function renderBarcodeToCanvas(
       }
       if (element.humanReadableCustomFormat) {
         // e.g. "(01) {0}" format template
-        options.alttext = element.humanReadableCustomFormat.replace('{0}', evaluatedValue);
+        options.alttext = element.humanReadableCustomFormat.replace('{0}', formattedText);
       }
     }
 
@@ -517,35 +542,58 @@ export async function renderBarcodeToCanvas(
       }
     }
   } catch (err: any) {
+    // Secondary fallback: Try clean standard rendering with the user's actual text without complex font/color modifiers
     try {
-      const fallbackOptions: any = {
+      const retryOpts: any = {
         bcid: meta.bwipBcId || 'code128',
-        text: meta.defaultSample,
+        text: formattedText || '12345678',
         scale: Math.max(1, Math.round(scale * (element.barWidth || 1.8))),
       };
       if (!meta.is2D) {
-        fallbackOptions.height = Math.max(8, Math.round((element.barHeight || 12) * 1.5));
-        fallbackOptions.includetext = Boolean(element.includeText);
+        retryOpts.height = Math.max(8, Math.round((element.barHeight || 12) * 1.5));
+        retryOpts.includetext = Boolean(element.includeText !== false);
+        retryOpts.textxalign = 'center';
       }
-      bwipjs.toCanvas(canvas, fallbackOptions);
+      bwipjs.toCanvas(canvas, retryOpts);
+      return;
     } catch {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#fef2f2';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#f87171';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
-        ctx.fillStyle = '#b91c1c';
-        ctx.font = 'bold 12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(meta.name, canvas.width / 2, canvas.height / 2 - 8);
-        ctx.font = '10px sans-serif';
-        ctx.fillStyle = '#6b7280';
-        ctx.fillText('Invalid Data Format', canvas.width / 2, canvas.height / 2 + 8);
+      // If even standard rendering fails, then display invalid data warning
+    }
+
+    console.warn(`[BarcodeEngine] Failed to render ${meta.name} with value "${evaluatedValue}":`, err?.message || err);
+    
+    // Draw explicit, clear BarTender invalid barcode warning on canvas (Never silently draw a fake 12345678 sample barcode!)
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      canvas.width = Math.max(120, Math.round(element.width * scale * 2));
+      canvas.height = Math.max(40, Math.round(element.height * scale * 2));
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#fff5f5';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+      
+      // Diagonal subtle stripes
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.15)';
+      ctx.lineWidth = 1;
+      for (let x = -canvas.height; x < canvas.width + canvas.height; x += 12) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + canvas.height, canvas.height);
+        ctx.stroke();
       }
+
+      ctx.fillStyle = '#b91c1c';
+      ctx.font = `bold ${Math.max(10, Math.round(11 * scale))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`⚠ ${meta.name}: Invalid Data`, canvas.width / 2, canvas.height / 2 - 8);
+      
+      ctx.font = `${Math.max(8, Math.round(9 * scale))}px monospace`;
+      ctx.fillStyle = '#4b5563';
+      const dispText = String(evaluatedValue).length > 20 ? String(evaluatedValue).slice(0, 18) + '…' : String(evaluatedValue);
+      ctx.fillText(`"${dispText}"`, canvas.width / 2, canvas.height / 2 + 8);
     }
   }
 }
@@ -555,13 +603,20 @@ export async function renderBarcodeToCanvas(
  */
 export function generateBarcodeSVG(element: BarcodeElement, ctxEval?: EvaluationContext): string {
   const meta = getSymbologyMetadata(element.symbology);
-  const cleanValue = evaluateElementData(element, ctxEval) || element.value || meta.defaultSample;
+  const rawEvaluated = evaluateElementData(element, ctxEval);
+  const cleanValue = (rawEvaluated !== undefined && rawEvaluated !== '')
+    ? rawEvaluated
+    : (element.value !== undefined && element.value !== '')
+      ? element.value
+      : meta.defaultSample;
+
+  const formattedValue = formatValueForSymbology(element.symbology, cleanValue);
 
   try {
     const is2D = meta.is2D;
     const opts: any = {
       bcid: meta.bwipBcId || 'code128',
-      text: cleanValue,
+      text: formattedValue,
       scale: Math.max(1, Math.round(element.barWidth || 2)),
     };
 

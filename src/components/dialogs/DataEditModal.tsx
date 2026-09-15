@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BarcodeElement, TextElement, LabelElement, DataSourceItem } from '../../types';
 import { evaluateElementData } from '../../services/dataSourceEngine';
-import { X, HelpCircle } from 'lucide-react';
+import { getSymbologyMetadata } from '../../services/barcodeEngine';
+import { X } from 'lucide-react';
 import { SpecialCharacterModal } from './SpecialCharacterModal';
 
 interface DataEditModalProps {
@@ -77,6 +78,7 @@ export const DataEditModal: React.FC<DataEditModalProps> = ({
           return {
             ...ds,
             value: trimmedVal,
+            type: ds.type === 'database' || ds.type === 'variable' ? 'embedded' : ds.type,
             ...(currentSerial
               ? {
                   serialization: {
@@ -120,11 +122,34 @@ export const DataEditModal: React.FC<DataEditModalProps> = ({
 
     onUpdateElement(element.id, {
       dataSources: updatedDsList,
-      ...(element.type === 'barcode' ? { value: compiled || trimmedVal } : {}),
-      ...(element.type === 'text' ? { text: compiled || trimmedVal } : {}),
+      dataBinding: undefined,
+      ...(element.type === 'barcode'
+        ? {
+            value: compiled || trimmedVal,
+            barcodeValue: compiled || trimmedVal,
+            content: compiled || trimmedVal,
+          }
+        : {}),
+      ...(element.type === 'text'
+        ? {
+            text: compiled || trimmedVal,
+            value: compiled || trimmedVal,
+            content: compiled || trimmedVal,
+          }
+        : {}),
     });
 
     onClose();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || element.type === 'barcode' || !(element as any).multiline)) {
+      e.preventDefault();
+      handleOk();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
+    }
   };
 
   const handleOpenDataSources = () => {
@@ -141,6 +166,7 @@ export const DataEditModal: React.FC<DataEditModalProps> = ({
   };
 
   const elementFont = (element as any).fontFamily || 'Arial';
+  const symbologyMeta = element.type === 'barcode' ? getSymbologyMetadata((element as BarcodeElement).symbology) : null;
 
   return (
     <div
@@ -166,7 +192,14 @@ export const DataEditModal: React.FC<DataEditModalProps> = ({
         {/* Modal Body */}
         <div className="p-4 bg-white space-y-2">
           <div className="flex items-center justify-between">
-            <label className="block text-[11.5px] font-medium text-slate-700">Embedded Data</label>
+            <div className="flex items-center gap-2">
+              <label className="block text-[11.5px] font-medium text-slate-700">Embedded Data</label>
+              {symbologyMeta && (
+                <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                  {symbologyMeta.name}
+                </span>
+              )}
+            </div>
             <button
               type="button"
               title="Insert Symbols or Special Characters"
@@ -183,6 +216,7 @@ export const DataEditModal: React.FC<DataEditModalProps> = ({
               rows={4}
               value={dataValue}
               onChange={(e) => setDataValue(e.target.value)}
+              onKeyDown={handleKeyDown}
               autoFocus
               className="flex-1 bg-white border border-[#94a3b8] rounded-xs p-2 font-mono text-sm text-slate-900 focus:outline-[#0078d7] resize-none"
               placeholder="Enter embedded data..."
@@ -204,6 +238,10 @@ export const DataEditModal: React.FC<DataEditModalProps> = ({
                 Data Source...
               </button>
             </div>
+          </div>
+          <div className="flex justify-between items-center text-[10.5px] text-slate-500 pt-1">
+            <span>Length: {dataValue.length} characters</span>
+            <span className="italic text-slate-400">Press Enter to save</span>
           </div>
         </div>
 

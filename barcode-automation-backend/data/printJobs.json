@@ -1,5 +1,24 @@
 [
   {
+    "id": "PJ-8268",
+    "templateId": "tmpl-1789472712907",
+    "templateName": "Document208.btw",
+    "printerId": "prn-os-3",
+    "printerName": "Export to WPS PDF",
+    "copies": 5,
+    "recordCount": 1,
+    "status": "failed",
+    "format": "pdf",
+    "submittedBy": "Operator (BarcodeFlow Suite)",
+    "submittedAt": "2026-09-15T11:47:12.249Z",
+    "progressPercent": 0,
+    "rawOutput": "{\n  \"format\": \"pdf\",\n  \"templateId\": \"tmpl-1789472712907\",\n  \"templateName\": \"Document208.btw\",\n  \"dimensions\": {\n    \"width\": 50,\n    \"height\": 25,\n    \"unit\": \"mm\",\n    \"dpi\": 203,\n    \"orientation\": \"portrait\",\n    \"shape\": \"rectangle\",\n    \"cornerRadius\": 0\n  },\n  \"recordsCount\": 1,\n  \"copies\": 5,\n  \"generatedAt\": \"2026-09-15T11:47:12.249Z\"\n}",
+    "dataSnapshot": [
+      {}
+    ],
+    "errorMessage": "ENOTFOUND"
+  },
+  {
     "id": "PJ-4834",
     "templateId": "tmpl-1789369824056",
     "templateName": "Document371.btw",

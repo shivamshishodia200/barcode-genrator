@@ -194,20 +194,145 @@ export interface TransformRule {
   };
 }
 
-export interface SerializationConfig {
+export interface DynamicValueSource {
+  sourceType: 'constant' | 'database' | 'named_source' | 'unlimited';
+  value: number;
+  databaseField?: string;
+  namedSource?: string;
+  allowRecordOverride?: boolean;
+  isUnlimited?: boolean;
+}
+
+export type SerializationEvent =
+  | 'standard'
+  | 'record'
+  | 'page'
+  | 'job'
+  | 'data_change'
+  | 'copy'
+  | 'item'
+  | 'interval';
+
+export type SerializationMethod =
+  | 'alphabetic_and_numeric'
+  | 'numeric'
+  | 'alphabetic'
+  | 'alphanumeric'
+  | 'hexadecimal'
+  | 'custom';
+
+export type LetterCaseOption =
+  | 'uppercase'
+  | 'uppercase_no_io'
+  | 'lowercase'
+  | 'lowercase_no_l'
+  | 'uppercase_hex'
+  | 'lowercase_hex';
+
+export interface SerializationDefinition {
   action: 'none' | 'increment' | 'decrement';
-  method: 'alphanumeric' | 'numeric' | 'alphabetic';
-  letterCase?: 'uppercase' | 'lowercase';
+  method: SerializationMethod | 'alphanumeric' | 'numeric' | 'alphabetic';
+  letterCase?: LetterCaseOption | 'uppercase' | 'lowercase';
+  customSequence?: string;
   preserveCharacters: boolean;
   incrementBy: number;
-  event: 'standard' | 'item' | 'record' | 'interval';
+  incrementBySource?: DynamicValueSource;
+  event: SerializationEvent;
   eventInterval: number;
+  eventIntervalSource?: DynamicValueSource;
+  dataItem?: string;
+  dataItemSource?: DynamicValueSource;
+  serialNumbers?: number;
+  serialNumbersSource?: DynamicValueSource;
   copies: number;
+  copiesSource?: DynamicValueSource;
+  prefix?: string;
+  suffix?: string;
   resetRule?: 'never' | 'manual' | 'start' | 'daily' | 'weekly' | 'monthly' | 'record' | 'change';
   resetValue?: string;
+}
+
+export interface SerializationConfig extends SerializationDefinition {
   currentValue?: string;
   lastResetAt?: string;
   lastResetReason?: string;
+}
+
+export interface SerializationState {
+  sourceId: string;
+  currentCommittedValue: string;
+  lastCommittedAt: string;
+  version: number;
+}
+
+export type SerialReservationStatus =
+  | 'PREPARED'
+  | 'RESERVED'
+  | 'SUBMITTED'
+  | 'COMMITTED'
+  | 'ROLLED_BACK'
+  | 'PARTIALLY_PRINTED'
+  | 'PRINTED_OR_SUBMITTED_BUT_COMMIT_FAILED'
+  | 'UNKNOWN';
+
+export interface SerialReservation {
+  id: string;
+  sourceId: string;
+  documentId: string;
+  jobId: string;
+  startValue: string;
+  endValue: string;
+  count: number;
+  status: SerialReservationStatus;
+  createdAt: string;
+  updatedAt: string;
+  printedCount?: number;
+  remainingCount?: number;
+  lastBatchIndex?: number;
+  totalBatches?: number;
+  clientRequestId?: string;
+  error?: string;
+}
+
+export interface SerialJournalEntry {
+  id: string;
+  sourceId: string;
+  oldValue: string;
+  newValue: string;
+  jobId?: string;
+  reservationId?: string;
+  timestamp: string;
+  reason: string;
+  status: 'committed' | 'rolled_back' | 'reset' | 'failed';
+}
+
+export type PrintCommitPolicy =
+  | 'WHOLE_JOB_ON_DISPATCH'
+  | 'WHOLE_JOB_ON_COMPLETION'
+  | 'PER_ITEM'
+  | 'PER_BATCH'
+  | 'MANUAL_CONFIRMATION';
+
+export interface PrintJobItem {
+  itemIndex: number;
+  recordIndex: number;
+  copyIndex: number;
+  serialValue?: string;
+  status: 'pending' | 'spooled' | 'printed' | 'unknown' | 'failed';
+  printedAt?: string;
+}
+
+export interface PrintJobBatch {
+  batchIndex: number;
+  startIndex: number;
+  endIndex: number;
+  startSerial?: string;
+  endSerial?: string;
+  count: number;
+  status: 'pending' | 'submitting' | 'submitted' | 'printed' | 'unknown' | 'failed';
+  dispatchedAt?: string;
+  completedAt?: string;
+  rawPayload?: string;
 }
 
 export interface DataTypeFormatConfig {
@@ -939,13 +1064,14 @@ export interface PrinterDefinition {
 
 export interface PrintJob {
   id: string;
+  clientRequestId?: string;
   templateId: string;
   templateName: string;
   printerId: string;
   printerName: string;
   copies: number;
   recordCount: number;
-  status: 'queued' | 'printing' | 'completed' | 'failed' | 'paused';
+  status: 'queued' | 'printing' | 'completed' | 'failed' | 'paused' | 'CREATED' | 'RESERVED' | 'RENDERED' | 'SUBMITTING' | 'SUBMITTED' | 'SPOOLING' | 'PRINTING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'PARTIAL' | 'UNKNOWN';
   format: 'zpl' | 'epl' | 'tspl' | 'cpcl' | 'sbpl' | 'escpos' | 'pdf' | 'png' | 'svg';
   submittedBy: string;
   submittedAt: string;
@@ -962,6 +1088,18 @@ export interface PrintJob {
   datasetName?: string;
   excelFilePath?: string;
   excelSheetName?: string;
+  // Production Serialization & Telemetry fields
+  reservationId?: string;
+  serialStart?: string;
+  serialEnd?: string;
+  confirmedCount?: number;
+  unknownCount?: number;
+  failedCount?: number;
+  commitPolicy?: PrintCommitPolicy;
+  spoolerJobId?: number | string;
+  batches?: PrintJobBatch[];
+  items?: PrintJobItem[];
+  templateSnapshot?: LabelTemplate;
 }
 
 export interface CanvasAnnotation {

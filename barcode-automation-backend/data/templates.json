@@ -1,5 +1,2064 @@
 [
   {
+    "id": "tmpl-1789472712907",
+    "name": "Document208.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [
+      {
+        "id": "el-bar-1789472729943",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "006",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1,
+        "barHeight": 15,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 6,
+        "y": 6,
+        "width": 40,
+        "height": 15,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 1,
+        "dataSources": [
+          {
+            "id": "ds-1789472744628",
+            "name": "Embedded Data",
+            "type": "embedded",
+            "value": "006",
+            "enabled": true,
+            "serialization": {
+              "action": "increment",
+              "method": "alphabetic_and_numeric",
+              "letterCase": "uppercase",
+              "customSequence": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+              "preserveCharacters": false,
+              "incrementBy": 1,
+              "event": "standard",
+              "eventInterval": 1,
+              "dataItem": "",
+              "serialNumbers": 1,
+              "copies": 1,
+              "resetRule": "never",
+              "resetValue": "",
+              "currentValue": "006"
+            },
+            "transformConfig": {
+              "serialization": {
+                "action": "increment",
+                "method": "alphabetic_and_numeric",
+                "letterCase": "uppercase",
+                "customSequence": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                "preserveCharacters": false,
+                "incrementBy": 1,
+                "event": "standard",
+                "eventInterval": 1,
+                "dataItem": "",
+                "serialNumbers": 1,
+                "copies": 1,
+                "resetRule": "never",
+                "resetValue": "",
+                "currentValue": "006"
+              }
+            }
+          }
+        ],
+        "barcodeValue": "001",
+        "content": "001",
+        "humanReadableAlignment": "centered",
+        "humanReadableFont": "Arial",
+        "humanReadableFontSize": 12,
+        "fontFamily": "Arial",
+        "fontSize": 12,
+        "fontWeight": "normal",
+        "fontStyle": "normal",
+        "underline": false,
+        "humanReadableUnderline": false,
+        "humanReadableStrikeout": false,
+        "humanReadableColor": "#000000",
+        "color": "#000000",
+        "textFormatType": "single-line",
+        "autoSize": false,
+        "autoSizeText": false,
+        "minFontSize": 6,
+        "maxFontSize": 20,
+        "minWidthScale": 80,
+        "maxWidthScale": 100,
+        "horizontalAlignment": "center",
+        "verticalAlignment": "middle",
+        "tabsConfig": [],
+        "effectsConfig": {
+          "letterSpacing": 0,
+          "lineSpacing": 1.15,
+          "opacity": 100,
+          "outline": false,
+          "outlineColor": "#000000",
+          "outlineWidth": 1,
+          "shadow": false,
+          "shadowColor": "#888888",
+          "shadowBlur": 2,
+          "shadowOffsetX": 1,
+          "shadowOffsetY": 1,
+          "strikeout": false,
+          "underline": false
+        },
+        "borderType": "none",
+        "borderThickness": 0.5,
+        "borderColor": "#000000",
+        "borderDashStyle": "solid",
+        "cornerRadius": 0,
+        "borderPadding": 0,
+        "errorCorrectionLevel": "M",
+        "bearerBars": false,
+        "bearerBarType": "top-bottom",
+        "bearerBarThickness": 1
+      }
+    ],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-15T11:45:12.907Z",
+    "updatedAt": "2026-09-15T11:47:14.234Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789472349601",
+    "name": "Document123.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 300,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [
+      {
+        "id": "el-bar-1789472352189",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "10850006531238",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1,
+        "barHeight": 15,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 6,
+        "y": 6,
+        "width": 40,
+        "height": 15,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 1,
+        "dataSources": [
+          {
+            "id": "ds-1789472355909",
+            "name": "Primary Data Source",
+            "type": "embedded",
+            "value": "10850006531238",
+            "enabled": true,
+            "serialization": {
+              "action": "increment",
+              "method": "alphabetic_and_numeric",
+              "letterCase": "uppercase",
+              "customSequence": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+              "preserveCharacters": false,
+              "incrementBy": 1,
+              "event": "standard",
+              "eventInterval": 1,
+              "dataItem": "",
+              "serialNumbers": 1,
+              "copies": 1,
+              "resetRule": "never",
+              "resetValue": ""
+            },
+            "transformConfig": {
+              "serialization": {
+                "action": "increment",
+                "method": "alphabetic_and_numeric",
+                "letterCase": "uppercase",
+                "customSequence": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                "preserveCharacters": false,
+                "incrementBy": 1,
+                "event": "standard",
+                "eventInterval": 1,
+                "dataItem": "",
+                "serialNumbers": 1,
+                "copies": 1,
+                "resetRule": "never",
+                "resetValue": ""
+              }
+            }
+          }
+        ],
+        "humanReadableAlignment": "centered",
+        "humanReadableFont": "Arial",
+        "humanReadableFontSize": 12,
+        "fontFamily": "Arial",
+        "fontSize": 12,
+        "fontWeight": "normal",
+        "fontStyle": "normal",
+        "underline": false,
+        "humanReadableUnderline": false,
+        "humanReadableStrikeout": false,
+        "humanReadableColor": "#000000",
+        "color": "#000000",
+        "textFormatType": "single-line",
+        "autoSize": false,
+        "autoSizeText": false,
+        "minFontSize": 6,
+        "maxFontSize": 20,
+        "minWidthScale": 80,
+        "maxWidthScale": 100,
+        "horizontalAlignment": "center",
+        "verticalAlignment": "middle",
+        "tabsConfig": [],
+        "effectsConfig": {
+          "letterSpacing": 0,
+          "lineSpacing": 1.15,
+          "opacity": 100,
+          "outline": false,
+          "outlineColor": "#000000",
+          "outlineWidth": 1,
+          "shadow": false,
+          "shadowColor": "#888888",
+          "shadowBlur": 2,
+          "shadowOffsetX": 1,
+          "shadowOffsetY": 1,
+          "strikeout": false,
+          "underline": false
+        },
+        "borderType": "none",
+        "borderThickness": 0.5,
+        "borderColor": "#000000",
+        "borderDashStyle": "solid",
+        "cornerRadius": 0,
+        "borderPadding": 0,
+        "errorCorrectionLevel": "M",
+        "bearerBars": false,
+        "bearerBarType": "top-bottom",
+        "bearerBarThickness": 1
+      }
+    ],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "300 DPI"
+    ],
+    "printer": {
+      "id": "prn-os-3",
+      "name": "Export to WPS PDF",
+      "systemName": "Export to WPS PDF",
+      "driverName": "Kingsoft Virtual Printer Driver",
+      "portName": 9100,
+      "dpi": 300,
+      "renderer": "WINDOWS_DRIVER",
+      "manufacturer": "Desktop PDF",
+      "model": "Kingsoft Virtual Printer Driver"
+    },
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-15T11:39:09.601Z",
+    "updatedAt": "2026-09-15T11:39:37.907Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-document1-btw",
+    "name": "Document1.btw",
+    "description": "Industrial Dual Barcode Label Format",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "published",
+    "complianceStandard": "Custom",
+    "dimensions": {
+      "width": 100,
+      "height": 50,
+      "unit": "mm",
+      "dpi": 300,
+      "orientation": "landscape"
+    },
+    "margins": {
+      "top": 2,
+      "right": 2,
+      "bottom": 2,
+      "left": 2,
+      "bleed": 1,
+      "safeZone": 2
+    },
+    "tags": [
+      "BarCode Automation",
+      "Direct Thermal",
+      "Industrial",
+      "Dual Barcode"
+    ],
+    "createdBy": "Administrator",
+    "createdAt": "2026-08-14T10:00:00Z",
+    "updatedAt": "2026-09-15T11:39:00.239Z",
+    "approvedBy": "Lead Engineer",
+    "approvedAt": "2026-08-14T18:30:00Z",
+    "variables": [
+      {
+        "id": "v1",
+        "name": "CODE_VAL",
+        "type": "static",
+        "defaultValue": "12345678"
+      }
+    ],
+    "sampleRecords": [
+      {
+        "CODE_VAL": "12345678"
+      },
+      {
+        "CODE_VAL": "87654321"
+      },
+      {
+        "CODE_VAL": "99001122"
+      }
+    ],
+    "elements": [
+      {
+        "id": "el-barcode-2",
+        "name": "Barcode 3",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "001",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 2,
+        "barHeight": 15.2,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": false,
+        "x": 10.9,
+        "y": 22.1,
+        "width": 68.6,
+        "height": 15.2,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 2,
+        "dataSources": [
+          {
+            "id": "ds-1789472296471",
+            "name": "Embedded Data",
+            "type": "embedded",
+            "value": "001",
+            "enabled": true,
+            "serialization": {
+              "action": "increment",
+              "method": "alphabetic_and_numeric",
+              "letterCase": "uppercase",
+              "customSequence": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+              "preserveCharacters": false,
+              "incrementBy": 1,
+              "event": "standard",
+              "eventInterval": 1,
+              "dataItem": "",
+              "serialNumbers": 1,
+              "copies": 1,
+              "resetRule": "never",
+              "resetValue": ""
+            },
+            "transformConfig": {
+              "serialization": {
+                "action": "increment",
+                "method": "alphabetic_and_numeric",
+                "letterCase": "uppercase",
+                "customSequence": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                "preserveCharacters": false,
+                "incrementBy": 1,
+                "event": "standard",
+                "eventInterval": 1,
+                "dataItem": "",
+                "serialNumbers": 1,
+                "copies": 1,
+                "resetRule": "never",
+                "resetValue": ""
+              }
+            }
+          }
+        ],
+        "barcodeValue": "001",
+        "content": "001",
+        "humanReadableAlignment": "centered",
+        "humanReadableFont": "Arial",
+        "humanReadableFontSize": 12,
+        "fontFamily": "Arial",
+        "fontSize": 12,
+        "fontWeight": "normal",
+        "fontStyle": "normal",
+        "underline": false,
+        "humanReadableUnderline": false,
+        "humanReadableStrikeout": false,
+        "humanReadableColor": "#000000",
+        "color": "#000000",
+        "textFormatType": "single-line",
+        "autoSize": false,
+        "autoSizeText": false,
+        "minFontSize": 6,
+        "maxFontSize": 20,
+        "minWidthScale": 80,
+        "maxWidthScale": 100,
+        "horizontalAlignment": "center",
+        "verticalAlignment": "middle",
+        "tabsConfig": [],
+        "effectsConfig": {
+          "letterSpacing": 0,
+          "lineSpacing": 1.15,
+          "opacity": 100,
+          "outline": false,
+          "outlineColor": "#000000",
+          "outlineWidth": 1,
+          "shadow": false,
+          "shadowColor": "#888888",
+          "shadowBlur": 2,
+          "shadowOffsetX": 1,
+          "shadowOffsetY": 1,
+          "strikeout": false,
+          "underline": false
+        },
+        "borderType": "none",
+        "borderThickness": 0.5,
+        "borderColor": "#000000",
+        "borderDashStyle": "solid",
+        "cornerRadius": 0,
+        "borderPadding": 0,
+        "errorCorrectionLevel": "M",
+        "bearerBars": false,
+        "bearerBarType": "top-bottom",
+        "bearerBarThickness": 1
+      }
+    ],
+    "databaseConnection": {
+      "id": "db-1788866028949",
+      "name": "BarTender_Test_Data",
+      "type": "excel",
+      "mode": "linked",
+      "filePath": "BarTender_Test_Data.xlsx",
+      "fileName": "BarTender_Test_Data.xlsx",
+      "sheetName": "Products$'",
+      "availableSheets": [
+        "Products$'"
+      ],
+      "fields": [
+        "ProductID",
+        "ProductName",
+        "Barcode",
+        "Price",
+        "Batch",
+        "ExpiryDate",
+        "Quantity"
+      ],
+      "records": [
+        {
+          "ProductID": "P001",
+          "ProductName": "Sample Product 1",
+          "Barcode": "8901234000001",
+          "Price": "11.5",
+          "Batch": "B202602",
+          "ExpiryDate": "2027-02-15",
+          "Quantity": "5"
+        },
+        {
+          "ProductID": "P002",
+          "ProductName": "Sample Product 2",
+          "Barcode": "8901234000002",
+          "Price": "13",
+          "Batch": "B202603",
+          "ExpiryDate": "2027-03-15",
+          "Quantity": "10"
+        },
+        {
+          "ProductID": "P003",
+          "ProductName": "Sample Product 3",
+          "Barcode": "8901234000003",
+          "Price": "14.5",
+          "Batch": "B202604",
+          "ExpiryDate": "2027-04-15",
+          "Quantity": "15"
+        },
+        {
+          "ProductID": "P004",
+          "ProductName": "Sample Product 4",
+          "Barcode": "8901234000004",
+          "Price": "16",
+          "Batch": "B202605",
+          "ExpiryDate": "2027-05-15",
+          "Quantity": "20"
+        },
+        {
+          "ProductID": "P005",
+          "ProductName": "Sample Product 5",
+          "Barcode": "8901234000005",
+          "Price": "17.5",
+          "Batch": "B202606",
+          "ExpiryDate": "2027-06-15",
+          "Quantity": "25"
+        },
+        {
+          "ProductID": "P006",
+          "ProductName": "Sample Product 6",
+          "Barcode": "8901234000006",
+          "Price": "19",
+          "Batch": "B202607",
+          "ExpiryDate": "2027-07-15",
+          "Quantity": "30"
+        },
+        {
+          "ProductID": "P007",
+          "ProductName": "Sample Product 7",
+          "Barcode": "8901234000007",
+          "Price": "20.5",
+          "Batch": "B202608",
+          "ExpiryDate": "2027-08-15",
+          "Quantity": "35"
+        },
+        {
+          "ProductID": "P008",
+          "ProductName": "Sample Product 8",
+          "Barcode": "8901234000008",
+          "Price": "22",
+          "Batch": "B202609",
+          "ExpiryDate": "2027-09-15",
+          "Quantity": "40"
+        },
+        {
+          "ProductID": "P009",
+          "ProductName": "Sample Product 9",
+          "Barcode": "8901234000009",
+          "Price": "23.5",
+          "Batch": "B202610",
+          "ExpiryDate": "2027-10-15",
+          "Quantity": "45"
+        },
+        {
+          "ProductID": "P010",
+          "ProductName": "Sample Product 10",
+          "Barcode": "8901234000010",
+          "Price": "25",
+          "Batch": "B202611",
+          "ExpiryDate": "2027-11-15",
+          "Quantity": "50"
+        },
+        {
+          "ProductID": "P011",
+          "ProductName": "Sample Product 11",
+          "Barcode": "8901234000011",
+          "Price": "26.5",
+          "Batch": "B202612",
+          "ExpiryDate": "2027-12-15",
+          "Quantity": "55"
+        },
+        {
+          "ProductID": "P012",
+          "ProductName": "Sample Product 12",
+          "Barcode": "8901234000012",
+          "Price": "28",
+          "Batch": "B202601",
+          "ExpiryDate": "2027-01-15",
+          "Quantity": "60"
+        },
+        {
+          "ProductID": "P013",
+          "ProductName": "Sample Product 13",
+          "Barcode": "8901234000013",
+          "Price": "29.5",
+          "Batch": "B202602",
+          "ExpiryDate": "2027-02-15",
+          "Quantity": "65"
+        },
+        {
+          "ProductID": "P014",
+          "ProductName": "Sample Product 14",
+          "Barcode": "8901234000014",
+          "Price": "31",
+          "Batch": "B202603",
+          "ExpiryDate": "2027-03-15",
+          "Quantity": "70"
+        },
+        {
+          "ProductID": "P015",
+          "ProductName": "Sample Product 15",
+          "Barcode": "8901234000015",
+          "Price": "32.5",
+          "Batch": "B202604",
+          "ExpiryDate": "2027-04-15",
+          "Quantity": "75"
+        },
+        {
+          "ProductID": "P016",
+          "ProductName": "Sample Product 16",
+          "Barcode": "8901234000016",
+          "Price": "34",
+          "Batch": "B202605",
+          "ExpiryDate": "2027-05-15",
+          "Quantity": "80"
+        },
+        {
+          "ProductID": "P017",
+          "ProductName": "Sample Product 17",
+          "Barcode": "8901234000017",
+          "Price": "35.5",
+          "Batch": "B202606",
+          "ExpiryDate": "2027-06-15",
+          "Quantity": "85"
+        },
+        {
+          "ProductID": "P018",
+          "ProductName": "Sample Product 18",
+          "Barcode": "8901234000018",
+          "Price": "37",
+          "Batch": "B202607",
+          "ExpiryDate": "2027-07-15",
+          "Quantity": "90"
+        },
+        {
+          "ProductID": "P019",
+          "ProductName": "Sample Product 19",
+          "Barcode": "8901234000019",
+          "Price": "38.5",
+          "Batch": "B202608",
+          "ExpiryDate": "2027-08-15",
+          "Quantity": "95"
+        },
+        {
+          "ProductID": "P020",
+          "ProductName": "Sample Product 20",
+          "Barcode": "8901234000020",
+          "Price": "40",
+          "Batch": "B202609",
+          "ExpiryDate": "2027-09-15",
+          "Quantity": "100"
+        },
+        {
+          "ProductID": "P021",
+          "ProductName": "Sample Product 21",
+          "Barcode": "8901234000021",
+          "Price": "41.5",
+          "Batch": "B202610",
+          "ExpiryDate": "2027-10-15",
+          "Quantity": "105"
+        },
+        {
+          "ProductID": "P022",
+          "ProductName": "Sample Product 22",
+          "Barcode": "8901234000022",
+          "Price": "43",
+          "Batch": "B202611",
+          "ExpiryDate": "2027-11-15",
+          "Quantity": "110"
+        },
+        {
+          "ProductID": "P023",
+          "ProductName": "Sample Product 23",
+          "Barcode": "8901234000023",
+          "Price": "44.5",
+          "Batch": "B202612",
+          "ExpiryDate": "2027-12-15",
+          "Quantity": "115"
+        },
+        {
+          "ProductID": "P024",
+          "ProductName": "Sample Product 24",
+          "Barcode": "8901234000024",
+          "Price": "46",
+          "Batch": "B202601",
+          "ExpiryDate": "2027-01-15",
+          "Quantity": "120"
+        },
+        {
+          "ProductID": "P025",
+          "ProductName": "Sample Product 25",
+          "Barcode": "8901234000025",
+          "Price": "47.5",
+          "Batch": "B202602",
+          "ExpiryDate": "2027-02-15",
+          "Quantity": "125"
+        },
+        {
+          "ProductID": "P026",
+          "ProductName": "Sample Product 26",
+          "Barcode": "8901234000026",
+          "Price": "49",
+          "Batch": "B202603",
+          "ExpiryDate": "2027-03-15",
+          "Quantity": "130"
+        },
+        {
+          "ProductID": "P027",
+          "ProductName": "Sample Product 27",
+          "Barcode": "8901234000027",
+          "Price": "50.5",
+          "Batch": "B202604",
+          "ExpiryDate": "2027-04-15",
+          "Quantity": "135"
+        },
+        {
+          "ProductID": "P028",
+          "ProductName": "Sample Product 28",
+          "Barcode": "8901234000028",
+          "Price": "52",
+          "Batch": "B202605",
+          "ExpiryDate": "2027-05-15",
+          "Quantity": "140"
+        },
+        {
+          "ProductID": "P029",
+          "ProductName": "Sample Product 29",
+          "Barcode": "8901234000029",
+          "Price": "53.5",
+          "Batch": "B202606",
+          "ExpiryDate": "2027-06-15",
+          "Quantity": "145"
+        },
+        {
+          "ProductID": "P030",
+          "ProductName": "Sample Product 30",
+          "Barcode": "8901234000030",
+          "Price": "55",
+          "Batch": "B202607",
+          "ExpiryDate": "2027-07-15",
+          "Quantity": "150"
+        },
+        {
+          "ProductID": "P031",
+          "ProductName": "Sample Product 31",
+          "Barcode": "8901234000031",
+          "Price": "56.5",
+          "Batch": "B202608",
+          "ExpiryDate": "2027-08-15",
+          "Quantity": "155"
+        },
+        {
+          "ProductID": "P032",
+          "ProductName": "Sample Product 32",
+          "Barcode": "8901234000032",
+          "Price": "58",
+          "Batch": "B202609",
+          "ExpiryDate": "2027-09-15",
+          "Quantity": "160"
+        },
+        {
+          "ProductID": "P033",
+          "ProductName": "Sample Product 33",
+          "Barcode": "8901234000033",
+          "Price": "59.5",
+          "Batch": "B202610",
+          "ExpiryDate": "2027-10-15",
+          "Quantity": "165"
+        },
+        {
+          "ProductID": "P034",
+          "ProductName": "Sample Product 34",
+          "Barcode": "8901234000034",
+          "Price": "61",
+          "Batch": "B202611",
+          "ExpiryDate": "2027-11-15",
+          "Quantity": "170"
+        },
+        {
+          "ProductID": "P035",
+          "ProductName": "Sample Product 35",
+          "Barcode": "8901234000035",
+          "Price": "62.5",
+          "Batch": "B202612",
+          "ExpiryDate": "2027-12-15",
+          "Quantity": "175"
+        },
+        {
+          "ProductID": "P036",
+          "ProductName": "Sample Product 36",
+          "Barcode": "8901234000036",
+          "Price": "64",
+          "Batch": "B202601",
+          "ExpiryDate": "2027-01-15",
+          "Quantity": "180"
+        },
+        {
+          "ProductID": "P037",
+          "ProductName": "Sample Product 37",
+          "Barcode": "8901234000037",
+          "Price": "65.5",
+          "Batch": "B202602",
+          "ExpiryDate": "2027-02-15",
+          "Quantity": "185"
+        },
+        {
+          "ProductID": "P038",
+          "ProductName": "Sample Product 38",
+          "Barcode": "8901234000038",
+          "Price": "67",
+          "Batch": "B202603",
+          "ExpiryDate": "2027-03-15",
+          "Quantity": "190"
+        },
+        {
+          "ProductID": "P039",
+          "ProductName": "Sample Product 39",
+          "Barcode": "8901234000039",
+          "Price": "68.5",
+          "Batch": "B202604",
+          "ExpiryDate": "2027-04-15",
+          "Quantity": "195"
+        },
+        {
+          "ProductID": "P040",
+          "ProductName": "Sample Product 40",
+          "Barcode": "8901234000040",
+          "Price": "70",
+          "Batch": "B202605",
+          "ExpiryDate": "2027-05-15",
+          "Quantity": "200"
+        },
+        {
+          "ProductID": "P041",
+          "ProductName": "Sample Product 41",
+          "Barcode": "8901234000041",
+          "Price": "71.5",
+          "Batch": "B202606",
+          "ExpiryDate": "2027-06-15",
+          "Quantity": "205"
+        },
+        {
+          "ProductID": "P042",
+          "ProductName": "Sample Product 42",
+          "Barcode": "8901234000042",
+          "Price": "73",
+          "Batch": "B202607",
+          "ExpiryDate": "2027-07-15",
+          "Quantity": "210"
+        },
+        {
+          "ProductID": "P043",
+          "ProductName": "Sample Product 43",
+          "Barcode": "8901234000043",
+          "Price": "74.5",
+          "Batch": "B202608",
+          "ExpiryDate": "2027-08-15",
+          "Quantity": "215"
+        },
+        {
+          "ProductID": "P044",
+          "ProductName": "Sample Product 44",
+          "Barcode": "8901234000044",
+          "Price": "76",
+          "Batch": "B202609",
+          "ExpiryDate": "2027-09-15",
+          "Quantity": "220"
+        },
+        {
+          "ProductID": "P045",
+          "ProductName": "Sample Product 45",
+          "Barcode": "8901234000045",
+          "Price": "77.5",
+          "Batch": "B202610",
+          "ExpiryDate": "2027-10-15",
+          "Quantity": "225"
+        },
+        {
+          "ProductID": "P046",
+          "ProductName": "Sample Product 46",
+          "Barcode": "8901234000046",
+          "Price": "79",
+          "Batch": "B202611",
+          "ExpiryDate": "2027-11-15",
+          "Quantity": "230"
+        },
+        {
+          "ProductID": "P047",
+          "ProductName": "Sample Product 47",
+          "Barcode": "8901234000047",
+          "Price": "80.5",
+          "Batch": "B202612",
+          "ExpiryDate": "2027-12-15",
+          "Quantity": "235"
+        },
+        {
+          "ProductID": "P048",
+          "ProductName": "Sample Product 48",
+          "Barcode": "8901234000048",
+          "Price": "82",
+          "Batch": "B202601",
+          "ExpiryDate": "2027-01-15",
+          "Quantity": "240"
+        },
+        {
+          "ProductID": "P049",
+          "ProductName": "Sample Product 49",
+          "Barcode": "8901234000049",
+          "Price": "83.5",
+          "Batch": "B202602",
+          "ExpiryDate": "2027-02-15",
+          "Quantity": "245"
+        },
+        {
+          "ProductID": "P050",
+          "ProductName": "Sample Product 50",
+          "Barcode": "8901234000050",
+          "Price": "85",
+          "Batch": "B202603",
+          "ExpiryDate": "2027-03-15",
+          "Quantity": "250"
+        },
+        {
+          "ProductID": "P051",
+          "ProductName": "Sample Product 51",
+          "Barcode": "8901234000051",
+          "Price": "86.5",
+          "Batch": "B202604",
+          "ExpiryDate": "2027-04-15",
+          "Quantity": "255"
+        },
+        {
+          "ProductID": "P052",
+          "ProductName": "Sample Product 52",
+          "Barcode": "8901234000052",
+          "Price": "88",
+          "Batch": "B202605",
+          "ExpiryDate": "2027-05-15",
+          "Quantity": "260"
+        },
+        {
+          "ProductID": "P053",
+          "ProductName": "Sample Product 53",
+          "Barcode": "8901234000053",
+          "Price": "89.5",
+          "Batch": "B202606",
+          "ExpiryDate": "2027-06-15",
+          "Quantity": "265"
+        },
+        {
+          "ProductID": "P054",
+          "ProductName": "Sample Product 54",
+          "Barcode": "8901234000054",
+          "Price": "91",
+          "Batch": "B202607",
+          "ExpiryDate": "2027-07-15",
+          "Quantity": "270"
+        },
+        {
+          "ProductID": "P055",
+          "ProductName": "Sample Product 55",
+          "Barcode": "8901234000055",
+          "Price": "92.5",
+          "Batch": "B202608",
+          "ExpiryDate": "2027-08-15",
+          "Quantity": "275"
+        },
+        {
+          "ProductID": "P056",
+          "ProductName": "Sample Product 56",
+          "Barcode": "8901234000056",
+          "Price": "94",
+          "Batch": "B202609",
+          "ExpiryDate": "2027-09-15",
+          "Quantity": "280"
+        },
+        {
+          "ProductID": "P057",
+          "ProductName": "Sample Product 57",
+          "Barcode": "8901234000057",
+          "Price": "95.5",
+          "Batch": "B202610",
+          "ExpiryDate": "2027-10-15",
+          "Quantity": "285"
+        },
+        {
+          "ProductID": "P058",
+          "ProductName": "Sample Product 58",
+          "Barcode": "8901234000058",
+          "Price": "97",
+          "Batch": "B202611",
+          "ExpiryDate": "2027-11-15",
+          "Quantity": "290"
+        },
+        {
+          "ProductID": "P059",
+          "ProductName": "Sample Product 59",
+          "Barcode": "8901234000059",
+          "Price": "98.5",
+          "Batch": "B202612",
+          "ExpiryDate": "2027-12-15",
+          "Quantity": "295"
+        },
+        {
+          "ProductID": "P060",
+          "ProductName": "Sample Product 60",
+          "Barcode": "8901234000060",
+          "Price": "100",
+          "Batch": "B202601",
+          "ExpiryDate": "2027-01-15",
+          "Quantity": "300"
+        },
+        {
+          "ProductID": "P061",
+          "ProductName": "Sample Product 61",
+          "Barcode": "8901234000061",
+          "Price": "101.5",
+          "Batch": "B202602",
+          "ExpiryDate": "2027-02-15",
+          "Quantity": "305"
+        },
+        {
+          "ProductID": "P062",
+          "ProductName": "Sample Product 62",
+          "Barcode": "8901234000062",
+          "Price": "103",
+          "Batch": "B202603",
+          "ExpiryDate": "2027-03-15",
+          "Quantity": "310"
+        },
+        {
+          "ProductID": "P063",
+          "ProductName": "Sample Product 63",
+          "Barcode": "8901234000063",
+          "Price": "104.5",
+          "Batch": "B202604",
+          "ExpiryDate": "2027-04-15",
+          "Quantity": "315"
+        },
+        {
+          "ProductID": "P064",
+          "ProductName": "Sample Product 64",
+          "Barcode": "8901234000064",
+          "Price": "106",
+          "Batch": "B202605",
+          "ExpiryDate": "2027-05-15",
+          "Quantity": "320"
+        },
+        {
+          "ProductID": "P065",
+          "ProductName": "Sample Product 65",
+          "Barcode": "8901234000065",
+          "Price": "107.5",
+          "Batch": "B202606",
+          "ExpiryDate": "2027-06-15",
+          "Quantity": "325"
+        },
+        {
+          "ProductID": "P066",
+          "ProductName": "Sample Product 66",
+          "Barcode": "8901234000066",
+          "Price": "109",
+          "Batch": "B202607",
+          "ExpiryDate": "2027-07-15",
+          "Quantity": "330"
+        },
+        {
+          "ProductID": "P067",
+          "ProductName": "Sample Product 67",
+          "Barcode": "8901234000067",
+          "Price": "110.5",
+          "Batch": "B202608",
+          "ExpiryDate": "2027-08-15",
+          "Quantity": "335"
+        },
+        {
+          "ProductID": "P068",
+          "ProductName": "Sample Product 68",
+          "Barcode": "8901234000068",
+          "Price": "112",
+          "Batch": "B202609",
+          "ExpiryDate": "2027-09-15",
+          "Quantity": "340"
+        },
+        {
+          "ProductID": "P069",
+          "ProductName": "Sample Product 69",
+          "Barcode": "8901234000069",
+          "Price": "113.5",
+          "Batch": "B202610",
+          "ExpiryDate": "2027-10-15",
+          "Quantity": "345"
+        },
+        {
+          "ProductID": "P070",
+          "ProductName": "Sample Product 70",
+          "Barcode": "8901234000070",
+          "Price": "115",
+          "Batch": "B202611",
+          "ExpiryDate": "2027-11-15",
+          "Quantity": "350"
+        },
+        {
+          "ProductID": "P071",
+          "ProductName": "Sample Product 71",
+          "Barcode": "8901234000071",
+          "Price": "116.5",
+          "Batch": "B202612",
+          "ExpiryDate": "2027-12-15",
+          "Quantity": "355"
+        },
+        {
+          "ProductID": "P072",
+          "ProductName": "Sample Product 72",
+          "Barcode": "8901234000072",
+          "Price": "118",
+          "Batch": "B202601",
+          "ExpiryDate": "2027-01-15",
+          "Quantity": "360"
+        },
+        {
+          "ProductID": "P073",
+          "ProductName": "Sample Product 73",
+          "Barcode": "8901234000073",
+          "Price": "119.5",
+          "Batch": "B202602",
+          "ExpiryDate": "2027-02-15",
+          "Quantity": "365"
+        },
+        {
+          "ProductID": "P074",
+          "ProductName": "Sample Product 74",
+          "Barcode": "8901234000074",
+          "Price": "121",
+          "Batch": "B202603",
+          "ExpiryDate": "2027-03-15",
+          "Quantity": "370"
+        },
+        {
+          "ProductID": "P075",
+          "ProductName": "Sample Product 75",
+          "Barcode": "8901234000075",
+          "Price": "122.5",
+          "Batch": "B202604",
+          "ExpiryDate": "2027-04-15",
+          "Quantity": "375"
+        },
+        {
+          "ProductID": "P076",
+          "ProductName": "Sample Product 76",
+          "Barcode": "8901234000076",
+          "Price": "124",
+          "Batch": "B202605",
+          "ExpiryDate": "2027-05-15",
+          "Quantity": "380"
+        },
+        {
+          "ProductID": "P077",
+          "ProductName": "Sample Product 77",
+          "Barcode": "8901234000077",
+          "Price": "125.5",
+          "Batch": "B202606",
+          "ExpiryDate": "2027-06-15",
+          "Quantity": "385"
+        },
+        {
+          "ProductID": "P078",
+          "ProductName": "Sample Product 78",
+          "Barcode": "8901234000078",
+          "Price": "127",
+          "Batch": "B202607",
+          "ExpiryDate": "2027-07-15",
+          "Quantity": "390"
+        },
+        {
+          "ProductID": "P079",
+          "ProductName": "Sample Product 79",
+          "Barcode": "8901234000079",
+          "Price": "128.5",
+          "Batch": "B202608",
+          "ExpiryDate": "2027-08-15",
+          "Quantity": "395"
+        },
+        {
+          "ProductID": "P080",
+          "ProductName": "Sample Product 80",
+          "Barcode": "8901234000080",
+          "Price": "130",
+          "Batch": "B202609",
+          "ExpiryDate": "2027-09-15",
+          "Quantity": "400"
+        },
+        {
+          "ProductID": "P081",
+          "ProductName": "Sample Product 81",
+          "Barcode": "8901234000081",
+          "Price": "131.5",
+          "Batch": "B202610",
+          "ExpiryDate": "2027-10-15",
+          "Quantity": "405"
+        },
+        {
+          "ProductID": "P082",
+          "ProductName": "Sample Product 82",
+          "Barcode": "8901234000082",
+          "Price": "133",
+          "Batch": "B202611",
+          "ExpiryDate": "2027-11-15",
+          "Quantity": "410"
+        },
+        {
+          "ProductID": "P083",
+          "ProductName": "Sample Product 83",
+          "Barcode": "8901234000083",
+          "Price": "134.5",
+          "Batch": "B202612",
+          "ExpiryDate": "2027-12-15",
+          "Quantity": "415"
+        },
+        {
+          "ProductID": "P084",
+          "ProductName": "Sample Product 84",
+          "Barcode": "8901234000084",
+          "Price": "136",
+          "Batch": "B202601",
+          "ExpiryDate": "2027-01-15",
+          "Quantity": "420"
+        },
+        {
+          "ProductID": "P085",
+          "ProductName": "Sample Product 85",
+          "Barcode": "8901234000085",
+          "Price": "137.5",
+          "Batch": "B202602",
+          "ExpiryDate": "2027-02-15",
+          "Quantity": "425"
+        },
+        {
+          "ProductID": "P086",
+          "ProductName": "Sample Product 86",
+          "Barcode": "8901234000086",
+          "Price": "139",
+          "Batch": "B202603",
+          "ExpiryDate": "2027-03-15",
+          "Quantity": "430"
+        },
+        {
+          "ProductID": "P087",
+          "ProductName": "Sample Product 87",
+          "Barcode": "8901234000087",
+          "Price": "140.5",
+          "Batch": "B202604",
+          "ExpiryDate": "2027-04-15",
+          "Quantity": "435"
+        },
+        {
+          "ProductID": "P088",
+          "ProductName": "Sample Product 88",
+          "Barcode": "8901234000088",
+          "Price": "142",
+          "Batch": "B202605",
+          "ExpiryDate": "2027-05-15",
+          "Quantity": "440"
+        },
+        {
+          "ProductID": "P089",
+          "ProductName": "Sample Product 89",
+          "Barcode": "8901234000089",
+          "Price": "143.5",
+          "Batch": "B202606",
+          "ExpiryDate": "2027-06-15",
+          "Quantity": "445"
+        },
+        {
+          "ProductID": "P090",
+          "ProductName": "Sample Product 90",
+          "Barcode": "8901234000090",
+          "Price": "145",
+          "Batch": "B202607",
+          "ExpiryDate": "2027-07-15",
+          "Quantity": "450"
+        },
+        {
+          "ProductID": "P091",
+          "ProductName": "Sample Product 91",
+          "Barcode": "8901234000091",
+          "Price": "146.5",
+          "Batch": "B202608",
+          "ExpiryDate": "2027-08-15",
+          "Quantity": "455"
+        },
+        {
+          "ProductID": "P092",
+          "ProductName": "Sample Product 92",
+          "Barcode": "8901234000092",
+          "Price": "148",
+          "Batch": "B202609",
+          "ExpiryDate": "2027-09-15",
+          "Quantity": "460"
+        },
+        {
+          "ProductID": "P093",
+          "ProductName": "Sample Product 93",
+          "Barcode": "8901234000093",
+          "Price": "149.5",
+          "Batch": "B202610",
+          "ExpiryDate": "2027-10-15",
+          "Quantity": "465"
+        },
+        {
+          "ProductID": "P094",
+          "ProductName": "Sample Product 94",
+          "Barcode": "8901234000094",
+          "Price": "151",
+          "Batch": "B202611",
+          "ExpiryDate": "2027-11-15",
+          "Quantity": "470"
+        },
+        {
+          "ProductID": "P095",
+          "ProductName": "Sample Product 95",
+          "Barcode": "8901234000095",
+          "Price": "152.5",
+          "Batch": "B202612",
+          "ExpiryDate": "2027-12-15",
+          "Quantity": "475"
+        },
+        {
+          "ProductID": "P096",
+          "ProductName": "Sample Product 96",
+          "Barcode": "8901234000096",
+          "Price": "154",
+          "Batch": "B202601",
+          "ExpiryDate": "2027-01-15",
+          "Quantity": "480"
+        },
+        {
+          "ProductID": "P097",
+          "ProductName": "Sample Product 97",
+          "Barcode": "8901234000097",
+          "Price": "155.5",
+          "Batch": "B202602",
+          "ExpiryDate": "2027-02-15",
+          "Quantity": "485"
+        },
+        {
+          "ProductID": "P098",
+          "ProductName": "Sample Product 98",
+          "Barcode": "8901234000098",
+          "Price": "157",
+          "Batch": "B202603",
+          "ExpiryDate": "2027-03-15",
+          "Quantity": "490"
+        },
+        {
+          "ProductID": "P099",
+          "ProductName": "Sample Product 99",
+          "Barcode": "8901234000099",
+          "Price": "158.5",
+          "Batch": "B202604",
+          "ExpiryDate": "2027-04-15",
+          "Quantity": "495"
+        },
+        {
+          "ProductID": "P100",
+          "ProductName": "Sample Product 100",
+          "Barcode": "8901234000100",
+          "Price": "160",
+          "Batch": "B202605",
+          "ExpiryDate": "2027-05-15",
+          "Quantity": "500"
+        }
+      ],
+      "columns": [
+        {
+          "name": "ProductID",
+          "originalName": "ProductID",
+          "dataType": "text"
+        },
+        {
+          "name": "ProductName",
+          "originalName": "ProductName",
+          "dataType": "text"
+        },
+        {
+          "name": "Barcode",
+          "originalName": "Barcode",
+          "dataType": "text"
+        },
+        {
+          "name": "Price",
+          "originalName": "Price",
+          "dataType": "text"
+        },
+        {
+          "name": "Batch",
+          "originalName": "Batch",
+          "dataType": "text"
+        },
+        {
+          "name": "ExpiryDate",
+          "originalName": "ExpiryDate",
+          "dataType": "text"
+        },
+        {
+          "name": "Quantity",
+          "originalName": "Quantity",
+          "dataType": "text"
+        }
+      ],
+      "status": "CONNECTED",
+      "lastModified": "2026-09-08T11:13:48.949Z",
+      "lastRefreshed": "2026-09-08T11:13:48.949Z",
+      "autoRefresh": true
+    }
+  },
+  {
+    "id": "tmpl-1789470956097",
+    "name": "Document911.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [
+      {
+        "id": "el-bar-1789470957854",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "001",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1,
+        "barHeight": 15,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 6,
+        "y": 6,
+        "width": 40,
+        "height": 15,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 1,
+        "dataSources": [
+          {
+            "id": "ds-1789470960836",
+            "name": "Primary Data Source",
+            "type": "embedded",
+            "value": "001",
+            "enabled": true,
+            "serialization": {
+              "action": "increment",
+              "method": "alphabetic_and_numeric",
+              "letterCase": "uppercase",
+              "customSequence": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+              "preserveCharacters": false,
+              "incrementBy": 1,
+              "event": "standard",
+              "eventInterval": 1,
+              "dataItem": "",
+              "serialNumbers": 1,
+              "copies": 1,
+              "resetRule": "never",
+              "resetValue": "",
+              "currentValue": "001"
+            },
+            "transformConfig": {
+              "serialization": {
+                "action": "increment",
+                "method": "alphabetic_and_numeric",
+                "letterCase": "uppercase",
+                "customSequence": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                "preserveCharacters": false,
+                "incrementBy": 1,
+                "event": "standard",
+                "eventInterval": 1,
+                "dataItem": "",
+                "serialNumbers": 1,
+                "copies": 1,
+                "resetRule": "never",
+                "resetValue": "",
+                "currentValue": "001"
+              }
+            }
+          }
+        ],
+        "humanReadableAlignment": "centered",
+        "humanReadableFont": "Arial",
+        "humanReadableFontSize": 12,
+        "fontFamily": "Arial",
+        "fontSize": 12,
+        "fontWeight": "normal",
+        "fontStyle": "normal",
+        "underline": false,
+        "humanReadableUnderline": false,
+        "humanReadableStrikeout": false,
+        "humanReadableColor": "#000000",
+        "color": "#000000",
+        "textFormatType": "single-line",
+        "autoSize": false,
+        "autoSizeText": false,
+        "minFontSize": 6,
+        "maxFontSize": 20,
+        "minWidthScale": 80,
+        "maxWidthScale": 100,
+        "horizontalAlignment": "center",
+        "verticalAlignment": "middle",
+        "tabsConfig": [],
+        "effectsConfig": {
+          "letterSpacing": 0,
+          "lineSpacing": 1.15,
+          "opacity": 100,
+          "outline": false,
+          "outlineColor": "#000000",
+          "outlineWidth": 1,
+          "shadow": false,
+          "shadowColor": "#888888",
+          "shadowBlur": 2,
+          "shadowOffsetX": 1,
+          "shadowOffsetY": 1,
+          "strikeout": false,
+          "underline": false
+        },
+        "borderType": "none",
+        "borderThickness": 0.5,
+        "borderColor": "#000000",
+        "borderDashStyle": "solid",
+        "cornerRadius": 0,
+        "borderPadding": 0,
+        "errorCorrectionLevel": "M",
+        "bearerBars": false,
+        "bearerBarType": "top-bottom",
+        "bearerBarThickness": 1
+      }
+    ],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-15T11:15:56.097Z",
+    "updatedAt": "2026-09-15T11:16:54.310Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789469594137",
+    "name": "Document499.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [
+      {
+        "id": "el-bar-1789469599239",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "10850006531238",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1.5,
+        "barHeight": 16,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 6,
+        "y": 6,
+        "width": 40,
+        "height": 15,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 1,
+        "dataSources": [
+          {
+            "id": "ds-1789469603959",
+            "name": "Primary Data Source",
+            "type": "embedded",
+            "value": "10850006531238",
+            "enabled": true,
+            "serialization": {
+              "action": "increment",
+              "method": "alphabetic",
+              "letterCase": "lowercase",
+              "customSequence": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+              "preserveCharacters": false,
+              "incrementBy": 1,
+              "event": "standard",
+              "eventInterval": 1,
+              "dataItem": "",
+              "serialNumbers": 1,
+              "copies": 1,
+              "resetRule": "never",
+              "resetValue": ""
+            },
+            "transformConfig": {
+              "serialization": {
+                "action": "increment",
+                "method": "alphabetic",
+                "letterCase": "lowercase",
+                "customSequence": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                "preserveCharacters": false,
+                "incrementBy": 1,
+                "event": "standard",
+                "eventInterval": 1,
+                "dataItem": "",
+                "serialNumbers": 1,
+                "copies": 1,
+                "resetRule": "never",
+                "resetValue": ""
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-15T10:53:14.137Z",
+    "updatedAt": "2026-09-15T10:54:48.278Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789467601766",
+    "name": "Document380.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [
+      {
+        "id": "el-bar-1789467604710",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "10850006531238",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1.5,
+        "barHeight": 16,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 6,
+        "y": 6,
+        "width": 40,
+        "height": 15,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 1
+      }
+    ],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-15T10:20:06.727Z",
+    "updatedAt": "2026-09-15T10:20:06.727Z",
+    "createdBy": "Shivam"
+  },
+  {
+    "id": "tmpl-1789465702580",
+    "name": "Document816.btw",
+    "description": "Blank 50 × 25 mm document created via New Document Wizard",
+    "category": "Manufacturing",
+    "version": "1.0",
+    "status": "approved",
+    "complianceStandard": "Custom",
+    "shape": "rectangle",
+    "cornerRadius": 0,
+    "dimensions": {
+      "width": 50,
+      "height": 25,
+      "unit": "mm",
+      "dpi": 203,
+      "orientation": "portrait",
+      "shape": "rectangle",
+      "cornerRadius": 0
+    },
+    "margins": {
+      "top": 0,
+      "right": 0,
+      "bottom": 0,
+      "left": 0,
+      "bleed": 0.5,
+      "safeZone": 1
+    },
+    "sheetGrid": {
+      "enabled": false,
+      "rows": 1,
+      "columns": 1,
+      "gapHorizontal": 0,
+      "gapVertical": 2,
+      "labelWidth": 50,
+      "labelHeight": 25,
+      "marginTop": 0,
+      "marginLeft": 0
+    },
+    "variables": [],
+    "sampleRecords": [
+      {}
+    ],
+    "elements": [
+      {
+        "id": "el-text-1789466592523",
+        "name": "Single Line Text 1",
+        "type": "text",
+        "textType": "single-line",
+        "textFormatType": "single-line",
+        "text": "Shivam",
+        "fontFamily": "Arial",
+        "fontSize": 10,
+        "fontWeight": "bold",
+        "fontStyle": "normal",
+        "textDecoration": "none",
+        "textAlign": "left",
+        "verticalAlign": "top",
+        "color": "#000000",
+        "lineHeight": 1.2,
+        "letterSpacing": 0,
+        "multiline": false,
+        "wordWrap": false,
+        "wrap": false,
+        "autoSize": true,
+        "autoFit": false,
+        "autoSizeConfig": {
+          "enabled": true,
+          "minFontSize": 6,
+          "maxFontSize": 720,
+          "minWidthScale": 50,
+          "maxWidthScale": 200,
+          "objectWidth": 21.3,
+          "objectHeight": 4.8,
+          "horizontalAlignment": "left",
+          "verticalAlignment": "top"
+        },
+        "x": 14,
+        "y": 0.5,
+        "width": 13.3,
+        "height": 4.8,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 1
+      },
+      {
+        "id": "el-bar-1789466632339",
+        "name": "1D Barcode (CODE128)",
+        "type": "barcode",
+        "symbology": "code128",
+        "value": "10850006531238",
+        "includeText": true,
+        "textPosition": "below",
+        "barWidth": 1.5,
+        "barHeight": 16,
+        "quietZone": true,
+        "foregroundColor": "#000000",
+        "backgroundColor": "#ffffff",
+        "checkDigit": true,
+        "x": 12,
+        "y": 7,
+        "width": 18.5,
+        "height": 10,
+        "rotation": 0,
+        "opacity": 1,
+        "locked": false,
+        "visible": true,
+        "zIndex": 2,
+        "humanReadableFontSize": 20,
+        "fontSize": 20
+      }
+    ],
+    "tags": [
+      "Blank Label",
+      "Draft",
+      "203 DPI"
+    ],
+    "stockId": "stock-mrp-50x25",
+    "stockName": "stock-mrp-50x25",
+    "mediaType": "gap",
+    "printOrder": {
+      "startingCorner": "top-left",
+      "direction": "horizontal",
+      "selectStartingPositionAtPrintTime": false,
+      "continueFromPrevious": false
+    },
+    "background": {
+      "useColor": false,
+      "color": "#ffffff",
+      "useImage": false,
+      "showInDesigner": true,
+      "printBackground": false
+    },
+    "createdAt": "2026-09-15T09:48:22.580Z",
+    "updatedAt": "2026-09-15T10:04:11.871Z",
+    "createdBy": "Shivam"
+  },
+  {
     "id": "tmpl-1789378844834",
     "name": "Document842.btw",
     "description": "Blank 50 × 25 mm document created via New Document Wizard",
@@ -1097,1074 +3156,6 @@
     "createdAt": "2026-09-11T10:49:16.508Z",
     "updatedAt": "2026-09-11T10:49:28.462Z",
     "createdBy": "Shivam"
-  },
-  {
-    "id": "tmpl-document1-btw",
-    "name": "Document1.btw",
-    "description": "Industrial Dual Barcode Label Format",
-    "category": "Manufacturing",
-    "version": "1.0",
-    "status": "published",
-    "complianceStandard": "Custom",
-    "dimensions": {
-      "width": 100,
-      "height": 50,
-      "unit": "mm",
-      "dpi": 300,
-      "orientation": "landscape"
-    },
-    "margins": {
-      "top": 2,
-      "right": 2,
-      "bottom": 2,
-      "left": 2,
-      "bleed": 1,
-      "safeZone": 2
-    },
-    "tags": [
-      "BarCode Automation",
-      "Direct Thermal",
-      "Industrial",
-      "Dual Barcode"
-    ],
-    "createdBy": "Administrator",
-    "createdAt": "2026-08-14T10:00:00Z",
-    "updatedAt": "2026-09-11T10:30:41.810Z",
-    "approvedBy": "Lead Engineer",
-    "approvedAt": "2026-08-14T18:30:00Z",
-    "variables": [
-      {
-        "id": "v1",
-        "name": "CODE_VAL",
-        "type": "static",
-        "defaultValue": "12345678"
-      }
-    ],
-    "sampleRecords": [
-      {
-        "CODE_VAL": "12345678"
-      },
-      {
-        "CODE_VAL": "87654321"
-      },
-      {
-        "CODE_VAL": "99001122"
-      }
-    ],
-    "elements": [
-      {
-        "id": "el-barcode-1",
-        "name": "Barcode 1",
-        "type": "barcode",
-        "symbology": "code128",
-        "value": "12345678",
-        "includeText": true,
-        "textPosition": "below",
-        "barWidth": 1.8,
-        "barHeight": 14,
-        "quietZone": true,
-        "foregroundColor": "#000000",
-        "backgroundColor": "#ffffff",
-        "checkDigit": false,
-        "x": 10.9,
-        "y": 4.8,
-        "width": 7.5,
-        "height": 5.5,
-        "rotation": 0,
-        "opacity": 1,
-        "locked": false,
-        "visible": true,
-        "zIndex": 1
-      },
-      {
-        "id": "el-barcode-2",
-        "name": "Barcode 3",
-        "type": "barcode",
-        "symbology": "code128",
-        "value": "12345678",
-        "includeText": true,
-        "textPosition": "below",
-        "barWidth": 1.8,
-        "barHeight": 14,
-        "quietZone": true,
-        "foregroundColor": "#000000",
-        "backgroundColor": "#ffffff",
-        "checkDigit": false,
-        "x": 10.9,
-        "y": 22.1,
-        "width": 68.6,
-        "height": 15.2,
-        "rotation": 0,
-        "opacity": 1,
-        "locked": false,
-        "visible": true,
-        "zIndex": 2
-      }
-    ],
-    "databaseConnection": {
-      "id": "db-1788866028949",
-      "name": "BarTender_Test_Data",
-      "type": "excel",
-      "mode": "linked",
-      "filePath": "BarTender_Test_Data.xlsx",
-      "fileName": "BarTender_Test_Data.xlsx",
-      "sheetName": "Products$'",
-      "availableSheets": [
-        "Products$'"
-      ],
-      "fields": [
-        "ProductID",
-        "ProductName",
-        "Barcode",
-        "Price",
-        "Batch",
-        "ExpiryDate",
-        "Quantity"
-      ],
-      "records": [
-        {
-          "ProductID": "P001",
-          "ProductName": "Sample Product 1",
-          "Barcode": "8901234000001",
-          "Price": "11.5",
-          "Batch": "B202602",
-          "ExpiryDate": "2027-02-15",
-          "Quantity": "5"
-        },
-        {
-          "ProductID": "P002",
-          "ProductName": "Sample Product 2",
-          "Barcode": "8901234000002",
-          "Price": "13",
-          "Batch": "B202603",
-          "ExpiryDate": "2027-03-15",
-          "Quantity": "10"
-        },
-        {
-          "ProductID": "P003",
-          "ProductName": "Sample Product 3",
-          "Barcode": "8901234000003",
-          "Price": "14.5",
-          "Batch": "B202604",
-          "ExpiryDate": "2027-04-15",
-          "Quantity": "15"
-        },
-        {
-          "ProductID": "P004",
-          "ProductName": "Sample Product 4",
-          "Barcode": "8901234000004",
-          "Price": "16",
-          "Batch": "B202605",
-          "ExpiryDate": "2027-05-15",
-          "Quantity": "20"
-        },
-        {
-          "ProductID": "P005",
-          "ProductName": "Sample Product 5",
-          "Barcode": "8901234000005",
-          "Price": "17.5",
-          "Batch": "B202606",
-          "ExpiryDate": "2027-06-15",
-          "Quantity": "25"
-        },
-        {
-          "ProductID": "P006",
-          "ProductName": "Sample Product 6",
-          "Barcode": "8901234000006",
-          "Price": "19",
-          "Batch": "B202607",
-          "ExpiryDate": "2027-07-15",
-          "Quantity": "30"
-        },
-        {
-          "ProductID": "P007",
-          "ProductName": "Sample Product 7",
-          "Barcode": "8901234000007",
-          "Price": "20.5",
-          "Batch": "B202608",
-          "ExpiryDate": "2027-08-15",
-          "Quantity": "35"
-        },
-        {
-          "ProductID": "P008",
-          "ProductName": "Sample Product 8",
-          "Barcode": "8901234000008",
-          "Price": "22",
-          "Batch": "B202609",
-          "ExpiryDate": "2027-09-15",
-          "Quantity": "40"
-        },
-        {
-          "ProductID": "P009",
-          "ProductName": "Sample Product 9",
-          "Barcode": "8901234000009",
-          "Price": "23.5",
-          "Batch": "B202610",
-          "ExpiryDate": "2027-10-15",
-          "Quantity": "45"
-        },
-        {
-          "ProductID": "P010",
-          "ProductName": "Sample Product 10",
-          "Barcode": "8901234000010",
-          "Price": "25",
-          "Batch": "B202611",
-          "ExpiryDate": "2027-11-15",
-          "Quantity": "50"
-        },
-        {
-          "ProductID": "P011",
-          "ProductName": "Sample Product 11",
-          "Barcode": "8901234000011",
-          "Price": "26.5",
-          "Batch": "B202612",
-          "ExpiryDate": "2027-12-15",
-          "Quantity": "55"
-        },
-        {
-          "ProductID": "P012",
-          "ProductName": "Sample Product 12",
-          "Barcode": "8901234000012",
-          "Price": "28",
-          "Batch": "B202601",
-          "ExpiryDate": "2027-01-15",
-          "Quantity": "60"
-        },
-        {
-          "ProductID": "P013",
-          "ProductName": "Sample Product 13",
-          "Barcode": "8901234000013",
-          "Price": "29.5",
-          "Batch": "B202602",
-          "ExpiryDate": "2027-02-15",
-          "Quantity": "65"
-        },
-        {
-          "ProductID": "P014",
-          "ProductName": "Sample Product 14",
-          "Barcode": "8901234000014",
-          "Price": "31",
-          "Batch": "B202603",
-          "ExpiryDate": "2027-03-15",
-          "Quantity": "70"
-        },
-        {
-          "ProductID": "P015",
-          "ProductName": "Sample Product 15",
-          "Barcode": "8901234000015",
-          "Price": "32.5",
-          "Batch": "B202604",
-          "ExpiryDate": "2027-04-15",
-          "Quantity": "75"
-        },
-        {
-          "ProductID": "P016",
-          "ProductName": "Sample Product 16",
-          "Barcode": "8901234000016",
-          "Price": "34",
-          "Batch": "B202605",
-          "ExpiryDate": "2027-05-15",
-          "Quantity": "80"
-        },
-        {
-          "ProductID": "P017",
-          "ProductName": "Sample Product 17",
-          "Barcode": "8901234000017",
-          "Price": "35.5",
-          "Batch": "B202606",
-          "ExpiryDate": "2027-06-15",
-          "Quantity": "85"
-        },
-        {
-          "ProductID": "P018",
-          "ProductName": "Sample Product 18",
-          "Barcode": "8901234000018",
-          "Price": "37",
-          "Batch": "B202607",
-          "ExpiryDate": "2027-07-15",
-          "Quantity": "90"
-        },
-        {
-          "ProductID": "P019",
-          "ProductName": "Sample Product 19",
-          "Barcode": "8901234000019",
-          "Price": "38.5",
-          "Batch": "B202608",
-          "ExpiryDate": "2027-08-15",
-          "Quantity": "95"
-        },
-        {
-          "ProductID": "P020",
-          "ProductName": "Sample Product 20",
-          "Barcode": "8901234000020",
-          "Price": "40",
-          "Batch": "B202609",
-          "ExpiryDate": "2027-09-15",
-          "Quantity": "100"
-        },
-        {
-          "ProductID": "P021",
-          "ProductName": "Sample Product 21",
-          "Barcode": "8901234000021",
-          "Price": "41.5",
-          "Batch": "B202610",
-          "ExpiryDate": "2027-10-15",
-          "Quantity": "105"
-        },
-        {
-          "ProductID": "P022",
-          "ProductName": "Sample Product 22",
-          "Barcode": "8901234000022",
-          "Price": "43",
-          "Batch": "B202611",
-          "ExpiryDate": "2027-11-15",
-          "Quantity": "110"
-        },
-        {
-          "ProductID": "P023",
-          "ProductName": "Sample Product 23",
-          "Barcode": "8901234000023",
-          "Price": "44.5",
-          "Batch": "B202612",
-          "ExpiryDate": "2027-12-15",
-          "Quantity": "115"
-        },
-        {
-          "ProductID": "P024",
-          "ProductName": "Sample Product 24",
-          "Barcode": "8901234000024",
-          "Price": "46",
-          "Batch": "B202601",
-          "ExpiryDate": "2027-01-15",
-          "Quantity": "120"
-        },
-        {
-          "ProductID": "P025",
-          "ProductName": "Sample Product 25",
-          "Barcode": "8901234000025",
-          "Price": "47.5",
-          "Batch": "B202602",
-          "ExpiryDate": "2027-02-15",
-          "Quantity": "125"
-        },
-        {
-          "ProductID": "P026",
-          "ProductName": "Sample Product 26",
-          "Barcode": "8901234000026",
-          "Price": "49",
-          "Batch": "B202603",
-          "ExpiryDate": "2027-03-15",
-          "Quantity": "130"
-        },
-        {
-          "ProductID": "P027",
-          "ProductName": "Sample Product 27",
-          "Barcode": "8901234000027",
-          "Price": "50.5",
-          "Batch": "B202604",
-          "ExpiryDate": "2027-04-15",
-          "Quantity": "135"
-        },
-        {
-          "ProductID": "P028",
-          "ProductName": "Sample Product 28",
-          "Barcode": "8901234000028",
-          "Price": "52",
-          "Batch": "B202605",
-          "ExpiryDate": "2027-05-15",
-          "Quantity": "140"
-        },
-        {
-          "ProductID": "P029",
-          "ProductName": "Sample Product 29",
-          "Barcode": "8901234000029",
-          "Price": "53.5",
-          "Batch": "B202606",
-          "ExpiryDate": "2027-06-15",
-          "Quantity": "145"
-        },
-        {
-          "ProductID": "P030",
-          "ProductName": "Sample Product 30",
-          "Barcode": "8901234000030",
-          "Price": "55",
-          "Batch": "B202607",
-          "ExpiryDate": "2027-07-15",
-          "Quantity": "150"
-        },
-        {
-          "ProductID": "P031",
-          "ProductName": "Sample Product 31",
-          "Barcode": "8901234000031",
-          "Price": "56.5",
-          "Batch": "B202608",
-          "ExpiryDate": "2027-08-15",
-          "Quantity": "155"
-        },
-        {
-          "ProductID": "P032",
-          "ProductName": "Sample Product 32",
-          "Barcode": "8901234000032",
-          "Price": "58",
-          "Batch": "B202609",
-          "ExpiryDate": "2027-09-15",
-          "Quantity": "160"
-        },
-        {
-          "ProductID": "P033",
-          "ProductName": "Sample Product 33",
-          "Barcode": "8901234000033",
-          "Price": "59.5",
-          "Batch": "B202610",
-          "ExpiryDate": "2027-10-15",
-          "Quantity": "165"
-        },
-        {
-          "ProductID": "P034",
-          "ProductName": "Sample Product 34",
-          "Barcode": "8901234000034",
-          "Price": "61",
-          "Batch": "B202611",
-          "ExpiryDate": "2027-11-15",
-          "Quantity": "170"
-        },
-        {
-          "ProductID": "P035",
-          "ProductName": "Sample Product 35",
-          "Barcode": "8901234000035",
-          "Price": "62.5",
-          "Batch": "B202612",
-          "ExpiryDate": "2027-12-15",
-          "Quantity": "175"
-        },
-        {
-          "ProductID": "P036",
-          "ProductName": "Sample Product 36",
-          "Barcode": "8901234000036",
-          "Price": "64",
-          "Batch": "B202601",
-          "ExpiryDate": "2027-01-15",
-          "Quantity": "180"
-        },
-        {
-          "ProductID": "P037",
-          "ProductName": "Sample Product 37",
-          "Barcode": "8901234000037",
-          "Price": "65.5",
-          "Batch": "B202602",
-          "ExpiryDate": "2027-02-15",
-          "Quantity": "185"
-        },
-        {
-          "ProductID": "P038",
-          "ProductName": "Sample Product 38",
-          "Barcode": "8901234000038",
-          "Price": "67",
-          "Batch": "B202603",
-          "ExpiryDate": "2027-03-15",
-          "Quantity": "190"
-        },
-        {
-          "ProductID": "P039",
-          "ProductName": "Sample Product 39",
-          "Barcode": "8901234000039",
-          "Price": "68.5",
-          "Batch": "B202604",
-          "ExpiryDate": "2027-04-15",
-          "Quantity": "195"
-        },
-        {
-          "ProductID": "P040",
-          "ProductName": "Sample Product 40",
-          "Barcode": "8901234000040",
-          "Price": "70",
-          "Batch": "B202605",
-          "ExpiryDate": "2027-05-15",
-          "Quantity": "200"
-        },
-        {
-          "ProductID": "P041",
-          "ProductName": "Sample Product 41",
-          "Barcode": "8901234000041",
-          "Price": "71.5",
-          "Batch": "B202606",
-          "ExpiryDate": "2027-06-15",
-          "Quantity": "205"
-        },
-        {
-          "ProductID": "P042",
-          "ProductName": "Sample Product 42",
-          "Barcode": "8901234000042",
-          "Price": "73",
-          "Batch": "B202607",
-          "ExpiryDate": "2027-07-15",
-          "Quantity": "210"
-        },
-        {
-          "ProductID": "P043",
-          "ProductName": "Sample Product 43",
-          "Barcode": "8901234000043",
-          "Price": "74.5",
-          "Batch": "B202608",
-          "ExpiryDate": "2027-08-15",
-          "Quantity": "215"
-        },
-        {
-          "ProductID": "P044",
-          "ProductName": "Sample Product 44",
-          "Barcode": "8901234000044",
-          "Price": "76",
-          "Batch": "B202609",
-          "ExpiryDate": "2027-09-15",
-          "Quantity": "220"
-        },
-        {
-          "ProductID": "P045",
-          "ProductName": "Sample Product 45",
-          "Barcode": "8901234000045",
-          "Price": "77.5",
-          "Batch": "B202610",
-          "ExpiryDate": "2027-10-15",
-          "Quantity": "225"
-        },
-        {
-          "ProductID": "P046",
-          "ProductName": "Sample Product 46",
-          "Barcode": "8901234000046",
-          "Price": "79",
-          "Batch": "B202611",
-          "ExpiryDate": "2027-11-15",
-          "Quantity": "230"
-        },
-        {
-          "ProductID": "P047",
-          "ProductName": "Sample Product 47",
-          "Barcode": "8901234000047",
-          "Price": "80.5",
-          "Batch": "B202612",
-          "ExpiryDate": "2027-12-15",
-          "Quantity": "235"
-        },
-        {
-          "ProductID": "P048",
-          "ProductName": "Sample Product 48",
-          "Barcode": "8901234000048",
-          "Price": "82",
-          "Batch": "B202601",
-          "ExpiryDate": "2027-01-15",
-          "Quantity": "240"
-        },
-        {
-          "ProductID": "P049",
-          "ProductName": "Sample Product 49",
-          "Barcode": "8901234000049",
-          "Price": "83.5",
-          "Batch": "B202602",
-          "ExpiryDate": "2027-02-15",
-          "Quantity": "245"
-        },
-        {
-          "ProductID": "P050",
-          "ProductName": "Sample Product 50",
-          "Barcode": "8901234000050",
-          "Price": "85",
-          "Batch": "B202603",
-          "ExpiryDate": "2027-03-15",
-          "Quantity": "250"
-        },
-        {
-          "ProductID": "P051",
-          "ProductName": "Sample Product 51",
-          "Barcode": "8901234000051",
-          "Price": "86.5",
-          "Batch": "B202604",
-          "ExpiryDate": "2027-04-15",
-          "Quantity": "255"
-        },
-        {
-          "ProductID": "P052",
-          "ProductName": "Sample Product 52",
-          "Barcode": "8901234000052",
-          "Price": "88",
-          "Batch": "B202605",
-          "ExpiryDate": "2027-05-15",
-          "Quantity": "260"
-        },
-        {
-          "ProductID": "P053",
-          "ProductName": "Sample Product 53",
-          "Barcode": "8901234000053",
-          "Price": "89.5",
-          "Batch": "B202606",
-          "ExpiryDate": "2027-06-15",
-          "Quantity": "265"
-        },
-        {
-          "ProductID": "P054",
-          "ProductName": "Sample Product 54",
-          "Barcode": "8901234000054",
-          "Price": "91",
-          "Batch": "B202607",
-          "ExpiryDate": "2027-07-15",
-          "Quantity": "270"
-        },
-        {
-          "ProductID": "P055",
-          "ProductName": "Sample Product 55",
-          "Barcode": "8901234000055",
-          "Price": "92.5",
-          "Batch": "B202608",
-          "ExpiryDate": "2027-08-15",
-          "Quantity": "275"
-        },
-        {
-          "ProductID": "P056",
-          "ProductName": "Sample Product 56",
-          "Barcode": "8901234000056",
-          "Price": "94",
-          "Batch": "B202609",
-          "ExpiryDate": "2027-09-15",
-          "Quantity": "280"
-        },
-        {
-          "ProductID": "P057",
-          "ProductName": "Sample Product 57",
-          "Barcode": "8901234000057",
-          "Price": "95.5",
-          "Batch": "B202610",
-          "ExpiryDate": "2027-10-15",
-          "Quantity": "285"
-        },
-        {
-          "ProductID": "P058",
-          "ProductName": "Sample Product 58",
-          "Barcode": "8901234000058",
-          "Price": "97",
-          "Batch": "B202611",
-          "ExpiryDate": "2027-11-15",
-          "Quantity": "290"
-        },
-        {
-          "ProductID": "P059",
-          "ProductName": "Sample Product 59",
-          "Barcode": "8901234000059",
-          "Price": "98.5",
-          "Batch": "B202612",
-          "ExpiryDate": "2027-12-15",
-          "Quantity": "295"
-        },
-        {
-          "ProductID": "P060",
-          "ProductName": "Sample Product 60",
-          "Barcode": "8901234000060",
-          "Price": "100",
-          "Batch": "B202601",
-          "ExpiryDate": "2027-01-15",
-          "Quantity": "300"
-        },
-        {
-          "ProductID": "P061",
-          "ProductName": "Sample Product 61",
-          "Barcode": "8901234000061",
-          "Price": "101.5",
-          "Batch": "B202602",
-          "ExpiryDate": "2027-02-15",
-          "Quantity": "305"
-        },
-        {
-          "ProductID": "P062",
-          "ProductName": "Sample Product 62",
-          "Barcode": "8901234000062",
-          "Price": "103",
-          "Batch": "B202603",
-          "ExpiryDate": "2027-03-15",
-          "Quantity": "310"
-        },
-        {
-          "ProductID": "P063",
-          "ProductName": "Sample Product 63",
-          "Barcode": "8901234000063",
-          "Price": "104.5",
-          "Batch": "B202604",
-          "ExpiryDate": "2027-04-15",
-          "Quantity": "315"
-        },
-        {
-          "ProductID": "P064",
-          "ProductName": "Sample Product 64",
-          "Barcode": "8901234000064",
-          "Price": "106",
-          "Batch": "B202605",
-          "ExpiryDate": "2027-05-15",
-          "Quantity": "320"
-        },
-        {
-          "ProductID": "P065",
-          "ProductName": "Sample Product 65",
-          "Barcode": "8901234000065",
-          "Price": "107.5",
-          "Batch": "B202606",
-          "ExpiryDate": "2027-06-15",
-          "Quantity": "325"
-        },
-        {
-          "ProductID": "P066",
-          "ProductName": "Sample Product 66",
-          "Barcode": "8901234000066",
-          "Price": "109",
-          "Batch": "B202607",
-          "ExpiryDate": "2027-07-15",
-          "Quantity": "330"
-        },
-        {
-          "ProductID": "P067",
-          "ProductName": "Sample Product 67",
-          "Barcode": "8901234000067",
-          "Price": "110.5",
-          "Batch": "B202608",
-          "ExpiryDate": "2027-08-15",
-          "Quantity": "335"
-        },
-        {
-          "ProductID": "P068",
-          "ProductName": "Sample Product 68",
-          "Barcode": "8901234000068",
-          "Price": "112",
-          "Batch": "B202609",
-          "ExpiryDate": "2027-09-15",
-          "Quantity": "340"
-        },
-        {
-          "ProductID": "P069",
-          "ProductName": "Sample Product 69",
-          "Barcode": "8901234000069",
-          "Price": "113.5",
-          "Batch": "B202610",
-          "ExpiryDate": "2027-10-15",
-          "Quantity": "345"
-        },
-        {
-          "ProductID": "P070",
-          "ProductName": "Sample Product 70",
-          "Barcode": "8901234000070",
-          "Price": "115",
-          "Batch": "B202611",
-          "ExpiryDate": "2027-11-15",
-          "Quantity": "350"
-        },
-        {
-          "ProductID": "P071",
-          "ProductName": "Sample Product 71",
-          "Barcode": "8901234000071",
-          "Price": "116.5",
-          "Batch": "B202612",
-          "ExpiryDate": "2027-12-15",
-          "Quantity": "355"
-        },
-        {
-          "ProductID": "P072",
-          "ProductName": "Sample Product 72",
-          "Barcode": "8901234000072",
-          "Price": "118",
-          "Batch": "B202601",
-          "ExpiryDate": "2027-01-15",
-          "Quantity": "360"
-        },
-        {
-          "ProductID": "P073",
-          "ProductName": "Sample Product 73",
-          "Barcode": "8901234000073",
-          "Price": "119.5",
-          "Batch": "B202602",
-          "ExpiryDate": "2027-02-15",
-          "Quantity": "365"
-        },
-        {
-          "ProductID": "P074",
-          "ProductName": "Sample Product 74",
-          "Barcode": "8901234000074",
-          "Price": "121",
-          "Batch": "B202603",
-          "ExpiryDate": "2027-03-15",
-          "Quantity": "370"
-        },
-        {
-          "ProductID": "P075",
-          "ProductName": "Sample Product 75",
-          "Barcode": "8901234000075",
-          "Price": "122.5",
-          "Batch": "B202604",
-          "ExpiryDate": "2027-04-15",
-          "Quantity": "375"
-        },
-        {
-          "ProductID": "P076",
-          "ProductName": "Sample Product 76",
-          "Barcode": "8901234000076",
-          "Price": "124",
-          "Batch": "B202605",
-          "ExpiryDate": "2027-05-15",
-          "Quantity": "380"
-        },
-        {
-          "ProductID": "P077",
-          "ProductName": "Sample Product 77",
-          "Barcode": "8901234000077",
-          "Price": "125.5",
-          "Batch": "B202606",
-          "ExpiryDate": "2027-06-15",
-          "Quantity": "385"
-        },
-        {
-          "ProductID": "P078",
-          "ProductName": "Sample Product 78",
-          "Barcode": "8901234000078",
-          "Price": "127",
-          "Batch": "B202607",
-          "ExpiryDate": "2027-07-15",
-          "Quantity": "390"
-        },
-        {
-          "ProductID": "P079",
-          "ProductName": "Sample Product 79",
-          "Barcode": "8901234000079",
-          "Price": "128.5",
-          "Batch": "B202608",
-          "ExpiryDate": "2027-08-15",
-          "Quantity": "395"
-        },
-        {
-          "ProductID": "P080",
-          "ProductName": "Sample Product 80",
-          "Barcode": "8901234000080",
-          "Price": "130",
-          "Batch": "B202609",
-          "ExpiryDate": "2027-09-15",
-          "Quantity": "400"
-        },
-        {
-          "ProductID": "P081",
-          "ProductName": "Sample Product 81",
-          "Barcode": "8901234000081",
-          "Price": "131.5",
-          "Batch": "B202610",
-          "ExpiryDate": "2027-10-15",
-          "Quantity": "405"
-        },
-        {
-          "ProductID": "P082",
-          "ProductName": "Sample Product 82",
-          "Barcode": "8901234000082",
-          "Price": "133",
-          "Batch": "B202611",
-          "ExpiryDate": "2027-11-15",
-          "Quantity": "410"
-        },
-        {
-          "ProductID": "P083",
-          "ProductName": "Sample Product 83",
-          "Barcode": "8901234000083",
-          "Price": "134.5",
-          "Batch": "B202612",
-          "ExpiryDate": "2027-12-15",
-          "Quantity": "415"
-        },
-        {
-          "ProductID": "P084",
-          "ProductName": "Sample Product 84",
-          "Barcode": "8901234000084",
-          "Price": "136",
-          "Batch": "B202601",
-          "ExpiryDate": "2027-01-15",
-          "Quantity": "420"
-        },
-        {
-          "ProductID": "P085",
-          "ProductName": "Sample Product 85",
-          "Barcode": "8901234000085",
-          "Price": "137.5",
-          "Batch": "B202602",
-          "ExpiryDate": "2027-02-15",
-          "Quantity": "425"
-        },
-        {
-          "ProductID": "P086",
-          "ProductName": "Sample Product 86",
-          "Barcode": "8901234000086",
-          "Price": "139",
-          "Batch": "B202603",
-          "ExpiryDate": "2027-03-15",
-          "Quantity": "430"
-        },
-        {
-          "ProductID": "P087",
-          "ProductName": "Sample Product 87",
-          "Barcode": "8901234000087",
-          "Price": "140.5",
-          "Batch": "B202604",
-          "ExpiryDate": "2027-04-15",
-          "Quantity": "435"
-        },
-        {
-          "ProductID": "P088",
-          "ProductName": "Sample Product 88",
-          "Barcode": "8901234000088",
-          "Price": "142",
-          "Batch": "B202605",
-          "ExpiryDate": "2027-05-15",
-          "Quantity": "440"
-        },
-        {
-          "ProductID": "P089",
-          "ProductName": "Sample Product 89",
-          "Barcode": "8901234000089",
-          "Price": "143.5",
-          "Batch": "B202606",
-          "ExpiryDate": "2027-06-15",
-          "Quantity": "445"
-        },
-        {
-          "ProductID": "P090",
-          "ProductName": "Sample Product 90",
-          "Barcode": "8901234000090",
-          "Price": "145",
-          "Batch": "B202607",
-          "ExpiryDate": "2027-07-15",
-          "Quantity": "450"
-        },
-        {
-          "ProductID": "P091",
-          "ProductName": "Sample Product 91",
-          "Barcode": "8901234000091",
-          "Price": "146.5",
-          "Batch": "B202608",
-          "ExpiryDate": "2027-08-15",
-          "Quantity": "455"
-        },
-        {
-          "ProductID": "P092",
-          "ProductName": "Sample Product 92",
-          "Barcode": "8901234000092",
-          "Price": "148",
-          "Batch": "B202609",
-          "ExpiryDate": "2027-09-15",
-          "Quantity": "460"
-        },
-        {
-          "ProductID": "P093",
-          "ProductName": "Sample Product 93",
-          "Barcode": "8901234000093",
-          "Price": "149.5",
-          "Batch": "B202610",
-          "ExpiryDate": "2027-10-15",
-          "Quantity": "465"
-        },
-        {
-          "ProductID": "P094",
-          "ProductName": "Sample Product 94",
-          "Barcode": "8901234000094",
-          "Price": "151",
-          "Batch": "B202611",
-          "ExpiryDate": "2027-11-15",
-          "Quantity": "470"
-        },
-        {
-          "ProductID": "P095",
-          "ProductName": "Sample Product 95",
-          "Barcode": "8901234000095",
-          "Price": "152.5",
-          "Batch": "B202612",
-          "ExpiryDate": "2027-12-15",
-          "Quantity": "475"
-        },
-        {
-          "ProductID": "P096",
-          "ProductName": "Sample Product 96",
-          "Barcode": "8901234000096",
-          "Price": "154",
-          "Batch": "B202601",
-          "ExpiryDate": "2027-01-15",
-          "Quantity": "480"
-        },
-        {
-          "ProductID": "P097",
-          "ProductName": "Sample Product 97",
-          "Barcode": "8901234000097",
-          "Price": "155.5",
-          "Batch": "B202602",
-          "ExpiryDate": "2027-02-15",
-          "Quantity": "485"
-        },
-        {
-          "ProductID": "P098",
-          "ProductName": "Sample Product 98",
-          "Barcode": "8901234000098",
-          "Price": "157",
-          "Batch": "B202603",
-          "ExpiryDate": "2027-03-15",
-          "Quantity": "490"
-        },
-        {
-          "ProductID": "P099",
-          "ProductName": "Sample Product 99",
-          "Barcode": "8901234000099",
-          "Price": "158.5",
-          "Batch": "B202604",
-          "ExpiryDate": "2027-04-15",
-          "Quantity": "495"
-        },
-        {
-          "ProductID": "P100",
-          "ProductName": "Sample Product 100",
-          "Barcode": "8901234000100",
-          "Price": "160",
-          "Batch": "B202605",
-          "ExpiryDate": "2027-05-15",
-          "Quantity": "500"
-        }
-      ],
-      "columns": [
-        {
-          "name": "ProductID",
-          "originalName": "ProductID",
-          "dataType": "text"
-        },
-        {
-          "name": "ProductName",
-          "originalName": "ProductName",
-          "dataType": "text"
-        },
-        {
-          "name": "Barcode",
-          "originalName": "Barcode",
-          "dataType": "text"
-        },
-        {
-          "name": "Price",
-          "originalName": "Price",
-          "dataType": "text"
-        },
-        {
-          "name": "Batch",
-          "originalName": "Batch",
-          "dataType": "text"
-        },
-        {
-          "name": "ExpiryDate",
-          "originalName": "ExpiryDate",
-          "dataType": "text"
-        },
-        {
-          "name": "Quantity",
-          "originalName": "Quantity",
-          "dataType": "text"
-        }
-      ],
-      "status": "CONNECTED",
-      "lastModified": "2026-09-08T11:13:48.949Z",
-      "lastRefreshed": "2026-09-08T11:13:48.949Z",
-      "autoRefresh": true
-    }
   },
   {
     "id": "tmpl-1789118825920",

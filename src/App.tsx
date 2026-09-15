@@ -22,7 +22,8 @@ import { INITIAL_TEMPLATES, getUserPersonalizedTemplates } from './services/init
 import { INITIAL_PRINTERS, INITIAL_PRINT_JOBS, INITIAL_AUDIT_LOGS, INITIAL_USERS, INITIAL_BATCH_JOBS } from './services/mockDataService';
 import { PrinterService, useCentralPrinterState } from './printer/printerService';
 import { PrinterModel } from './printer/types';
-import { advanceTemplateSerialState } from './services/serializationEngine';
+import { advanceTemplateSerialState, AtomicSerialReservationService } from './services/serializationEngine';
+import { SerializationRecoveryModal } from './components/dialogs/SerializationRecoveryModal';
 import { measureTextObject, recalculateTextElementDimensions } from './services/textMeasurementEngine';
 import { evaluateElementData } from './services/dataSourceEngine';
 import { PrintPreviewWorkspace } from './components/views/PrintPreviewWorkspace';
@@ -325,7 +326,26 @@ export default function App() {
   const [isDataEntryRuntimeOpen, setIsDataEntryRuntimeOpen] = useState(false);
   const [isExcelWizardOpen, setIsExcelWizardOpen] = useState(false);
   const [isRecordBrowserOpen, setIsRecordBrowserOpen] = useState(false);
+  const [isSerializationRecoveryModalOpen, setIsSerializationRecoveryModalOpen] = useState(false);
+  const [orphanReservationsCount, setOrphanReservationsCount] = useState<number>(0);
   const [selectedRecordIndices, setSelectedRecordIndices] = useState<number[]>([]);
+
+  // Startup: Scan for orphan/uncommitted serialization reservations
+  useEffect(() => {
+    const scanForOrphans = async () => {
+      try {
+        const orphans = await AtomicSerialReservationService.getPendingOrphanReservations();
+        if (orphans && orphans.length > 0) {
+          setOrphanReservationsCount(orphans.length);
+        } else {
+          setOrphanReservationsCount(0);
+        }
+      } catch (err) {
+        console.warn('Startup orphan serialization scan failed:', err);
+      }
+    };
+    scanForOrphans();
+  }, []);
   // Section 10: Record Navigator filter & refresh state
   const [recordSearchFilter, setRecordSearchFilter] = useState<string>('');
   const [isRefreshingRecords, setIsRefreshingRecords] = useState<boolean>(false);
@@ -581,9 +601,10 @@ export default function App() {
     (updates: Partial<LabelTemplate>) => {
       let templateToSync: LabelTemplate | null = null;
 
-      setOpenDocuments((prev) =>
-        prev.map((doc) => {
-          if (doc.instanceId !== activeDocumentInstanceId) return doc;
+      setOpenDocuments((prev) => {
+        const targetId = activeDocumentInstanceId || prev[0]?.instanceId;
+        return prev.map((doc) => {
+          if (doc.instanceId !== targetId) return doc;
           const baseT = doc.template || currentTemplate;
           const updated = { ...baseT, ...updates, updatedAt: new Date().toISOString() };
           templateToSync = updated;
@@ -593,8 +614,8 @@ export default function App() {
             template: updated,
             name: updates.name || doc.name,
           };
-        })
-      );
+        });
+      });
 
       setTemplates((prev) =>
         prev.map((t) => {
@@ -3505,6 +3526,8 @@ export default function App() {
               setSettingsInitialTab('general');
               setIsSettingsOpen(true);
             }}
+            onOpenSerializationRecovery={() => setIsSerializationRecoveryModalOpen(true)}
+            orphanCount={orphanReservationsCount}
             recentDocuments={recentDocuments}
             onOpenRecentDocument={handleOpenRecentDocument}
             onClearRecentDocuments={handleClearRecentDocuments}
@@ -4088,6 +4111,28 @@ export default function App() {
             setPrintJobs((prev) => [newJob, ...prev]);
             showToast(`Reprinted ${freshRecords.length} labels from live Excel file!`, 'success');
           }}
+          onReprintRemaining={async (job) => {
+            const confirmedCount = job.confirmedCount || 0;
+            const remainingRecords = (job.dataSnapshot || [{}]).slice(confirmedCount);
+            if (remainingRecords.length === 0) {
+              showToast('No remaining unprinted items found for this job.', 'info');
+              return;
+            }
+            const newJob: PrintJob = {
+              ...job,
+              id: `PJ-${Math.floor(1000 + Math.random() * 9000)}`,
+              submittedAt: new Date().toISOString(),
+              status: 'completed',
+              progressPercent: 100,
+              dataSnapshot: remainingRecords,
+              totalLabelsPrinted: remainingRecords.length,
+              confirmedCount: remainingRecords.length,
+              unknownCount: 0,
+              failedCount: 0,
+            };
+            setPrintJobs((prev) => [newJob, ...prev]);
+            showToast(`Dispatched reprint for remaining ${remainingRecords.length} labels!`, 'success');
+          }}
         />
       )}
 
@@ -4412,6 +4457,20 @@ export default function App() {
         }}
       />
 
+      <SerializationRecoveryModal
+        isOpen={isSerializationRecoveryModalOpen}
+        onClose={() => {
+          setIsSerializationRecoveryModalOpen(false);
+          AtomicSerialReservationService.getPendingOrphanReservations().then((orphans) => {
+            setOrphanReservationsCount(orphans.length);
+          });
+        }}
+        onReprintRemaining={(resv) => {
+          setIsSerializationRecoveryModalOpen(false);
+          setIsPrintDialogOpen(true);
+        }}
+      />
+
       {/* Dedicated Desktop Print Preview Workspace */}
       {isPrintPreviewActive && currentTemplate && (
         <PrintPreviewWorkspace
@@ -4732,6 +4791,7 @@ export default function App() {
         element={dataEditTargetElement}
         onUpdateElement={(id, updates) => {
           updateSingleElement(id, updates);
+          setDataEditTargetElement((prev) => (prev && prev.id === id ? ({ ...prev, ...updates } as LabelElement) : prev));
         }}
         onOpenDataSources={(el) => {
           setIsDataEditOpen(false);
