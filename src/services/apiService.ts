@@ -9,13 +9,23 @@ import {
 } from '../types';
 import { INITIAL_USERS } from './mockDataService';
 
-const API_BASE = '/api';
+export const getApiBaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    if (window.location.protocol === 'file:' || !window.location.host) {
+      return 'http://localhost:3001/api';
+    }
+  }
+  return '/api';
+};
+
+const API_BASE = getApiBaseUrl();
 
 /**
  * Robust JSON fetch wrapper with error handling
  */
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE}${endpoint}`;
+  const base = getApiBaseUrl();
+  const url = `${base}${endpoint}`;
   const defaultHeaders = {
     'Content-Type': 'application/json',
   };

@@ -17,26 +17,42 @@ function startBackendServer() {
   const serverJs = path.join(__dirname, '../dist/server.js');
   const serverPath = isDev
     ? path.join(__dirname, '../server.ts')
-    : (fs.existsSync(serverCjs) ? serverCjs : serverJs);
+    : (fs.existsSync(serverCjs) ? serverCjs : (fs.existsSync(serverJs) ? serverJs : null));
 
-  if (!fs.existsSync(serverPath)) {
-    console.log(`[Electron Main] Server file not found at ${serverPath}, assuming external server is running.`);
-    return;
+  // 1. In production / packaged desktop app, run embedded in-process so client PC requires NO installed Node.js runtime!
+  if (serverPath && !isDev) {
+    try {
+      console.log(`[Electron Main] Initializing embedded in-process backend server from ${serverPath}...`);
+      require(serverPath);
+      console.log(`[Electron Main] In-process backend server successfully running on port ${PORT}`);
+      return;
+    } catch (inProcessErr: any) {
+      if (inProcessErr.code === 'EADDRINUSE') {
+        console.log(`[Electron Main] Port ${PORT} already active, reusing existing backend instance.`);
+        return;
+      }
+      console.warn(`[Electron Main] In-process server bootstrap notice:`, inProcessErr.message);
+    }
   }
 
-  try {
-    serverProcess = fork(serverPath, [], {
-      env: { ...process.env, PORT: String(PORT), NODE_ENV: isDev ? 'development' : 'production' },
-      silent: true,
-    });
+  // 2. Child process fork fallback
+  if (serverPath && fs.existsSync(serverPath)) {
+    try {
+      serverProcess = fork(serverPath, [], {
+        env: { ...process.env, PORT: String(PORT), NODE_ENV: isDev ? 'development' : 'production' },
+        silent: true,
+      });
 
-    serverProcess.on('error', (err) => {
-      console.log('[Electron Main] Backend process error (server may already be running):', err.message);
-    });
+      serverProcess.on('error', (err) => {
+        console.log('[Electron Main] Backend process notice (server may already be running):', err.message);
+      });
 
-    console.log(`[Electron Main] Backend process configured on port ${PORT}`);
-  } catch (err) {
-    console.error('[Electron Main] Failed to spawn backend server process:', err);
+      console.log(`[Electron Main] Backend process configured on port ${PORT}`);
+    } catch (err) {
+      console.error('[Electron Main] Failed to spawn backend server process:', err);
+    }
+  } else {
+    console.log(`[Electron Main] Server file not found at ${serverPath}, assuming external server is running on port ${PORT}.`);
   }
 }
 
@@ -1375,15 +1391,27 @@ function createWindow() {
     show: false,
   });
 
+  const localServerUrl = `http://localhost:${PORT}`;
   const distIndex = path.join(__dirname, '../dist/index.html');
-  console.log(`[Electron Main] Loading frontend. distIndex exists: ${fs.existsSync(distIndex)} at ${distIndex}`);
-  if (fs.existsSync(distIndex)) {
-    mainWindow.loadFile(distIndex);
-  } else {
-    mainWindow.loadURL('http://localhost:5180').catch(() => {
-      mainWindow?.loadURL(`http://localhost:${PORT}`);
+  console.log(`[Electron Main] Loading frontend. Local server: ${localServerUrl}, distIndex exists: ${fs.existsSync(distIndex)}`);
+
+  // Load via local HTTP server for full localhost experience (matches browser exactly), fallback to loadFile
+  let loadAttempts = 0;
+  const loadApp = () => {
+    loadAttempts++;
+    mainWindow?.loadURL(localServerUrl).catch(() => {
+      if (loadAttempts < 4) {
+        setTimeout(loadApp, 350);
+      } else {
+        console.log('[Electron Main] Local server HTTP connection timed out, loading static dist/index.html...');
+        if (fs.existsSync(distIndex)) {
+          mainWindow?.loadFile(distIndex);
+        }
+      }
     });
-  }
+  };
+
+  loadApp();
 
   mainWindow.once('ready-to-show', () => {
     console.log('[Electron Main] Window ready-to-show event fired');
@@ -1401,6 +1429,9 @@ function createWindow() {
 
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     console.error(`[Electron Main] Failed to load ${validatedURL}: ${errorCode} - ${errorDescription}`);
+    if (fs.existsSync(distIndex) && !validatedURL.includes('index.html')) {
+      mainWindow?.loadFile(distIndex);
+    }
   });
 
   mainWindow.on('closed', () => {

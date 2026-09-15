@@ -14,3 +14,5 @@ scratch/
 **/watch_folders/error/*
 dist-electron-build/
 barcode-automation-backend/barcode-automation-backend/
+barcode-automation-backend/downloads/*.exe
+bin/*.exe

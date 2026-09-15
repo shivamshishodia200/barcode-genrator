@@ -54,16 +54,25 @@ export class InstallerService {
         }
       }
 
-      // Copy genuine executable into downloads
+      // Locate full Electron NSIS installer if generated
+      const electronSetupDev = path.resolve(process.cwd(), 'dist-electron-build', 'BarcodeFlow_Setup_Dev_Unsigned.exe');
+      const electronSetup = path.resolve(process.cwd(), 'dist-electron-build', 'BarcodeFlow_Setup.exe');
       const targetExe = path.join(this.downloadsDir, 'BarcodeFlow_Setup_v2.5.0.exe');
       const fallbackExe = path.join(this.downloadsDir, 'BarcodeFlow_Setup.exe');
 
-      if (fs.existsSync(binExe)) {
-        if (!fs.existsSync(targetExe) || fs.statSync(targetExe).size !== fs.statSync(binExe).size) {
-          fs.copyFileSync(binExe, targetExe);
+      const sourceInstaller = fs.existsSync(electronSetupDev) && fs.statSync(electronSetupDev).size > 1000000
+        ? electronSetupDev
+        : (fs.existsSync(electronSetup) && fs.statSync(electronSetup).size > 1000000 ? electronSetup : (fs.existsSync(binExe) ? binExe : null));
+
+      if (sourceInstaller) {
+        if (!fs.existsSync(targetExe) || fs.statSync(targetExe).size !== fs.statSync(sourceInstaller).size) {
+          fs.copyFileSync(sourceInstaller, targetExe);
         }
-        if (!fs.existsSync(fallbackExe) || fs.statSync(fallbackExe).size !== fs.statSync(binExe).size) {
-          fs.copyFileSync(binExe, fallbackExe);
+        if (!fs.existsSync(fallbackExe) || fs.statSync(fallbackExe).size !== fs.statSync(sourceInstaller).size) {
+          fs.copyFileSync(sourceInstaller, fallbackExe);
+        }
+        if (sourceInstaller === electronSetupDev && (!fs.existsSync(electronSetup) || fs.statSync(electronSetup).size < 1000000)) {
+          fs.copyFileSync(electronSetupDev, electronSetup);
         }
       }
     } catch (err) {
@@ -78,21 +87,24 @@ export class InstallerService {
     this.ensureInstallerBinaries();
 
     const candidates = [
+      path.resolve(process.cwd(), 'dist-electron-build', 'BarcodeFlow_Setup.exe'),
+      path.resolve(process.cwd(), 'dist-electron-build', 'BarcodeFlow_Setup_Dev_Unsigned.exe'),
       path.join(this.downloadsDir, `BarcodeFlow_Setup_v${version}.exe`),
-      path.resolve(process.cwd(), 'bin', `BarcodeFlow_Setup_v${version}.exe`),
       path.join(this.downloadsDir, 'BarcodeFlow_Setup.exe'),
       path.resolve(process.cwd(), 'dist-electron-build', `BarcodeFlow_Setup_v${version}.exe`),
-      path.resolve(process.cwd(), 'dist-electron-build', 'BarcodeFlow_Setup.exe'),
+      path.resolve(process.cwd(), 'bin', `BarcodeFlow_Setup_v${version}.exe`),
     ];
 
     for (const cand of candidates) {
       if (fs.existsSync(cand)) {
         const stat = fs.statSync(cand);
-        return {
-          filePath: cand,
-          fileName: `BarcodeFlow_Setup_v${version}.exe`,
-          size: stat.size,
-        };
+        if (stat.size > 50000) { // Ensure not a truncated placeholder
+          return {
+            filePath: cand,
+            fileName: `BarcodeFlow_Setup_v${version}.exe`,
+            size: stat.size,
+          };
+        }
       }
     }
 
