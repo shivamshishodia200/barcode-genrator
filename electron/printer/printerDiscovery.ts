@@ -135,7 +135,7 @@ export async function discoverSystemPrinters(
       const psCommand = `powershell -NoProfile -NonInteractive -Command "$ProgressPreference = 'SilentlyContinue'; Get-CimInstance Win32_Printer | Select-Object Name, Default, DriverName, PortName, PrinterStatus, WorkOffline, Location, Comment | ConvertTo-Json -Compress"`;
       const execPromise = execAsync(psCommand);
       const timeoutPromise = new Promise<{ stdout: string }>((_, reject) =>
-        setTimeout(() => reject(new Error('PowerShell CIM query timed out')), 2500)
+        setTimeout(() => reject(new Error('PowerShell CIM query timed out')), 6000)
       );
       const { stdout } = await Promise.race([execPromise, timeoutPromise]);
       if (stdout.trim()) {

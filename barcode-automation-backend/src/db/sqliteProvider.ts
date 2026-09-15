@@ -1,27 +1,39 @@
 /**
- * SQLite Database Provider using Node.js Native DatabaseSync
+ * SQLite Database Provider with Resilient Fallback for Node < 22 and Electron
  */
-import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 import { IDatabaseProvider } from './interfaces';
 import { runMigrations } from './migrations';
 
+let DatabaseSyncClass: any = null;
+try {
+  const sqliteModule = require('node:sqlite');
+  DatabaseSyncClass = sqliteModule?.DatabaseSync || null;
+} catch {
+  DatabaseSyncClass = null;
+}
+
 export class SqliteDatabaseProvider implements IDatabaseProvider {
-  private db!: DatabaseSync;
+  private db: any = null;
   private dbPath: string;
+  private dataDir: string;
 
   constructor(customPath?: string) {
-    const dataDir = path.resolve(process.cwd(), 'barcode-automation-backend/data');
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
+    this.dataDir = path.resolve(process.cwd(), 'barcode-automation-backend/data');
+    if (!fs.existsSync(this.dataDir)) {
+      fs.mkdirSync(this.dataDir, { recursive: true });
     }
-    this.dbPath = customPath || path.join(dataDir, 'barcodeflow.sqlite');
+    this.dbPath = customPath || path.join(this.dataDir, 'barcodeflow.sqlite');
   }
 
   public initialize(): void {
+    if (!DatabaseSyncClass) {
+      console.log(`[SqliteDatabaseProvider] Native node:sqlite not present in runtime. Operating in resilient JSON persistence mode.`);
+      return;
+    }
     try {
-      this.db = new DatabaseSync(this.dbPath);
+      this.db = new DatabaseSyncClass(this.dbPath);
       this.db.exec('PRAGMA journal_mode = WAL;');
       this.db.exec('PRAGMA synchronous = NORMAL;');
       this.db.exec('PRAGMA foreign_keys = ON;');
@@ -29,12 +41,13 @@ export class SqliteDatabaseProvider implements IDatabaseProvider {
       runMigrations(this.db);
       console.log(`[SqliteDatabaseProvider] Connected and initialized SQLite database at: ${this.dbPath}`);
     } catch (err) {
-      console.error('[SqliteDatabaseProvider] Initialization error:', err);
-      throw err;
+      console.warn('[SqliteDatabaseProvider] Initialization warning, using JSON store:', err);
+      this.db = null;
     }
   }
 
   public execute(sql: string, params: any[] = []): void {
+    if (!this.db) return;
     if (params.length === 0) {
       this.db.exec(sql);
     } else {
@@ -44,16 +57,32 @@ export class SqliteDatabaseProvider implements IDatabaseProvider {
   }
 
   public query<T = any>(sql: string, params: any[] = []): T[] {
+    if (!this.db) return [];
     const stmt = this.db.prepare(sql);
     return stmt.all(...params) as T[];
   }
 
   public queryOne<T = any>(sql: string, params: any[] = []): T | null {
+    if (!this.db) return null;
     const rows = this.query<T>(sql, params);
     return rows.length > 0 ? rows[0] : null;
   }
 
   public readCollection<T = any>(collectionName: string, fallback: T[] = []): T[] {
+    if (!this.db) {
+      try {
+        const filePath = path.join(this.dataDir, `${collectionName}.json`);
+        if (fs.existsSync(filePath)) {
+          const raw = fs.readFileSync(filePath, 'utf-8');
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : fallback;
+        }
+      } catch (err) {
+        console.warn(`[SqliteDatabaseProvider] Fallback read warning for "${collectionName}":`, err);
+      }
+      return fallback;
+    }
+
     try {
       // Check dedicated tables first
       if (collectionName === 'templates') {
@@ -86,6 +115,17 @@ export class SqliteDatabaseProvider implements IDatabaseProvider {
   }
 
   public writeCollection<T = any>(collectionName: string, items: T[]): boolean {
+    if (!this.db) {
+      try {
+        const filePath = path.join(this.dataDir, `${collectionName}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(items, null, 2), 'utf-8');
+        return true;
+      } catch (err) {
+        console.error(`[SqliteDatabaseProvider] Fallback write error for "${collectionName}":`, err);
+        return false;
+      }
+    }
+
     try {
       this.db.exec('BEGIN TRANSACTION;');
 

@@ -1388,7 +1388,7 @@ function createWindow() {
       webSecurity: true,
     },
     autoHideMenuBar: true,
-    show: false,
+    show: true,
   });
 
   const localServerUrl = `http://localhost:${PORT}`;
