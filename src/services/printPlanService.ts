@@ -273,7 +273,7 @@ export function createPrintPlan(
     elements: template.elements,
     currentRecordIndex: 0,
     totalRecords: sourceRecords.length,
-    printerName: printer.name,
+    printerName: printer?.name || 'Default Printer',
     jobId: baseJobId,
     pageNumber: 1,
     copyNumber: 1,
@@ -366,6 +366,6 @@ export function createPrintPlan(
     timestamp: new Date().toISOString(),
     isTestPrint,
     documentSnapshot: JSON.parse(JSON.stringify(template)),
-    printerSnapshot: JSON.parse(JSON.stringify(printer)),
+    printerSnapshot: printer ? JSON.parse(JSON.stringify(printer)) : undefined,
   };
 }

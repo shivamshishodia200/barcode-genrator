@@ -602,30 +602,73 @@ export async function renderBarcodeToCanvas(
  * Generates an SVG string representation of a barcode
  */
 export function generateBarcodeSVG(element: BarcodeElement, ctxEval?: EvaluationContext): string {
-  const meta = getSymbologyMetadata(element.symbology);
+  const meta = getSymbologyMetadata(element.symbology || (element as any).barcodeType || 'code128');
   const rawEvaluated = evaluateElementData(element, ctxEval);
   const cleanValue = (rawEvaluated !== undefined && rawEvaluated !== '')
     ? rawEvaluated
     : (element.value !== undefined && element.value !== '')
       ? element.value
-      : meta.defaultSample;
+      : (element as any).barcodeValue !== undefined && (element as any).barcodeValue !== ''
+        ? (element as any).barcodeValue
+        : (element as any).content !== undefined && (element as any).content !== ''
+          ? (element as any).content
+          : meta.defaultSample;
 
-  const formattedValue = formatValueForSymbology(element.symbology, cleanValue);
+  const formattedValue = formatValueForSymbology(element.symbology || (element as any).barcodeType || 'code128', cleanValue);
 
   try {
     const is2D = meta.is2D;
     const opts: any = {
       bcid: meta.bwipBcId || 'code128',
-      text: formattedValue,
+      text: String(formattedValue || '12345678'),
       scale: Math.max(1, Math.round(element.barWidth || 2)),
     };
 
     if (!is2D) {
-      opts.height = Math.max(10, Math.round(element.barHeight * 2));
-      opts.includetext = Boolean(element.includeText);
-      opts.textxalign = 'center';
+      const bHeight = Number(element.barHeight) || Number(element.height) || 15;
+      opts.height = Math.max(8, Math.round(bHeight * 1.5));
+      opts.includetext = Boolean(element.includeText !== false);
+      opts.textxalign = element.humanReadableAlignment || element.horizontalAlignment || element.textAlign || 'center';
+      opts.textyalign = element.textPosition === 'above' ? 'above' : 'below';
+
+      let fSize = element.humanReadableFontSize || element.fontSize || 10;
+      if (element.autoSize || element.autoSizeText) {
+        const minPt = Math.max(4, element.minFontSize || 6);
+        const maxPt = Math.max(minPt, element.maxFontSize || 20);
+        const textLen = String(formattedValue || '').length || 8;
+        const availableWidthPx = Math.max(20, (element.width || 40) * 2 * 0.85);
+        const charWidthRatio = 0.55;
+        const calculatedPt = Math.floor(availableWidthPx / (textLen * charWidthRatio));
+        fSize = Math.max(minPt, Math.min(maxPt, calculatedPt));
+      }
+      opts.textsize = Math.max(4, Math.min(36, Math.round(fSize)));
+
+      const fontName = element.humanReadableFont || element.fontFamily;
+      if (fontName && /^(ocr-a|ocr-b|courier|helvetica|times)$/i.test(fontName.trim())) {
+        opts.textfont = fontName.trim();
+      }
+
+      const textCol = element.humanReadableColor || element.color || element.foregroundColor;
+      if (textCol) {
+        const col = textCol.replace('#', '');
+        if (/^[0-9A-Fa-f]{6}$/.test(col)) {
+          opts.textcolor = col;
+        }
+      }
+      if (element.humanReadableOffsetV) {
+        opts.textgap = Math.max(0, Math.round(element.humanReadableOffsetV));
+      }
+      if (element.humanReadableCustomFormat) {
+        opts.alttext = element.humanReadableCustomFormat.replace('{0}', String(formattedValue));
+      }
     }
 
+    if (element.backgroundColor && element.backgroundColor !== 'transparent') {
+      const bg = element.backgroundColor.replace('#', '');
+      if (/^[0-9A-Fa-f]{6}$/.test(bg)) {
+        opts.backgroundcolor = bg;
+      }
+    }
     if (element.foregroundColor) {
       const fg = element.foregroundColor.replace('#', '');
       if (/^[0-9A-Fa-f]{6}$/.test(fg)) {
@@ -633,8 +676,23 @@ export function generateBarcodeSVG(element: BarcodeElement, ctxEval?: Evaluation
       }
     }
 
+    if (element.errorCorrectionLevel && (element.symbology === 'qr' || element.symbology === 'aztec')) {
+      opts.eclevel = element.errorCorrectionLevel;
+    }
+
     return bwipjs.toSVG(opts);
   } catch (e) {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="100%" height="100%" fill="#fef2f2"/><text x="50%" y="50%" text-anchor="middle" fill="#dc2626" font-size="10">Invalid Barcode</text></svg>`;
+    try {
+      const retryOpts: any = {
+        bcid: meta.bwipBcId || 'code128',
+        text: String(formattedValue || '12345678'),
+        scale: 2,
+        height: 15,
+        includetext: Boolean(element.includeText !== false),
+      };
+      return bwipjs.toSVG(retryOpts);
+    } catch {
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="100%" height="100%" fill="#fef2f2"/><text x="50%" y="50%" text-anchor="middle" fill="#dc2626" font-size="10">Invalid Barcode</text></svg>`;
+    }
   }
 }

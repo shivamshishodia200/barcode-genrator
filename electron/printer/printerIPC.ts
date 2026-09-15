@@ -376,32 +376,74 @@ export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
   }) => {
     let printHost: BrowserWindow | null = new BrowserWindow({
       show: false,
-      width: 800,
-      height: 600,
+      width: Math.max(800, Math.round((payload.widthMm || 100) * 3.78)),
+      height: Math.max(600, Math.round((payload.heightMm || 100) * 3.78)),
       skipTaskbar: true,
-      webPreferences: { nodeIntegration: false, contextIsolation: true },
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+      },
     });
 
     try {
-      await printHost.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(payload.htmlContent)}`);
+      await new Promise<void>((resolve, reject) => {
+        if (!printHost) return reject(new Error('Print host window missing'));
+        const timeout = setTimeout(() => {
+          resolve();
+        }, 5000);
+
+        printHost.webContents.once('did-finish-load', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+        printHost.webContents.once('did-fail-load', (_ev, code, desc) => {
+          clearTimeout(timeout);
+          reject(new Error(`HTML load failed: ${desc} (${code})`));
+        });
+        printHost.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(payload.htmlContent)}`);
+      });
+
+      if (!printHost || printHost.isDestroyed()) {
+        throw new Error('Print host window was destroyed before render');
+      }
+
+      // Wait for fonts and complete layout paint cycle
       try {
         await printHost.webContents.executeJavaScript(`
           (async () => {
-            if (document.fonts) await document.fonts.ready;
+            if (document.fonts) {
+              await document.fonts.ready;
+            }
+            await new Promise(r => requestAnimationFrame(() => setTimeout(r, 60)));
             return true;
           })()
         `);
-      } catch {}
+      } catch (jsErr) {
+        console.warn('[PrinterIPC] Font readiness/render wait warning:', jsErr);
+      }
 
-      const pdfBuffer = await printHost.webContents.printToPDF({
+      if (!printHost || printHost.isDestroyed()) {
+        throw new Error('Print host window was destroyed');
+      }
+
+      const printOptions: any = {
         printBackground: true,
+        preferCSSPageSize: true,
         margins: { marginType: 'none' },
-        pageSize: {
-          width: Math.round((payload.widthMm || 50) * 1000), // in microns
-          height: Math.round((payload.heightMm || 25) * 1000),
-        },
-        landscape: Boolean(payload.landscape),
-      });
+      };
+
+      if (payload.widthMm && payload.heightMm) {
+        printOptions.pageSize = {
+          width: Math.round(payload.widthMm * 1000), // in microns
+          height: Math.round(payload.heightMm * 1000),
+        };
+      }
+      if (payload.landscape !== undefined) {
+        printOptions.landscape = Boolean(payload.landscape);
+      }
+
+      const pdfBuffer = await printHost.webContents.printToPDF(printOptions);
 
       return {
         success: true,
@@ -416,7 +458,9 @@ export function registerPrinterIpc(getMainWindow: () => BrowserWindow | null) {
       };
     } finally {
       if (printHost && !printHost.isDestroyed()) {
-        printHost.destroy();
+        try {
+          printHost.destroy();
+        } catch {}
         printHost = null;
       }
     }

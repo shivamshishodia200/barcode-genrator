@@ -96,8 +96,9 @@ export function renderTSPL(
         const val = evaluateElementData(el, { record, printIndex: rIdx, currentRecordIndex: rIdx });
         const barH = mmToDots(el.barHeight || el.height, dpi);
         const printText = el.includeText !== false ? 1 : 0;
+        const symbology = el.symbology || (el as any).barcodeType || 'code128';
 
-        switch (el.symbology) {
+        switch (symbology) {
           case 'code39':
             lines.push(`BARCODE ${xD},${yD},"39",${barH},${printText},${rot},2,4,"${escapeTSPL(val)}"`);
             break;

@@ -54,9 +54,9 @@ function generateSingleLabelRollHtml(
   const isLandscape = orientation === 'landscape' || orientation === 'landscape-180';
   const is180 = orientation === 'portrait-180' || orientation === 'landscape-180';
 
-  // Physical page dimensions
-  const pageWidthMm = isLandscape ? Math.max(widthMm, heightMm) : Math.min(widthMm, heightMm);
-  const pageHeightMm = isLandscape ? Math.min(widthMm, heightMm) : Math.max(widthMm, heightMm);
+  // Physical page dimensions: retain exact template dimensions unless landscape orientation requests dimension inversion
+  const pageWidthMm = isLandscape && widthMm < heightMm ? heightMm : widthMm;
+  const pageHeightMm = isLandscape && widthMm < heightMm ? widthMm : heightMm;
 
   const renderedLabelsHtml: string[] = records.map((record, rIdx) => {
     const innerHtml = renderLabelContentHtml(template, record, rIdx);
@@ -127,6 +127,7 @@ function generateSingleLabelRollHtml(
       position: absolute;
       display: flex;
       align-items: center;
+      justify-content: center;
       box-sizing: border-box;
       transform-origin: top left;
       line-height: 1.15;
@@ -139,6 +140,7 @@ function generateSingleLabelRollHtml(
       display: block;
       width: 100%;
       height: 100%;
+      overflow: visible;
     }
   </style>
 </head>

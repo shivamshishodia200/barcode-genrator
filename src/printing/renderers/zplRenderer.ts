@@ -83,11 +83,12 @@ export function renderZPL(
       } else if (el.type === 'barcode') {
         const barVal = evaluateElementData(el, { record, printIndex: rIdx, currentRecordIndex: rIdx });
         const barHeight = mmToDots(el.barHeight || el.height, dpi);
-        const printText = el.includeText ? 'Y' : 'N';
+        const printText = el.includeText !== false ? 'Y' : 'N';
+        const symbology = el.symbology || (el as any).barcodeType || 'code128';
 
         lines.push(`^FO${x},${y}`);
 
-        switch (el.symbology) {
+        switch (symbology) {
           case 'code128':
           case 'gs1-128':
             lines.push(`^BC${zplOrientation},${barHeight},${printText},N,N,A`);

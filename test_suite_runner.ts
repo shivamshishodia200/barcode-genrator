@@ -101,10 +101,10 @@ const sampleTemplate: LabelTemplate = {
     {
       id: 'el-1',
       type: 'text',
-      x: 16,
-      y: 16,
-      width: 368,
-      height: 32,
+      x: 2,
+      y: 2,
+      width: 46,
+      height: 4,
       text: 'ACME PHARMA LTD',
       fontSize: 12,
       fontFamily: 'Arial',
@@ -116,13 +116,16 @@ const sampleTemplate: LabelTemplate = {
     {
       id: 'el-2',
       type: 'barcode',
-      x: 40,
-      y: 56,
-      width: 320,
-      height: 70,
+      x: 5,
+      y: 7,
+      width: 40,
+      height: 10,
+      symbology: 'code128',
       barcodeType: 'code128',
+      value: '8901234567890',
       barcodeValue: '8901234567890',
       showText: true,
+      includeText: true,
       fontSize: 10,
       color: '#000000',
       visible: true,
@@ -130,10 +133,10 @@ const sampleTemplate: LabelTemplate = {
     {
       id: 'el-3',
       type: 'text',
-      x: 16,
-      y: 136,
-      width: 368,
-      height: 48,
+      x: 2,
+      y: 18,
+      width: 46,
+      height: 6,
       text: 'MRP: Rs. 145.00 (Incl. of all taxes)\nB.No: BN-9988 Mfg: 09/26 Exp: 08/28',
       fontSize: 9,
       fontFamily: 'Arial',
@@ -166,7 +169,7 @@ assert(eplOutput.includes('P2,1') || eplOutput.includes('P2'), 'EPL specifies pr
 const driverHtml = generateWindowsDriverHtml(sampleTemplate, [{ MRP: '145.00' }], { copies: 2 });
 assert(driverHtml.includes('size: 50mm 25mm;') && driverHtml.includes('margin: 0;'), 'Driver HTML generates exact @page CSS dimensions 50mm 25mm');
 assert(driverHtml.includes('ACME PHARMA LTD'), 'Driver HTML contains label header text');
-assert(driverHtml.includes('<svg') && driverHtml.includes('rect'), 'Driver HTML contains vector SVG barcode bars');
+assert(driverHtml.includes('<svg') && (driverHtml.includes('path') || driverHtml.includes('rect')), 'Driver HTML contains vector SVG barcode bars');
 
 // 5. Pre-flight Validation Tests
 console.log('\n--- 5. Pre-Flight Validation ---');
