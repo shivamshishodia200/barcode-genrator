@@ -12,11 +12,23 @@
     "!barcode-automation-backend/downloads/**/*",
     "!barcode-automation-backend/src/**/*",
     "!**/node_modules/*/{CHANGELOG.md,README.md,README,test,tests,example,examples}",
+    "!**/node_modules/lucide-react/**",
+    "!**/node_modules/jspdf/**",
+    "!**/node_modules/@google/**",
+    "!**/node_modules/motion/**",
+    "!**/node_modules/react/**",
+    "!**/node_modules/react-dom/**",
+    "!**/node_modules/vite/**",
+    "!**/node_modules/@tailwindcss/**",
+    "!**/node_modules/@vitejs/**",
+    "!**/node_modules/tailwind-merge/**",
+    "!**/node_modules/clsx/**",
     "!**/*.ts",
     "!**/*.map",
     "!dist-electron-build/**/*"
   ],
   "win": {
+    "signAndEditExecutable": false,
     "target": [
       {
         "target": "nsis",
